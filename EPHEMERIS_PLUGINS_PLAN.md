@@ -1850,6 +1850,240 @@ the gates the phase touches.
      difference 11.361744", and the Moon sits at 5.17 degrees latitude.
      Use `acos(sin b1 sin b2 + cos b1 cos b2 cos(l1-l2))`.
 
+10. **Phase 7, the Prometheia plugin, first increment (2026-09-17).**
+   `ephprom.cpp` and `ephprom.h` in the CORE group of `Makefile.srcs`,
+   entirely inside `#ifdef PROMETHEIA`; the makefiles detect the
+   dependency with `pkg-config prometheia` and build without it silently
+   -- the detection lives in `Makefile.srcs` once, each Linux makefile
+   appends two lines after its own flags, and the Windows toolchains get
+   no detection at all because the package is today a Linux static
+   library. Phase 3's `EPHSRCDEF` table is still being built in parallel
+   on branch `eph3` (nothing landed when this was written), so the
+   module carries the parts of the 4.1 model it can own alone and the
+   shapes the sketch names: the three `EPHPARAM` rows with the
+   `prometheia.*` keys, `FAvailable`/`Start`/`Stop`/`State`, the
+   question block of 3.4 as one `FEphPromCompute` over the locked
+   header's own `eph::Profile` and `eph::Object` (so the plugin and the
+   wire cannot drift), LOOKUP under 3.5a's star grammar, and registration
+   into the shared table left as glue. What the binding pins:
+   - **The frame lists run in opposite orders.** The protocol's frames
+     are 0 true of date, 1 mean of date, 2 J2000, 3 ICRF; Prometheia's
+     are 0 ICRF, 1 J2000, 2 mean of date, 3 true of date. A straight
+     copy of the field binds the wrong frame four ways; the suite pins
+     all four mappings in a check that needs no engine and no data file.
+   - **The corrections reach the orbit points.** Prometheia honours the
+     three bits as sent on kind 1 (measured: at the check's instant
+     the light-time bit alone moves the Moon's ascending node -18.4030",
+     the aberration bit alone +18.4053", deflection alone 0.0000", and
+     all three together +0.0015" -- the two large terms nearly cancel), so
+     `corrApplied` is 7 there, and the group asserts each bit passes
+     through. Note that `docs/ENGINE.md` in the Prometheia tree still
+     says an orbit point "is geometric" and none of the terms apply --
+     the engine's behaviour and the locked 3.5a agree with each other
+     and not with that sentence; it reads as a stale doc, reported here
+     rather than assumed.
+   - **The star grammar and the ambiguity rule are the library's
+     namespace, enforced by the plugin.** `star_lookup` returns
+     "Beta Sco" as beta1 and beta2 Sco of equal best quality, and "8 Sco"
+     and "61 Cyg" the same way (a Flamsteed number two stars carry);
+     those are error 6 under 3.5a, and the plugin enforces it from the
+     lookup lists, because `star_find` answers the brighter component
+     and never says there was a choice. `star_lookup`'s exact matching
+     does not know every form of the grammar `star_find` does (a
+     Flamsteed number among them), so the resolver falls back to it when
+     the lookup answers nothing.
+   - **Distance unknown is a sentinel in the library and a flag in the
+     protocol:** a star without a parallax comes back with a huge
+     distance, which becomes column 0 and META's `noDistance`.
+   - **The delta T hook is Astrolog's:** a finite per-cast value when
+     the question carries one, else the -Yz override, else
+     `swe_deltat()` iterated once, so `calc_ut` answers with the same
+     TT-UT1 the local Swiss path would use.
+   A qttest group (`prometheia`, after `ephem-server-live`) runs in both
+   configurations: without PROMETHEIA it prints why it skips and passes,
+   with it the pure mapping checks and the star grammar run with no data
+   file at all, the engine checks run when an ephemeris is found on the
+   -Yi paths (the catalog and perturbers are set when their files are
+   found, and the small-body legs say what they skipped otherwise), and
+   the oracle against the local Swiss path is the next increment.
+   - **One bug the group caught in the plugin the same day:** the file
+     search returned fTrue for an absolute path without writing it to
+     the out path, so the engine opened with an empty catalog while
+     `FAvailable` said fine. The designation and Chiron checks failed
+     with the star namespace's error text, which named the path at once.
+   - **The scratch that runs the oracle** is `/nvm/work/eph7prom-scratch`:
+     the `.pc` inside the Prometheia tree's `build/` resolves its prefix
+     to `/shares` (it assumes a `lib/pkgconfig` layout that does not
+     exist there), so the session wrote its own with the real paths and
+     runs the PROMETHEIA build with `PKG_CONFIG_PATH` pointed at it.
+     Nothing in the repo reads that file.
+   - **Gates:** make check all clear, suite 5689 passed, 0 failed; the
+     full suite with PROMETHEIA compiled in, 5720 passed, 0 failed; the
+     prometheia group itself 54 passed, 0 failed with the engine open
+     against DE440 and the catalog, and a clean skip in both
+     configurations (no PROMETHEIA; PROMETHEIA with no ephemeris on the
+     -Yi paths). The locked artifacts are untouched; `ephsrv/ephproto.h`
+     is read, not written.
+
+11. **Phase 7, the oracle against the local Swiss path, run for real
+   (2026-09-17).** The second increment of phase 7: the group's oracle
+   legs, angular separations only (`SphDistance()`, work log 0c's acos
+   formula), the plugin's answers against `FSwissPlanet()` over
+   1990-06-15 12h UT, 2000-01-01 12h UT and 2026-09-17 0h UT. The
+   engines met on **DE440**: the Swiss side pinned to the -bj backend
+   (`us.nSwissEph = 2`) with the DE440 binary under the `de431.eph`
+   name that backend looks for on the -Yi paths, the plugin on the same
+   binary plus the SBDB catalog and the sb441-n16-de440span perturbers.
+   Both sides answered at UT instants -- the plugin's delta T hook is
+   bound to the chart's own swe_deltat() -- so the time scales agree by
+   construction. Figures, in arcseconds of angular separation:
+   - **Bodies, geocentric apparent, tropical:** the Sun, Moon, Mercury
+     and Venus 0.0000" at all three instants; Mars 0.0000-0.0031";
+     Jupiter 0.0043-0.0111", Saturn 0.0000-0.0031", Uranus
+     0.0043-0.0092", Neptune 0.0000-0.0147", Pluto 0.0102-0.0376" --
+     the outer planets carry the two engines' different small-body
+     perturbation models (Swiss's files vs sb441) and nothing else.
+     Gate: within 0.2".
+   - **Topocentric Sun and Moon** (the same site both sides,
+     Astrolog's west-positive longitude negated into the plugin's
+     east-positive one): 0.0000" and 0.0384". Gate: 0.2".
+   - **Heliocentric** (light time only, the mask Swiss's own
+     heliocentric calls structurally carry): Moon 0.0000", Mercury
+     0.2904", Venus 0.0439", Mars 0.0565", Jupiter 0.0097", Saturn
+     0.0000", Uranus 0.0061", Neptune 0.0144", Pluto 0.0383". Gate: 1".
+   - **The sidereal binding:** the plugin's fagan-bradley Sun against
+     the Swiss side's sidereal longitude (FSwissPlanet's answer
+     un-subtracted of `is.rSid`) 0.0000". And the semantics came out of
+     the measurement: both engines subtract the **true** ayanamsa (mean
+     plus nutation in longitude), exactly 3.5a's frame-0 rule; the
+     plugin's ayanamsa column sits 8.7788" from Swiss's MEAN ayanamsa
+     (swe_get_ayanamsa) and that difference is the nutation; the
+     plugin's sidereal longitude plus its own column equals its
+     tropical longitude to 0.001". Gate: sidereal 0.05", nutation
+     within (0.5", 20"), internal identity 0.001".
+   - **The Moon's true node, osculating:** Swiss's own convention
+     (light time in the Earth's frame, a 0.003" term) against the
+     plugin's uncorrected node 0.0881"; against the plugin's
+     light-timed node 18.3150" and its fully corrected node 0.0896" --
+     the two engines' light-time conventions on a node differ by 19" by
+     design (work log 0c measured 19.10"; this instant 18.3"). Gate:
+     tight tier 1", the conventions 25".
+   - **The Moon's mean node:** 0.2045", gate 0.5" (work log 0c's
+     standing fact: mean-element fits differ between engines; 0c
+     measured 0.006-0.025" and this instant 0.2").
+   - **The Moon's osculating apogee** (oLil, kind 1 point 3): Swiss vs
+     the plugin's uncorrected 5.1601" and light-timed 3.3232" -- a
+     convention pair like the nodes, gate 25"; **mean apogee** 0.2680",
+     gate 0.5".
+   - **Jupiter's ascending node** through a customized object (type 2,
+     point 1): Swiss (aberration and deflection, no light time) against
+     the plugin's mask 6, 0.5349", and mask 7, 0.5264" -- the light
+     time the plugin adds moves it under 0.01", inside the two engines'
+     0.5" Jupiter-model gap. Gate: 1" and 2".
+   - **Chiron:** Swiss's file vs the SBDB record, 0.0350" -- the two
+     realizations agree far better than the 60" gate allowed for.
+   - **Aldebaran:** 0.0000" (Swiss star 198, found by sweeping
+     SwissComputeStar's enumeration; gate 1").
+   - **Frames and time scales, Prometheia against itself:** J2000 vs
+     ICRF 0.0516" (the frame bias, gate 0.1"); true of date vs J2000
+     20.0' (26.7 years of precession, gate 15-30'); true vs mean of
+     date 3.4" (nutation, gate 20"); UT1 vs TT at the same instant
+     0.0000"; the delta T column 0.00000 s from swe_deltat().
+   - **The oracle caught one real bug in the plugin before it could
+     ship:** the delta T hook returned `swe_deltat()`'s value as
+     SECONDS when swe_deltat() answers in DAYS, so `prometheia_calc_ut`
+     ran with an effective delta T of 0.0008 s and every UT1 answer sat
+     one delta T (~69 s) late -- the Moon 34.47", the Sun 2.80", the
+     inner planets on the same signature, the outer planets almost
+     still. The pattern (gap proportional to apparent motion, the Sun
+     at the Sun's rate) named a time offset and the probe pinned it:
+     the same TT instant, plugin against Swiss, agreed to 0.0000"
+     while the UT1 leg carried the whole 34.5". Fixed (the hook and the
+     delta T column both now scale by 86400), and every UT1 leg since
+     agrees to the fourth decimal or better.
+   - **Two vendored-Swiss facts the star leg paid for, recorded because
+     the next person will hit both:** `swe_fixstar2()` writes the
+     star's canonical name back into its first argument -- pass a
+     string literal and it segfaults inside sprintf ("Aldebaran" as a
+     .rodata target); and its NUMBER form does not count the file's
+     records in order ("1" answers 109 Virginis; Aldebaran is 198 in
+     the enumeration the local path's SwissComputeStar() uses, which is
+     how the leg finds it).
+   - The Mars legs answer NAIF 4, the system barycentre Prometheia's
+     own convention names, not 499; the barycentre is within metres of
+     the body's centre and the Mars legs measured 0.0000-0.0031".
+   - **Gates:** the prometheia group 112 passed, 0 failed with the
+     engine open (DE440 both sides); the full suite with PROMETHEIA
+     compiled in, 5720 passed, 0 failed (no data paths -- the group
+     prints its reason and skips the engine legs); make check in the
+     default build, all clear, suite 5689 passed, 0 failed. The locked
+     artifacts untouched.
+
+12. **Phase 7, reconciled onto the landed registry (2026-09-17).** Phase
+   3 landed while increments 1 and 2 were in flight, so the branch was
+   rebased onto ephv4 a4c6b89 -- never merged, per the coordination
+   rule -- and the module was rewritten against the interface as it
+   landed, which deviates from 4.1's sketch in exactly the ways the
+   deviation note records: EPHQUERY is ONE instant with objects by
+   Astrolog index and a host-only native hint, the EPHROW carries the
+   six columns in the protocol's order with A.17's own error values,
+   and the types live in ephem.h, not in the locked ephproto.h. What
+   the reconciliation changed:
+   - **The source is registered.** `EPHSRCDEF ephsrcPrometheia` sits in
+     `rgephsrc[]` before none -- index 4 with the plugin compiled in,
+     so the five indexes phase 3 pinned never move and phase 3's own
+     key check became conditional on `cEphSrcPrometheia` (its one-line
+     amendment, reason recorded here). `CEphSrc()` is now
+     `5 + cEphSrcPrometheia`: five without the plugin, six with.
+   - **The delegation philosophy, kept.** FSubmitProm() derives what
+     every object IS from `FSwissPlanetSpec()` -- the same function the
+     local Swiss path has always used -- and converts the SWISSSPEC to
+     Prometheia's options instead of re-deriving: TRUEPOS becomes the
+     light-time-only mask, NONUT becomes the mean-of-date frame, the
+     solar-system-plane sidereal mode becomes per-object error 2 (the
+     engine serves no such plane), the Moon's named node bodies become
+     kind 1 orbit points (osculating or mean as the setting chose),
+     SE_INTP_APOG/PERG become error 2 (no interpolated points here),
+     swe_calc_pctr's centres become CENTER_BODY, and the Swiss body ids
+     map to NAIF/SPK-IDs with the barycentres-from-Mars-on convention
+     the C API names -- Mars 4, not 499; asteroids 20000000+N.
+   - **The row arithmetic is FSwissPlanet()'s own.** The answer's
+     longitude carries is.rSid subtracted, which the host re-adds --
+     the same convention the program's two halves have always met at,
+     and the reason the sidereal rows below compare like with like.
+   - **The parameters took the registry's shape.** The table is the
+     shared EPHPARAM (keys bare: "ephemeris", "catalog", "perturbers",
+     like jpl's "file" -- the source prefix is the CLI's business),
+     with the values held beside it until phase 4 moves them into
+     us.rgszEphParam[]; NLookup answers EPHMATCH, nNative carrying the
+     SPK-ID or the star index.
+   - **The host path is measured.** A query built the way
+     ComputeEphem() builds its, submitted down a chain holding the
+     prometheia source alone, every row against the direct call it
+     replaces: geocentric Sun, Moon and Mars 0.0000", Jupiter 0.0043",
+     the Moon's true node 0.0896", the sidereal Sun 0.0000", the
+     topocentric Moon 0.0384", a customized Jupiter ascending node
+     0.5264" (the two engines' Jupiter-model gap, the same figure the
+     internal layer's mask-6 leg measures), and a star row identical to
+     the internal answer. And the walk: with the ephemeris parameter
+     pointed at a missing file the source's submit refuses whole, every
+     object stays open, the swiss source behind it serves, the row's
+     provenance names swiss, and the fallback notice rises.
+   - **One trap the rebase itself left, recorded because it reads like
+     a link error and is nothing of the kind:** switching between the
+     PROMETHEIA and no-PROMETHEIA configurations recompiles nothing
+     unless the objects are removed -- -DPROMETHEIA lives in CPPFLAGS,
+     which the .d files do not record, and a stale ephem.o compiled
+     with the define failed to link against the empty plugin. Delete
+     ephem.o (all three object directories) when switching.
+   - **Gates:** the prometheia group 141 passed, 0 failed with the
+     engine open (DE440 both sides); the full suite with PROMETHEIA
+     compiled in, 5782 passed, 0 failed (no data paths -- the group
+     skips its engine legs with the reason printed); make check in the
+     default build, all clear, suite 5751 passed, 0 failed; the
+     registry group 64 passed, 0 failed under the plugin. The locked
+     artifacts untouched.
+
 9. **Phase 3d, the chain and the notice (2026-09-17).** The fallback
    walk of §4.1 is live in every submit, and each Swiss source now
    carries its OWN ephemeris bit: the three shared-implementation
@@ -2157,240 +2391,6 @@ the gates the phase touches.
      server computes in blocks and streams when the answer is whole, which is
      what the normative rules require; the suggestion needs either a
      "metadata may be revised on the last chunk" rule or withdrawal.
-
-6. **Phase 7, the Prometheia plugin, first increment (2026-09-17).**
-   `ephprom.cpp` and `ephprom.h` in the CORE group of `Makefile.srcs`,
-   entirely inside `#ifdef PROMETHEIA`; the makefiles detect the
-   dependency with `pkg-config prometheia` and build without it silently
-   -- the detection lives in `Makefile.srcs` once, each Linux makefile
-   appends two lines after its own flags, and the Windows toolchains get
-   no detection at all because the package is today a Linux static
-   library. Phase 3's `EPHSRCDEF` table is still being built in parallel
-   on branch `eph3` (nothing landed when this was written), so the
-   module carries the parts of the 4.1 model it can own alone and the
-   shapes the sketch names: the three `EPHPARAM` rows with the
-   `prometheia.*` keys, `FAvailable`/`Start`/`Stop`/`State`, the
-   question block of 3.4 as one `FEphPromCompute` over the locked
-   header's own `eph::Profile` and `eph::Object` (so the plugin and the
-   wire cannot drift), LOOKUP under 3.5a's star grammar, and registration
-   into the shared table left as glue. What the binding pins:
-   - **The frame lists run in opposite orders.** The protocol's frames
-     are 0 true of date, 1 mean of date, 2 J2000, 3 ICRF; Prometheia's
-     are 0 ICRF, 1 J2000, 2 mean of date, 3 true of date. A straight
-     copy of the field binds the wrong frame four ways; the suite pins
-     all four mappings in a check that needs no engine and no data file.
-   - **The corrections reach the orbit points.** Prometheia honours the
-     three bits as sent on kind 1 (measured: at the check's instant
-     the light-time bit alone moves the Moon's ascending node -18.4030",
-     the aberration bit alone +18.4053", deflection alone 0.0000", and
-     all three together +0.0015" -- the two large terms nearly cancel), so
-     `corrApplied` is 7 there, and the group asserts each bit passes
-     through. Note that `docs/ENGINE.md` in the Prometheia tree still
-     says an orbit point "is geometric" and none of the terms apply --
-     the engine's behaviour and the locked 3.5a agree with each other
-     and not with that sentence; it reads as a stale doc, reported here
-     rather than assumed.
-   - **The star grammar and the ambiguity rule are the library's
-     namespace, enforced by the plugin.** `star_lookup` returns
-     "Beta Sco" as beta1 and beta2 Sco of equal best quality, and "8 Sco"
-     and "61 Cyg" the same way (a Flamsteed number two stars carry);
-     those are error 6 under 3.5a, and the plugin enforces it from the
-     lookup lists, because `star_find` answers the brighter component
-     and never says there was a choice. `star_lookup`'s exact matching
-     does not know every form of the grammar `star_find` does (a
-     Flamsteed number among them), so the resolver falls back to it when
-     the lookup answers nothing.
-   - **Distance unknown is a sentinel in the library and a flag in the
-     protocol:** a star without a parallax comes back with a huge
-     distance, which becomes column 0 and META's `noDistance`.
-   - **The delta T hook is Astrolog's:** a finite per-cast value when
-     the question carries one, else the -Yz override, else
-     `swe_deltat()` iterated once, so `calc_ut` answers with the same
-     TT-UT1 the local Swiss path would use.
-   A qttest group (`prometheia`, after `ephem-server-live`) runs in both
-   configurations: without PROMETHEIA it prints why it skips and passes,
-   with it the pure mapping checks and the star grammar run with no data
-   file at all, the engine checks run when an ephemeris is found on the
-   -Yi paths (the catalog and perturbers are set when their files are
-   found, and the small-body legs say what they skipped otherwise), and
-   the oracle against the local Swiss path is the next increment.
-   - **One bug the group caught in the plugin the same day:** the file
-     search returned fTrue for an absolute path without writing it to
-     the out path, so the engine opened with an empty catalog while
-     `FAvailable` said fine. The designation and Chiron checks failed
-     with the star namespace's error text, which named the path at once.
-   - **The scratch that runs the oracle** is `/nvm/work/eph7prom-scratch`:
-     the `.pc` inside the Prometheia tree's `build/` resolves its prefix
-     to `/shares` (it assumes a `lib/pkgconfig` layout that does not
-     exist there), so the session wrote its own with the real paths and
-     runs the PROMETHEIA build with `PKG_CONFIG_PATH` pointed at it.
-     Nothing in the repo reads that file.
-   - **Gates:** make check all clear, suite 5689 passed, 0 failed; the
-     full suite with PROMETHEIA compiled in, 5720 passed, 0 failed; the
-     prometheia group itself 54 passed, 0 failed with the engine open
-     against DE440 and the catalog, and a clean skip in both
-     configurations (no PROMETHEIA; PROMETHEIA with no ephemeris on the
-     -Yi paths). The locked artifacts are untouched; `ephsrv/ephproto.h`
-     is read, not written.
-
-7. **Phase 7, the oracle against the local Swiss path, run for real
-   (2026-09-17).** The second increment of phase 7: the group's oracle
-   legs, angular separations only (`SphDistance()`, work log 0c's acos
-   formula), the plugin's answers against `FSwissPlanet()` over
-   1990-06-15 12h UT, 2000-01-01 12h UT and 2026-09-17 0h UT. The
-   engines met on **DE440**: the Swiss side pinned to the -bj backend
-   (`us.nSwissEph = 2`) with the DE440 binary under the `de431.eph`
-   name that backend looks for on the -Yi paths, the plugin on the same
-   binary plus the SBDB catalog and the sb441-n16-de440span perturbers.
-   Both sides answered at UT instants -- the plugin's delta T hook is
-   bound to the chart's own swe_deltat() -- so the time scales agree by
-   construction. Figures, in arcseconds of angular separation:
-   - **Bodies, geocentric apparent, tropical:** the Sun, Moon, Mercury
-     and Venus 0.0000" at all three instants; Mars 0.0000-0.0031";
-     Jupiter 0.0043-0.0111", Saturn 0.0000-0.0031", Uranus
-     0.0043-0.0092", Neptune 0.0000-0.0147", Pluto 0.0102-0.0376" --
-     the outer planets carry the two engines' different small-body
-     perturbation models (Swiss's files vs sb441) and nothing else.
-     Gate: within 0.2".
-   - **Topocentric Sun and Moon** (the same site both sides,
-     Astrolog's west-positive longitude negated into the plugin's
-     east-positive one): 0.0000" and 0.0384". Gate: 0.2".
-   - **Heliocentric** (light time only, the mask Swiss's own
-     heliocentric calls structurally carry): Moon 0.0000", Mercury
-     0.2904", Venus 0.0439", Mars 0.0565", Jupiter 0.0097", Saturn
-     0.0000", Uranus 0.0061", Neptune 0.0144", Pluto 0.0383". Gate: 1".
-   - **The sidereal binding:** the plugin's fagan-bradley Sun against
-     the Swiss side's sidereal longitude (FSwissPlanet's answer
-     un-subtracted of `is.rSid`) 0.0000". And the semantics came out of
-     the measurement: both engines subtract the **true** ayanamsa (mean
-     plus nutation in longitude), exactly 3.5a's frame-0 rule; the
-     plugin's ayanamsa column sits 8.7788" from Swiss's MEAN ayanamsa
-     (swe_get_ayanamsa) and that difference is the nutation; the
-     plugin's sidereal longitude plus its own column equals its
-     tropical longitude to 0.001". Gate: sidereal 0.05", nutation
-     within (0.5", 20"), internal identity 0.001".
-   - **The Moon's true node, osculating:** Swiss's own convention
-     (light time in the Earth's frame, a 0.003" term) against the
-     plugin's uncorrected node 0.0881"; against the plugin's
-     light-timed node 18.3150" and its fully corrected node 0.0896" --
-     the two engines' light-time conventions on a node differ by 19" by
-     design (work log 0c measured 19.10"; this instant 18.3"). Gate:
-     tight tier 1", the conventions 25".
-   - **The Moon's mean node:** 0.2045", gate 0.5" (work log 0c's
-     standing fact: mean-element fits differ between engines; 0c
-     measured 0.006-0.025" and this instant 0.2").
-   - **The Moon's osculating apogee** (oLil, kind 1 point 3): Swiss vs
-     the plugin's uncorrected 5.1601" and light-timed 3.3232" -- a
-     convention pair like the nodes, gate 25"; **mean apogee** 0.2680",
-     gate 0.5".
-   - **Jupiter's ascending node** through a customized object (type 2,
-     point 1): Swiss (aberration and deflection, no light time) against
-     the plugin's mask 6, 0.5349", and mask 7, 0.5264" -- the light
-     time the plugin adds moves it under 0.01", inside the two engines'
-     0.5" Jupiter-model gap. Gate: 1" and 2".
-   - **Chiron:** Swiss's file vs the SBDB record, 0.0350" -- the two
-     realizations agree far better than the 60" gate allowed for.
-   - **Aldebaran:** 0.0000" (Swiss star 198, found by sweeping
-     SwissComputeStar's enumeration; gate 1").
-   - **Frames and time scales, Prometheia against itself:** J2000 vs
-     ICRF 0.0516" (the frame bias, gate 0.1"); true of date vs J2000
-     20.0' (26.7 years of precession, gate 15-30'); true vs mean of
-     date 3.4" (nutation, gate 20"); UT1 vs TT at the same instant
-     0.0000"; the delta T column 0.00000 s from swe_deltat().
-   - **The oracle caught one real bug in the plugin before it could
-     ship:** the delta T hook returned `swe_deltat()`'s value as
-     SECONDS when swe_deltat() answers in DAYS, so `prometheia_calc_ut`
-     ran with an effective delta T of 0.0008 s and every UT1 answer sat
-     one delta T (~69 s) late -- the Moon 34.47", the Sun 2.80", the
-     inner planets on the same signature, the outer planets almost
-     still. The pattern (gap proportional to apparent motion, the Sun
-     at the Sun's rate) named a time offset and the probe pinned it:
-     the same TT instant, plugin against Swiss, agreed to 0.0000"
-     while the UT1 leg carried the whole 34.5". Fixed (the hook and the
-     delta T column both now scale by 86400), and every UT1 leg since
-     agrees to the fourth decimal or better.
-   - **Two vendored-Swiss facts the star leg paid for, recorded because
-     the next person will hit both:** `swe_fixstar2()` writes the
-     star's canonical name back into its first argument -- pass a
-     string literal and it segfaults inside sprintf ("Aldebaran" as a
-     .rodata target); and its NUMBER form does not count the file's
-     records in order ("1" answers 109 Virginis; Aldebaran is 198 in
-     the enumeration the local path's SwissComputeStar() uses, which is
-     how the leg finds it).
-   - The Mars legs answer NAIF 4, the system barycentre Prometheia's
-     own convention names, not 499; the barycentre is within metres of
-     the body's centre and the Mars legs measured 0.0000-0.0031".
-   - **Gates:** the prometheia group 112 passed, 0 failed with the
-     engine open (DE440 both sides); the full suite with PROMETHEIA
-     compiled in, 5720 passed, 0 failed (no data paths -- the group
-     prints its reason and skips the engine legs); make check in the
-     default build, all clear, suite 5689 passed, 0 failed. The locked
-     artifacts untouched.
-
-8. **Phase 7, reconciled onto the landed registry (2026-09-17).** Phase
-   3 landed while increments 1 and 2 were in flight, so the branch was
-   rebased onto ephv4 a4c6b89 -- never merged, per the coordination
-   rule -- and the module was rewritten against the interface as it
-   landed, which deviates from 4.1's sketch in exactly the ways the
-   deviation note records: EPHQUERY is ONE instant with objects by
-   Astrolog index and a host-only native hint, the EPHROW carries the
-   six columns in the protocol's order with A.17's own error values,
-   and the types live in ephem.h, not in the locked ephproto.h. What
-   the reconciliation changed:
-   - **The source is registered.** `EPHSRCDEF ephsrcPrometheia` sits in
-     `rgephsrc[]` before none -- index 4 with the plugin compiled in,
-     so the five indexes phase 3 pinned never move and phase 3's own
-     key check became conditional on `cEphSrcPrometheia` (its one-line
-     amendment, reason recorded here). `CEphSrc()` is now
-     `5 + cEphSrcPrometheia`: five without the plugin, six with.
-   - **The delegation philosophy, kept.** FSubmitProm() derives what
-     every object IS from `FSwissPlanetSpec()` -- the same function the
-     local Swiss path has always used -- and converts the SWISSSPEC to
-     Prometheia's options instead of re-deriving: TRUEPOS becomes the
-     light-time-only mask, NONUT becomes the mean-of-date frame, the
-     solar-system-plane sidereal mode becomes per-object error 2 (the
-     engine serves no such plane), the Moon's named node bodies become
-     kind 1 orbit points (osculating or mean as the setting chose),
-     SE_INTP_APOG/PERG become error 2 (no interpolated points here),
-     swe_calc_pctr's centres become CENTER_BODY, and the Swiss body ids
-     map to NAIF/SPK-IDs with the barycentres-from-Mars-on convention
-     the C API names -- Mars 4, not 499; asteroids 20000000+N.
-   - **The row arithmetic is FSwissPlanet()'s own.** The answer's
-     longitude carries is.rSid subtracted, which the host re-adds --
-     the same convention the program's two halves have always met at,
-     and the reason the sidereal rows below compare like with like.
-   - **The parameters took the registry's shape.** The table is the
-     shared EPHPARAM (keys bare: "ephemeris", "catalog", "perturbers",
-     like jpl's "file" -- the source prefix is the CLI's business),
-     with the values held beside it until phase 4 moves them into
-     us.rgszEphParam[]; NLookup answers EPHMATCH, nNative carrying the
-     SPK-ID or the star index.
-   - **The host path is measured.** A query built the way
-     ComputeEphem() builds its, submitted down a chain holding the
-     prometheia source alone, every row against the direct call it
-     replaces: geocentric Sun, Moon and Mars 0.0000", Jupiter 0.0043",
-     the Moon's true node 0.0896", the sidereal Sun 0.0000", the
-     topocentric Moon 0.0384", a customized Jupiter ascending node
-     0.5264" (the two engines' Jupiter-model gap, the same figure the
-     internal layer's mask-6 leg measures), and a star row identical to
-     the internal answer. And the walk: with the ephemeris parameter
-     pointed at a missing file the source's submit refuses whole, every
-     object stays open, the swiss source behind it serves, the row's
-     provenance names swiss, and the fallback notice rises.
-   - **One trap the rebase itself left, recorded because it reads like
-     a link error and is nothing of the kind:** switching between the
-     PROMETHEIA and no-PROMETHEIA configurations recompiles nothing
-     unless the objects are removed -- -DPROMETHEIA lives in CPPFLAGS,
-     which the .d files do not record, and a stale ephem.o compiled
-     with the define failed to link against the empty plugin. Delete
-     ephem.o (all three object directories) when switching.
-   - **Gates:** the prometheia group 141 passed, 0 failed with the
-     engine open (DE440 both sides); the full suite with PROMETHEIA
-     compiled in, 5782 passed, 0 failed (no data paths -- the group
-     skips its engine legs with the reason printed); make check in the
-     default build, all clear, suite 5751 passed, 0 failed; the
-     registry group 64 passed, 0 failed under the plugin. The locked
-     artifacts untouched.
 
 2. **Phase 2, protocol version 4 in code (2026-09-17).** `astrolog-ephd`,
    `eph_wsclient` and the Qt client speak version 4 and nothing else, in one
