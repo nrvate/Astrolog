@@ -34,14 +34,24 @@ version 3, and this section is the design authority behind it.
   rewrite someone should do with a network and a plan, not a move.
 
   **What phase 8 found, because it bears on how much to trust the rest.**
-  A delegated review found six defects in my own phase 6 work, including
-  a CRASHING out-of-bounds write reachable from any chart drawing stars
-  or asteroids with the server selected. Every one of them was in code
-  the suite was green over. They are all fixed, with nets and a
-  sanitizer, but the honest reading is that the suite grew alongside the
-  work and asserted what I was already thinking about. If you want one
-  more thing done before the squash, another independent review pass is
-  worth more than another feature.
+  Two delegated reviews found TEN defects -- one a crashing
+  out-of-bounds write, several silent wrong answers, including a Matrix
+  selection that drew 0Ari00'00" for every body and a heliocentric chart
+  that computed the lunar node heliocentrically. All are fixed, each with
+  a net proven to fail without its fix. But every one of them was in code
+  that passed every gate.
+
+  **And the gate itself was the tenth finding.** `make check` and the
+  release workflow run the suite under `-Yi1 ephem`; `./run-qt-tests.sh`,
+  the command this project documents, runs it under `-i nrvate.as`, which
+  is what the hard rule names. Those are different configurations, only
+  one is gated, and the ungated one was failing 20 assertions for most of
+  this branch's life -- and is the one that reaches the crash. **That is
+  worth a line in CLAUDE.md whatever you decide about this branch.**
+
+  If there is budget for one more thing before the squash, it is a third
+  review pass over phase 6's transport code: only the first review saw
+  it, and it has changed a great deal since.
 
 - **STATUS (2026-09-18, phase 6 substantially landed).** Phases 2, 3, 4,
   5 and 7 are on this branch and gated, and phase 6 is most of the way
@@ -2254,6 +2264,62 @@ the gates the phase touches.
      bug into their own `corrapplied.py` and caught it by fault
      injection rather than by trusting the green. The symptom to grep
      for in any existing leg is a column of suspiciously exact zeros.
+
+20. **Phase 8's second review, and the gate that could not see it
+   (2026-09-18).** A second independent pass over phases 2-5 -- ground
+   the first review was told to skip -- found four more defects. With the
+   six from the first, ten in all, and the branch had been green through
+   every gate the whole time.
+
+   - **E1: a Matrix selection became "none" and drew 0Ari00'00" for every
+     body**, with no warning. The legacy spellings keep a
+     {files, nSwiss, matrix} shadow; `EphSourceSetShadow()` bumps the
+     selection's generation and the parser never claimed it, so the next
+     `-b` spelling rebuilt the shadow from the chain TEXT -- and that
+     round trip cannot carry the Matrix bit. `_bs =bm _bU _b` is the
+     order the PRE-BRANCH writer emitted for a Matrix selection, so it is
+     what an old settings file replays. The branch's claim that any old
+     file order loads as before did not hold for that one selection.
+
+   - **E2: the Prometheia source computed every object under object 0's
+     profile.** `rgobj[i].profile` was never assigned and defaults to 0,
+     and the bounds check passes because 0 is always in range -- so a
+     heliocentric chart computed the lunar node heliocentrically. Its
+     second loop also overwrote refusals the first had set, so a refused
+     object could return marked answered and the walk would claim it; the
+     sharpest case is naif 0, the solar-system barycentre, which the
+     engine serves.
+
+   - **E3: picking a source in Ephemeris Settings dropped the whole
+     fallback tail.** The composer stood ON the separator, so its token
+     scan could not advance. Both builds.
+
+   - **E4: the chain was validated in full and stored truncated to 254**,
+     producing a settings file that would not load -- and a refused line
+     aborts the load, so everything after it was dropped.
+
+   - **THE GATE COULD NOT SEE ANY OF IT, AND THAT IS THE FINDING.**
+     `make check` and the release workflow run the suite with
+     `-Yi1 ephem`. `./run-qt-tests.sh` -- the command CLAUDE.md
+     documents -- defaults to `-i nrvate.as`, which is what the hard rule
+     "always test with -i nrvate.as" names, and which resolves far more
+     bodies from `/swe`. **That configuration was failing 20 assertions
+     for most of this branch's life while `make check` reported green.**
+     The cause was the server source warning about objects it had never
+     been asked for; the deeper point is that the two commands run
+     different configurations and only one of them is gated.
+
+     It is also the configuration that reaches D1's out-of-bounds write:
+     with the refusal removed, `-i nrvate.as` CRASHES the suite outright
+     while `-Yi1 ephem` passes.
+
+   - **What to take from it.** Ten defects, one crashing, several silent
+     wrong answers, all in code that every gate was green over. Both
+     reviews were given a brief naming the CLASSES to hunt rather than
+     asked to look for problems, and both paid. If there is budget for
+     one more thing before the squash, it is a third pass over phase 6's
+     own transport code, which only the first review saw and which has
+     changed a great deal since.
 
 19. **Phase 8, the branch review (2026-09-18).** Four independent
    passes, because they see different things.
