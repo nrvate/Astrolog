@@ -13,6 +13,73 @@ version 3, and this section is the design authority behind it.
 
 ## Status — how to pick this back up
 
+- **HANDOFF BLOCK (2026-09-17 ~21:00, for the next agent).** The live state,
+  all of it:
+  - **ephv4 head `b89475b`** (dates corrected; everything happened the 17th).
+    Phase 3 is DONE and merged. Phase 7 is DONE on branch **`eph7prom` at
+    `95fae2d`** (worktree `/nvm/work/eph7prom`) but its **merge is HELD**:
+    two oracle legs (Jupiter's node same-subset 10.4750", the light-time
+    convention leg 10.4834") fail against Prometheia's CURRENT engine —
+    proven not ours by isolation (their pre-fix code fails identically;
+    Moon-node legs unchanged); their `28661cb`/`405cb94` moved
+    planetary-orbit-point answers by ~the aberration term. The question is
+    asked in the LAST section of **`/nvm/work/ephv4-mail-to-astrolog.md`**
+    (scratch, shared channel with the peer session). When they answer:
+    intended → re-pin those two legs' tolerance with their engine sha in
+    the comment; not intended → they fix. Then **ff-merge `eph7prom` into
+    `ephv4`**, and at that merge: **renumber the duplicated work-log items**
+    (the phase-3 and phase-7 agents both appended items numbered 6-8 on
+    their branches) and consider a **PROMETHEIA stamp file** in the
+    makefiles (the pkg-config flag does not invalidate built objects; a
+    plugin-less `ephem.o` links silently beside a plugin-built
+    `ephprom.o` and the registry row is absent — flipping the flag today
+    requires `rm obj-*/[ephem,ephprom,qttest].o`).
+  - **Phase 7 review findings (main agent):** the plugin had mapped Swiss
+    TRUEPOS → `kCorrLightTime`; the protocol's mask **0** is TRUEPOS
+    (`ephswiss.h`'s own mapping) — fixed at both conversion sites in
+    `95fae2d`, netted (mask-0 binding check + spec-carries-TRUEPOS check).
+    Everything else verified clean: the `is.rSid` subtract/re-add
+    convention, topo west→east negation, per-object walk semantics, stable
+    registry indexes. Default `make check` on eph7prom all clear; the
+    plugin-on Prometheia group is 140/2 (the two held legs only).
+  - **Phase 4 is RUNNING** as a background agent in worktree
+    `/nvm/work/eph4sel`, branch `eph4sel`, off `a4c6b89`: increments 4a
+    state + `us.rgszEphParam[]` (US positional-initializer trap!), 4b
+    `-bE`/`-bP` + legacy shadow, 4c chain live + `FCm*` → `FEphSpeeds()`/
+    `FEphLegacyCast()`, 4d writer + astrolog.as. When it reports: verify
+    per increment — re-read the diffs, re-run the four `tools/*-matrix.sh`
+    byte-diffs per single-source selection against a baseline binary built
+    from `a4c6b89` (normalize each tree's own path in outputs before
+    diffing), `make check` all clear — then merge (expect a small docs-only
+    conflict with `b89475b`). If it has gone quiet: check the worktree's
+    file/object mtimes and `pgrep` for make/cc1plus before assuming a
+    stall. **Phase 5 (the dialog, both builds) fans out once 4a's state
+    lands; phase 6 after 4; phase 8 (branch review) last.**
+  - **The peer** (Ephemeris Prometheia, repo `/shares/ephemeris-prometheia`,
+    session channel the mail file above): their v4 migration is COMPLETE
+    including SEGDATA/CANCEL/priority; nothing is owed in either direction;
+    their pre-agreed armed action is checking truthful `corrApplied`
+    against live `astrolog-ephd` traffic when our phase 6 lands. Their
+    parked items (Vondrák 2011, zstd, the deadlineMs strategy switch) wait
+    on the maintainer. Two of their items ride my finding in the mail file
+    (stale "orbit points are geometric" sentence in their docs/ENGINE.md;
+    their `build/prometheia.pc` prefix is broken). Their progress letter is
+    section 2 of the same file; my finding is the last section — the
+    maintainer's relay of it is pending.
+  - **The Swiss fork** (`/shares/swisseph`, commit `8c4a23a`): gained
+    `swe_calc_orbel_r` (elements→positions, strictly additive, 608
+    insertions; golden re-verified bit-exact 149/149). Kind-4 serving
+    notes for the server side: μ is fixed to KGAUSS²/KGAUSS_EARTH²
+    regardless of SEFLG_EPHMASK; wire centre 0/1 and A.16 equinox values
+    map by identity; polynomial evaluation stays server-side; `ratesApprox`
+    on kind-4 rows with speeds. The server's kind-4 wiring is still
+    unwritten — a natural small increment when wanted.
+  - Scratch (not in git, do not delete): `/nvm/work/ephv4-drop/`,
+    `ephv4-drop-verdicts.md`, `ephv4-mail-to-astrolog.md`,
+    `ephv4-mail-to-prometheia.md`, `ephv4-handoff.md` (narrative),
+    `/nvm/work/eph7prom-scratch/` (the corrected `prometheia.pc`), the
+    probe sources `corrprobe.c`, `orbelprobe*`.
+
 - **Where.** Branch `ephv4`, branched from `qt` at d9642c0, in worktree
   `/nvm/work/ephv4`. Each pass lands as one commit on `ephv4`. The whole branch
   is squashed into `qt` when the maintainer says so; never before.
