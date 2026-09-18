@@ -214,7 +214,13 @@ flag FEphPromAvailable(char *szWhy, int cch)
 // since is noticed here rather than announced from elsewhere. A
 // notification can be missed by any path that writes the value another
 // way; comparing at the point of use cannot.
-static char szEphPromOpenedFrom[3][256];
+// Not a fixed buffer: the values are us.rgszEphParam[] entries, which are
+// FCloneSz'd and unbounded, and a truncated COPY can never compare equal
+// to its original -- so a path of 256 characters or more, which an
+// absolute path easily is, would take the reopen branch on every single
+// call for the life of the process (phase 8 review, D6). Cloned, so the
+// comparison is against the whole value.
+static char *rgszEphPromOpenedFrom[cepPromParam] = {NULL, NULL, NULL};
 
 flag FEphPromStart(char *szWhy, int cch)
 {
@@ -224,7 +230,7 @@ flag FEphPromStart(char *szWhy, int cch)
 
   if (fEphPromOpen) {
     for (iep = 0; iep < cepPromParam; iep++)
-      if (!FEqSz(szEphPromOpenedFrom[iep], SzEphPromParam(iep))) {
+      if (!FEqSz(SzSet(rgszEphPromOpenedFrom[iep]), SzEphPromParam(iep))) {
         // The engine is open on files the settings no longer name. Close
         // and reopen: 0.x has no way to drop or swap a catalog, and
         // close-and-reopen is the path the library's authors sanction.
@@ -240,7 +246,7 @@ flag FEphPromStart(char *szWhy, int cch)
     return fFalse;
   }
   for (iep = 0; iep < cepPromParam; iep++)
-    sprintf2(S(szEphPromOpenedFrom[iep]), "%s", SzEphPromParam(iep));
+    FCloneSz(SzEphPromParam(iep), &rgszEphPromOpenedFrom[iep]);
   if (prometheia_engine_open(szEphPromEphe, &pephProm, &err) !=
     PROMETHEIA_OK) {
     pephProm = NULL;

@@ -608,6 +608,7 @@ extern void EphSourceSetShadow P((flag, int, flag));
 // analogue for one star: resolve nothing here -- the caller hands the
 // resolved Swiss Ephemeris name -- and return the entry point's own six
 // in rg[6], unwritten when the star failed.
+extern void SwissStarSpec P((SWISSSPEC *));
 extern flag FSwissStar P((char *, real, real *));
 extern void SwissHouse P((real, real, real, int,
   real *, real *, real *, real *, real *, real *, real *, real *));

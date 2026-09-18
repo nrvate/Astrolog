@@ -7901,9 +7901,21 @@ static flag FSubmitTransQt(CONST EPHQUERY *pq)
   // One submit for the whole query, which is what a remote source needs:
   // a per-object fetch is a round trip per body (EPHEMERIS_CLIENT_PLAN.md
   // lesson 1). The plan it leaves is read back per object below.
-  // JulianDayFromTime()'s inverse: the adapter speaks Astrolog's T and the
-  // query carries the JD it makes.
-  SrvPrefetchQt((pq->rJD - 2415020.0) / 36525.0, oEar, oNorm, pq);
+  // The wait below scans oEar..imax for settled windows, so imax must
+  // cover the objects THIS QUERY names, not the main cast's range. A
+  // star sits at oNorm + n, above oNorm, so passing oNorm left every
+  // star request unwaited: the scan found nothing outstanding, returned
+  // at once, and each star then failed with "the Ephemeris Server did
+  // not answer in time" -- a client bug reported as a server timeout,
+  // one modal and one wasted REQUEST per cast (phase 8 review, D4).
+  {
+    int iMax = oNorm, iQ;
+
+    for (iQ = 0; iQ < pq->cobj; iQ++)
+      if (pq->rgobj[iQ] > iMax)
+        iMax = pq->rgobj[iQ];
+    SrvPrefetchQt((pq->rJD - 2415020.0) / 36525.0, oEar, iMax, pq);
+  }
   return fTrue;
 }
 

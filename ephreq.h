@@ -70,12 +70,27 @@ inline int CEphRequestFromQuery(CONST EPHQUERY *pq, real rDeltaTSec,
     double topo[3];
     int ip;
 
-    // A star is named, not numbered, and needs no Swiss spec.
+    // A star is named rather than numbered, but it is computed with the
+    // same settings as anything else and must be ASKED for with them.
+    // This built a default profile until the phase 8 review: a sidereal
+    // or heliocentric chart sent the server a tropical geocentric
+    // question, and FReadTransQt marked the answer ephErrNone, so the
+    // chain claimed the row and the fallback to the local files never
+    // ran. Wrong star longitudes, silently. SwissStarSpec() is the one
+    // expression FSwissStar() computes from too.
     if (pq->rgszName[i] != NULL) {
+      SWISSSPEC ssStar;
+      double topoStar[3];
+
       obj = eph::Object();
       obj.kind = eph::kObjStar;
       obj.name = pq->rgszName[i];
-      pf = eph::Profile();
+      SwissStarSpec(&ssStar);
+      topoStar[0] = ssStar.topoLon; topoStar[1] = ssStar.topoLat;
+      topoStar[2] = ssStar.topoElv;
+      if (!eph::swiss::ProfileFromSwiss(ssStar.iflag, ssStar.iobjCent,
+        ssStar.nSidMode, topoStar, &pf))
+        continue;
     } else {
       if (!FSwissPlanetSpec(pq->rgobj[i], pq->rgcent[i], &ss))
         continue;

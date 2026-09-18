@@ -4141,15 +4141,35 @@ static void FSwissStarName(int istar, char *sz)
 // array, which is what makes a failed star keep the previous star's
 // coordinates, as it always has.
 
+// How a fixed star is computed, as a spec, so that the local call and any
+// other source asking for the same star ask the same question. There is
+// one expression for it and both read it -- ephreq.h turns this into the
+// version 4 profile a server is sent, and before it existed that profile
+// was a DEFAULT one: every sidereal, heliocentric, no-nutation and
+// true-position setting was silently dropped on the way to the server,
+// and the answer claimed as this row's (phase 8 review, D2).
+
+void SwissStarSpec(SWISSSPEC *pss)
+{
+  ClearB((pbyte)pss, sizeof(SWISSSPEC));
+  pss->iobj = -1;        // a star is named, not numbered
+  pss->iobjCent = -1;
+  pss->nSidMode = !us.fSidereal2 ? SE_SIDM_FAGAN_BRADLEY : SE_SIDBIT_SSY_PLANE;
+  pss->iflag = GetSwissFlags();
+  if (us.objCenter != oEar)
+    pss->iflag |= (us.fBarycenter ? SEFLG_BARYCTR : SEFLG_HELCTR);
+}
+
+
 flag FSwissStar(char *sz, real jd, real *rg)
 {
   char serr[AS_MAXCH];
   int iflag;
+  SWISSSPEC ss;
 
   SwissEnsurePath();
-  iflag = GetSwissFlags();
-  if (us.objCenter != oEar)
-    iflag |= (us.fBarycenter ? SEFLG_BARYCTR : SEFLG_HELCTR);
+  SwissStarSpec(&ss);
+  iflag = ss.iflag;
   // swe_fixstar2() rewrites the name to the star's canonical form in
   // place, and the callers read it back -- that rewrite IS the display
   // name of a star enumerated by number -- so the caller's own buffer
