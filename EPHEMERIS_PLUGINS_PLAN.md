@@ -13,6 +13,113 @@ version 3, and this section is the design authority behind it.
 
 ## Status — how to pick this back up
 
+- **STATUS (2026-09-18, phase 4 landed).** Phases 2, 3, 4, 5 and 7 are
+  on this branch and gated. Phase 6 is next; phase 8 (branch review) and
+  the maintainer's squash-to-qt decision follow it.
+
+- **The 00:20 handoff block below is SUPERSEDED, and one of its central
+  claims is DISPROVEN.** It attributed phase 4c's 14 red assertions to a
+  sticky `tid_acc` leak in the Swiss fork and said the fix belonged in
+  `/shares/swisseph`, gated by that fork's golden suite. That is wrong,
+  and nothing in the fork was changed. **The fork is not linked into any
+  Astrolog binary** -- the Qt, console and Windows builds all compile the
+  VENDORED upstream Swiss 2.10.03 (`sweph.cpp`, `swephlib.cpp` and
+  siblings in this tree); `/shares/swisseph` is built only into
+  `astrolog-ephd`. So no change there could have caused or cured it.
+
+  Kept rather than deleted, per the keep-full-record rule, and flagged
+  here rather than only in the work log because a wrong-but-specific root
+  cause in a handoff is worse than none: it is confident enough to stop
+  the next reader looking. (Raised from the Prometheia side, who had the
+  same class of error the same day and said so first.)
+
+- **What the 14 assertions actually were.** The library reads its tidal
+  acceleration from the moon file's DE number, and with no file open
+  `swi_get_tid_acc()` falls through to `SE_TIDAL_DEFAULT` (DE431, -25.80)
+  instead of the bundled `ephem/`'s own (DE441, -25.936). The two differ
+  by 0.136, which is 0.037 s of Delta-T at 1900. Astrolog caches Delta-T
+  in `is.rDeltaT` keyed on the DATE ALONE, so a value computed before the
+  ephemeris path was set outlived the path change and the bodies reused
+  it while `swe_calc_ut()` recomputed on DE441. Every body came out by
+  its own motion over 0.037 s -- the Moon 0.018", the Sun 0.0015",
+  Mercury 0.00003" -- which is why it read as one epoch and fourteen
+  bodies rather than as an ephemeris fault. Fixed in `2fe2719` at two
+  sites (`SwissEnsurePath()` drops the cached offset when it sets the
+  path; `SwissHouse()` ensures the path before asking for Delta-T, being
+  the one site of four that did not), each pinned by its own assertion in
+  the numeric oracle's leg 1b and each proven by removing it and watching
+  only its own assertion fail.
+
+  **The general shape, worth keeping:** a value derived from the
+  ephemeris must not outlive the ephemeris it was derived from. Anything
+  else cached off a Swiss answer has the same hazard.
+
+- **Where things stand.** Phase 4 is merged. The merge resolved the
+  pre-analysed collision in the predicted direction: 4c deletes the five
+  legacy selection fields, phase 5 deletes the Windows
+  Calculation-Settings code that assigned them, and **neither branch
+  compiled for Windows on its own** -- `backend_parity_audit` and the
+  warning audit's Windows leg were both red on `eph4sel` for that one
+  structural reason, and both go green on the merge. Two further
+  conflicts resolved: the Calculation-Settings combo and its suite group
+  took phase 5's side (the combo is gone; Ephemeris Settings is the
+  shipped surface), and the registry pin combined phase 7's index
+  arithmetic with 4c's chain representation.
+
+- **Review findings.** F1, F3, F6, F7, F8, F9, F10 closed. F2 closed in
+  `2fe2719`, and the finding was worth less than it looked: the key list
+  reads `rgephsrc[]` directly now, so registry/key drift is impossible by
+  construction, and only the three section 4.2 keys whose plugins are
+  later phases' are hand-written. Those are pinned both ways, so leaving
+  one in `rgszEphSrcFuture[]` after its plugin lands fails rather than
+  being remembered. F4 FALSIFIED -- do not re-try; Swiss has no
+  corrections-off form for planetary nodes reachable from an Astrolog
+  setting, 10.4761" measured. **F11 is the one still open**: both builds'
+  Ephemeris Settings dialog declares `rgiepEphemParam[4]` beside a
+  generated `cEphParam` of 6. Two of the four it does reach
+  (`epServerUrl`, `epServerToken`) are inert until phase 6 wires the
+  transports, so it is not a live defect -- but the fixed `4` will not
+  grow with the generated count, and nothing says so.
+
+- **Phase 6, and the peer.** Prometheia's `tools/check/corrapplied.py`
+  (their `4052e29`) is written and waiting for a v4 daemon on our side;
+  it compares one server with ITSELF, so it presumes nothing about either
+  engine. Their `docs/CROSS-TEST.md` (`71d4f78`) drafts the cross-test
+  plan and asks two questions of us. Settled with them and recorded on
+  their side: protocol kinds 3 and 4 stay unadvertised, because
+  Astrolog's hypotheticals ARE `seorbel.txt` -- the user's own elements
+  are the definition of the body, so a server substituting its own would
+  silently discard them and the chart would move when a fallback changed
+  source. Two warnings from them worth keeping: an angular separation
+  through `acos(dot)` returns exactly 0 below ~0.01", which is a false
+  negative precisely at the deflection scale and reads as a clean pass
+  (use `atan2(|a x b|, a.b)`); and a subset check that reads only the
+  mask-0 answer is vacuous against a server that echoes the request.
+
+- **Scratch that must survive (do not delete):** `/nvm/work/ephv4*`
+  (review.md, the mail file, the verdicts), `eph4sel`, `eph4base` (the
+  baseline binary for matrices), `eph4verify`, `tidprobe*.c`, the
+  `eph4-mx-*` artifacts.
+
+- **House rules that bind whoever picks this up:** locked artifacts
+  (`ephsrv/ephproto.h`, `registries.json`, `conformance/`) are
+  byte-untouchable -- a change is a new named drop, never an edit.
+  `/shares/swisseph` is additive-only and has its own gates.
+  `/shares/ephemeris-prometheia` is read-only. `nrvate.as` is the
+  maintainer's. Scratch in `/nvm/work`, never `/tmp`. `-j4` cap (NAS).
+  `env -u DISPLAY` for binaries. No `pkill -f astrolog` -- stop by PID.
+  No `Claude-Session:` lines in commits; `Co-Authored-By:` fine; new
+  commits never amend; subjects one short sentence. Commits on ephv4
+  push immediately; the branch squashes to qt only when the maintainer
+  says so.
+
+---
+## Status — superseded handoff blocks (kept; see the Status above)
+
+- **SUPERSEDED, and its root cause DISPROVEN** -- see the Status
+  above. Kept whole rather than corrected in place, so the reasoning
+  that was wrong stays legible beside what replaced it.
+
 - **HANDOFF (2026-09-18 ~00:20, from the GLM-5.3 coordinator that is
   being stood down).** Read this whole block before touching anything.
   The honest state: the branch is sound below the neck and broken at
@@ -181,8 +288,6 @@ version 3, and this section is the design authority behind it.
   ephv4 push immediately; the branch squashes to qt only when the
   maintainer says so.
 
----
-## Status — superseded handoff blocks (kept; see the 00:20 handoff above)
 
 - **HANDOFF BLOCK (2026-09-17 ~21:00, for the next agent).** The live state,
   all of it:
@@ -2025,7 +2130,110 @@ the gates the phase touches.
      as a real disagreement and was entirely the projection -- the Moon's
      apparent-vs-astrometric displacement is 11.424861", its longitude
      difference 11.361744", and the Moon sits at 5.17 degrees latitude.
-     Use `acos(sin b1 sin b2 + cos b1 cos b2 cos(l1-l2))`.
+
+     **Corrected 2026-09-18, and the correction matters more than the
+     original:** do NOT take that separation as
+     `acos(sin b1 sin b2 + cos b1 cos b2 cos(l1-l2))`. The cosine of a
+     small angle rounds to 1.0 in f64, so `acos` of it returns EXACTLY
+     0 for anything under roughly 0.01" -- which is a false negative
+     precisely at the deflection and barycentric-aberration scale, and
+     it does not read as a wrong number, it reads as a clean pass. Use
+     `atan2(|a x b|, a.b)` on the unit vectors, which stays accurate as
+     the angle goes to zero. Raised by the Prometheia side, who put the
+     bug into their own `corrapplied.py` and caught it by fault
+     injection rather than by trusting the green. The symptom to grep
+     for in any existing leg is a column of suspiciously exact zeros.
+
+13. **Phase 4c and the merge: the chain IS the selection (2026-09-18).**
+   `us.szEphemSource` and `us.rgszEphParam[]` are the only representation
+   now. `fEphemFiles`, `nSwissEph`, `fMatrixPla`, `szEphSrv`,
+   `szEphSrvToken`, `fNoOldCalc` and `fNoNetwork` are deleted from `US`
+   and from `data.cpp`'s positional initializer; `settingsfields.h`
+   regenerated. Legacy spellings load by toggling a parse-time shadow and
+   re-deriving the chain, so any old file order still means what it
+   meant. `-0b`/`-0n` are genuinely inert. `FCm*` is replaced by
+   `FEphSpeeds()` and `FEphLegacyCast()`. Committed `2fe2719`, merged
+   `b296210`.
+
+   - **The 14 red assertions were NOT a Swiss-fork bug**, and the fork
+     was never touched. The 00:20 handoff said they were and said the fix
+     belonged in `/shares/swisseph`, gated by that fork's golden suite.
+     **The fork is not linked into any Astrolog binary** -- Qt, console
+     and Windows all compile the VENDORED upstream Swiss 2.10.03, and
+     `/shares/swisseph` is built only into `astrolog-ephd`. An hour went
+     into a fork that could not have been the cause. The lesson is not
+     about Delta-T: **check what is actually linked before diagnosing a
+     library.**
+
+   - **What it actually was.** The library reads its tidal acceleration
+     from the moon file's DE number; with no file open `swi_get_tid_acc()`
+     falls through to `SE_TIDAL_DEFAULT` (DE431, -25.80) instead of the
+     bundled `ephem/`'s own (DE441, -25.936). The two differ by 0.136,
+     which is 0.037 s of Delta-T at 1900. Astrolog caches Delta-T in
+     `is.rDeltaT` **keyed on the date alone**, so a value computed before
+     the ephemeris path was set outlived the path change and the bodies
+     reused it while `swe_calc_ut()` recomputed on DE441. Every body came
+     out by its own motion over 0.037 s: the Moon 0.018", the Sun
+     0.0015", Mercury 0.00003". That ratio is what identified it -- the
+     errors scaled with apparent motion, which is a TIME error, not an
+     ephemeris error.
+
+     Two fixes, each independently correct: `SwissEnsurePath()` drops the
+     cached offset when it sets the path, and `SwissHouse()` ensures the
+     path before asking for Delta-T, being the one site of four that did
+     not. **The general rule: a value derived from the ephemeris must not
+     outlive the ephemeris it was derived from.**
+
+   - **The first net was worthless and was thrown away.** It set the path
+     flag false and called `SwissEnsurePath()`, which is exactly what the
+     product does, so it passed with the fix removed. What it lacked was
+     `swe_close()` -- without it the moon file is still open from the
+     previous leg and the DE number is right for the wrong reason -- and
+     a cache reset, without which the previous leg's correct value is
+     reused. Each fix is now pinned by its OWN assertion, because a net
+     covering both passes with either one present, and each was proven by
+     removing it and watching only its own assertion fail.
+
+14. **The merge, and two regressions it exposed (2026-09-18).** eph4sel
+   branched before phase 5, and neither branch compiled for Windows on
+   its own: 4c deletes the five legacy selection fields, phase 5 deletes
+   the `wdialog.cpp` code that assigned them. `backend_parity_audit` and
+   the warning audit's Windows leg were red on eph4sel for that one
+   structural reason and are green on the merge. **`make check` does not
+   build Windows**, so only the full warning audit could see it -- worth
+   remembering before trusting a green `make check` on a branch that
+   touches `US`.
+
+   - **A pin set before the thing that invalidates it is not a pin.** The
+     required-server test set `is.fSwissPathSet` and then selected the
+     source, and 4c makes changing the source invalidate that latch by
+     design. The pin was cleared by the very call it was meant to
+     survive. Product right, test wrong.
+
+   - **A silently disabled test reads exactly like a passing one.** 4c's
+     mechanical rewrite of the selection calls dropped
+     `EphSrvStartupQt()` from the TLS leg and replaced `us.nSwissEph = 5`
+     with `EphSourceSet("swiss")` -- selecting the LOCAL source in the
+     leg whose purpose is to watch the server refuse an untrusted
+     certificate -- and pasted a duplicate of the local baseline cast
+     where the startup had been. The leg ran, and could never observe a
+     refusal. It was findable only because the pre-merge run was green
+     (85/0) and the post-merge run was not; without that baseline it
+     would have been written off as a flaky live group. Every
+     `EphSrvStartupQt()` call site was then audited for the same
+     signature, and the harness call counts compared against the
+     pre-merge file.
+
+15. **Review findings closed with phase 4 (2026-09-18).** F3: `-0b`/`-0n`
+   are inert, which is what `tools/inert_option_audit.py` had been
+   claiming since 4b. F2: closed, and the finding was worth less than it
+   looked -- the key list reads `rgephsrc[]` directly now, so
+   registry/key drift is impossible by construction, and only the three
+   §4.2 keys whose plugins are later phases' are hand-written. Those are
+   pinned both ways, so leaving one in `rgszEphSrcFuture[]` after its
+   plugin lands fails rather than being remembered. **F11 remains open**:
+   both builds' Ephemeris Settings dialog declares `rgiepEphemParam[4]`
+   beside a generated `cEphParam` of 6.
 
 10. **Phase 7, the Prometheia plugin, first increment (2026-09-17).**
    `ephprom.cpp` and `ephprom.h` in the CORE group of `Makefile.srcs`,
