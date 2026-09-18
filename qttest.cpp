@@ -17838,7 +17838,10 @@ static CONST HORIZONSCASE rghorizonsQt[] = {
   {"mercury-1990",199,  1990, 6, 15, 12.0, fFalse, fFalse, "Mercury"},
   {"venus-1990",  299,  1990, 6, 15, 12.0, fFalse, fFalse, "Venus"},
   {"mars-1990",   499,  1990, 6, 15, 12.0, fFalse, fFalse, "Mars"},
-  {"jupiter-1990",599,  1990, 6, 15, 12.0, fFalse, fFalse, "Jupiter, a barycentre id"},
+  {"jupiter-1990",599,  1990, 6, 15, 12.0, fFalse, fFalse,
+     "Jupiter. 599 is the BODY CENTRE, not the 5 barycentre -- rgObjJPL[] "
+     "asks for x99 throughout, which matters more than it looks: see "
+     "pluto-1700 below"},
   {"saturn-1990", 699,  1990, 6, 15, 12.0, fFalse, fFalse, "Saturn"},
   {"uranus-1990", 799,  1990, 6, 15, 12.0, fFalse, fFalse, "Uranus"},
   {"neptune-1990",899,  1990, 6, 15, 12.0, fFalse, fFalse, "Neptune"},
@@ -17854,6 +17857,24 @@ static CONST HORIZONSCASE rghorizonsQt[] = {
   {"sun-topo",     10,  1990, 6, 15, 12.0, fTrue,  fFalse,
      "the topocentric URL shape: COORD_TYPE and SITE_COORD, a different "
      "branch of the builder that no geocentric case exercises"},
+  // The same two bodies asked for as BARYCENTRES rather than body centres,
+  // to settle by measurement a thing the code only implies. ephswiss.h
+  // maps NAIF 4..9 to a plain SE_MARS+n and NAIF x99 to the same body
+  // PLUS SEFLG_CENTER_BODY out of the planetary-moon files -- explicitly
+  // different questions -- and rgObjJPL[] sends x99. So the horizons
+  // source and the swiss source in one chain are asking about different
+  // POINTS. These two fixtures are the evidence either way.
+  {"jupiter-bary-1990", 5, 1990, 6, 15, 12.0, fFalse, fFalse,
+     "Jupiter's system barycentre, against jupiter-1990's body centre"},
+  {"pluto-bary-1990",   9, 1990, 6, 15, 12.0, fFalse, fFalse,
+     "and the same pair at a modern instant, where both answer, so the "
+     "SIZE of the disagreement can be measured. Pluto is where it should "
+     "matter: Charon is massive enough that the system barycentre sits "
+     "well outside Pluto itself"},
+  {"pluto-bary-1700",   9, 1700, 1,  1, 12.0, fFalse, fFalse,
+     "Pluto's system barycentre at the instant its BODY CENTRE is refused: "
+     "if this answers, the coverage boundary is per target id, because a "
+     "body centre also needs the satellite solution"},
   {"chiron-1990", nMillion + 2060, 1990, 6, 15, 12.0, fFalse, fFalse,
      "a small body: the id carries nMillion and the query grows a trailing "
      "semicolon, which is then percent-encoded"},
@@ -17875,10 +17896,14 @@ static CONST HORIZONSCASE rghorizonsQt[] = {
      "Pluto outside coverage too"},
   {"pluto-1700",  999,  1700, 1,  1, 12.0, fFalse, fTrue,
      "and the reason this one is here rather than as a success: Pluto's "
-     "own boundary is \"prior to A.D. 1800-JAN-02\", two centuries later "
-     "than Mars's. The limits are PER BODY, so a plugin cannot carry one "
-     "coverage range for the source -- it has to report ephErrOutsideCover "
-     "per object, which is what this fixture pins"},
+     "boundary is \"prior to A.D. 1800-JAN-02\", two centuries later than "
+     "Mars's. The limits are per TARGET ID, not per planet -- this is the "
+     "BODY CENTRE 999, and the Prometheia project got an answer for the "
+     "same date from the 9 barycentre. A body centre needs the satellite "
+     "solution on top of the planetary ephemeris, and that starts later; "
+     "these replies name theirs (plu060_merged, jup365_merged, mar099). So "
+     "a plugin cannot carry one coverage range for the source, nor even "
+     "one per planet: it reports ephErrOutsideCover per object"},
   {"err-unknown",  9999999, 1990, 6, 15, 12.0, fFalse, fTrue,
      "a body id JPL does not know"},
   {"err-range",    999, 3500, 1,  1, 12.0, fFalse, fTrue,
@@ -18049,6 +18074,46 @@ static void TestHorizonsQt()
   }
   fclose(file);
   Check(cFix > 0, "the recorded corpus has at least one reply in it");
+
+  // Body centre against system barycentre, measured rather than reasoned
+  // about. ephswiss.h maps NAIF x99 to SE_MARS+n PLUS SEFLG_CENTER_BODY
+  // and NAIF 4..9 to the plain body, so they are different questions, and
+  // rgObjJPL[] asks Horizons for x99 while Astrolog's own Swiss path uses
+  // the plain form. Two sources in one chain, answering about two points.
+  //
+  // Compared as an ANGULAR SEPARATION, not a longitude difference: a
+  // longitude difference is a projection and exaggerates near the poles.
+  {
+    PT3R ptBody[3], ptBary[3];
+    char szT[cchSzMax];
+    FILE *fileBody, *fileBary;
+
+    sprintf2(S(szPath), "%s/pluto-1990.txt", szHorDirQt);
+    fileBody = fopen(szPath, "r");
+    sprintf2(S(szPath), "%s/pluto-bary-1990.txt", szHorDirQt);
+    fileBary = fopen(szPath, "r");
+    if (fileBody != NULL && fileBary != NULL &&
+      FParseJPLHorizons(fileBody, ptBody, S(szT)) &&
+      FParseJPLHorizons(fileBary, ptBary, S(szT))) {
+      real rSep = SphDistance(ptBody[1].x, ptBody[1].y,
+        ptBary[1].x, ptBary[1].y) * 3600.0;
+      // They are not the same point...
+      Check(rSep > 0.005,
+        "Pluto's body centre and its system barycentre are different "
+        "points, so the horizons source and the swiss source are not "
+        "asking the same question");
+      // ...and the difference is small enough that the coverage cost of
+      // asking for the body centre -- two centuries of Pluto, since the
+      // satellite solution starts at 1800 where DE441 reaches 1700 and
+      // beyond -- buys nothing worth having.
+      Check(rSep < 0.5,
+        "and they differ by well under an arcsecond, so nothing "
+        "astrological hangs on which one is asked for");
+      printf("  Pluto body centre vs barycentre: %.4f arcsec\n", rSep);
+    }
+    if (fileBody != NULL) fclose(fileBody);
+    if (fileBary != NULL) fclose(fileBary);
+  }
 }
 #endif // JPLWEB
 
