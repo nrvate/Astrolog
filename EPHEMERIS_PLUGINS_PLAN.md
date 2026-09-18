@@ -13,6 +13,177 @@ version 3, and this section is the design authority behind it.
 
 ## Status — how to pick this back up
 
+- **HANDOFF (2026-09-18 ~00:20, from the GLM-5.3 coordinator that is
+  being stood down).** Read this whole block before touching anything.
+  The honest state: the branch is sound below the neck and broken at
+  one known joint; every break is localized, measured and written down
+  below. Nothing on this branch is speculative — everything either has
+  a green gate behind it or a written reason it is red.
+
+- **Where things stand.** ephv4 head `c3c3d7c` (pushed; clean tree).
+  On it, complete and gated: the locked 3 protocol; the v4 server and
+  client (phase 2); the source registry (phase 3, a4c6b89); the
+  Prometheia plugin (phase 7, ed6e4f2..dc05d07 incl. the re-pinned
+  Jupiter-node courtesy legs, the PROMETHEIA stamp, work-log items
+  renumbered 10-12); the review fix pass (8950fbd: lunar-named-point
+  helio/bary refusal, pin wiring 0x8001/0x8003, plugin DeltaT -Yz0
+  leg, raw star rows, client DeltaT cap, fixture-digest check, console
+  Makefile stamp, Status sha corrections); and the Ephemeris Settings
+  dialog (phase 5, c3c3d7c merge: both builds, suite 5944/0,
+  Calculation lost the combo). Verified independently at each step —
+  matrices byte-identical against baselines, locked artifacts
+  untouched throughout. The blocks below this one (the 21:00 handoff,
+  the phase-7 merge record, the phase-4 withdrawal) are SUPERSEDED by
+  this block where they differ — kept per the keep-full-record rule.
+
+- **THE ONE BREAKING THING — phase 4c, uncommitted, in worktree
+  `/nvm/work/eph4sel` (branch eph4sel, based on 6f7eef1 = 4a+4b,
+  which ARE committed and green).** Its code is complete and compiles
+  warning-clean: the chain walk reads `us.szEphemSource`, `FCm*`
+  predicates replaced by `FEphSpeeds()`/`FEphLegacyCast()`, old
+  fields deleted with the US positional initializer migrated exactly,
+  dialogs re-pointed, `-0b`/`-0n` inert, writer/astrolog.as migrated,
+  and F1's save-reload net landed. Its 20-pass byte-identity battery
+  (four matrices x five single-source selections, old-vs-new with each
+  tree's own astrolog.as) is COMPLETE AND CLASSIFIED GREEN. What is
+  red: the suite, 14 assertions, all in the numeric-oracle group's
+  1900 epoch, and ONLY in group order registry-then-oracle. Each group
+  alone is green; order matters.
+
+- **The 14 failures are a Swiss-fork library bug, 90% diagnosed.
+  Facts, all probe-verified, probes in `/nvm/work/tidprobe*.c`:**
+  1. A `swe_calc_ut` under `SEFLG_MOSEPH` (any cast through the
+     moshier source's borrowed bit) internally converts UT via a
+     MOSEPH-flagged delta-t call, and `swi_set_tid_acc` SAVES the
+     Moshier tidal acceleration into process-global `ctx->tid_acc`
+     (fork: swephlib.c).
+  2. The saved value is sticky. A later plain `swe_deltat()` at a
+     FRESH jd — no flag transition in between — computes at the stale
+     term (probe11: deltat(1601-jd) = 0.001045927 stale vs 0.001038866
+     correct, tid stays -25.58).
+  3. Suite shape: the ephem-registry group's moshier walk poisons
+     tid_acc; chart-list's dialog render (ten seeded 1601-era charts,
+     house cusps -> plain swe_deltat at fresh jds) CONSUMES the poison
+     and the wrong Delta T values get cached into `is.rDeltaT`; the
+     numeric-oracle group's 1900 assertions then inherit the skew
+     (0.0372 s = the DE404-vs-DE441 tidal split at 1900).
+  4. THE ONE UNRESOLVED NUMBER: the instrumented suite prints the
+     poisoned tid as **-25.80** (= SE_TIDAL_DE431, the DEFAULT) where
+     my standalone probes produce **-25.58** (Moshier/DE404). So in
+     the real suite the poison may be a `swi_set_tid_acc` call that
+     landed on the `default:` branch (denum unresolved ->
+     SE_TIDAL_DEFAULT = DE431 = -25.80), not the Moshier value. The
+     first thing to do: instrument `swi_set_tid_acc` in the FORK
+     (print tjd, iflag, denum on every call) and run the two-group
+     pair (command below). That names the exact call site and its
+     denum in one 30-second run.
+  5. The fix belongs in the FORK (`/shares/swisseph`, commit 8c4a23a,
+     additive-only by house rule): `swe_deltat_ex_r` must not let a
+     cross-flavor saved tid_acc be consumed by a plain SWIEPH-flag
+     delta-t — re-derive when the saved flavor mismatches the request,
+     or make the save non-sticky. The fork's own tests/golden.c holds
+     the net (`cov:order_moseph_*` is the adjacent precedent; the
+     2026-09-16 review's F1/F5 in notes/REVIEW.md are the paper
+     trail). Run the fork's gate standalone (its check-samples has a
+     known -j flake, Error 127, passes serial).
+  6. DO NOT "fix" this in the suite by reordering groups or warming
+     casts — that masks a state leak the plan's no-silent-fallbacks
+     rule wants actually closed. The acceptance pin once fixed:
+     ephem-registry group then numeric-oracle group, no reordering,
+     green, with a comment naming the fork sha.
+
+- **Fast reproduction loop (all from /nvm/work/eph4sel):**
+  - The failing pair, instrumented (probes are already in the tree's
+    qttest.cpp, gated by ASTROLOG_DBG=1; they print DBGDELTA per
+    group + tid):
+    `env -u DISPLAY QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME= ASTROLOG_DBG=1 ASTROLOG_QT_TESTS=ephem-registry,chart-list,swiss-enumerate ./astrolog-qt-test -Yi1 ephem 2>&1 >/dev/null | grep DBG`
+  - The 14 failures: `ASTROLOG_QT_TESTS=oracle` alone is green; the
+    full suite shows 14 failed at the 1900 epoch. Suite driver:
+    `timeout 900 tools/ci-run-suite.sh 840 <log> -Yi1 ephem`. Group
+    filter is the ASTROLOG_QT_TESTS env var; group slugs from
+    `ASTROLOG_QT_TESTS=list`. Binaries ALWAYS with
+    `env -u DISPLAY QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=`
+    (the Gtk "cannot open display" trap ate an hour tonight).
+  - Traps recorded the hard way: `make astrolog-qt-test` is a no-op,
+    the target is `make qt-test`; suite slugs are hyphenated
+    (`ephem-registry`, not the group's display name); the .as matrix
+    trap — the baseline binary aborts its settings load on the new
+    -bE line, so matrix old-vs-new runs need each tree's OWN
+    astrolog.as over the shared root.
+
+- **What to do with eph4sel's uncommitted tree:** 17 modified files of
+  complete, coherent 4c work plus temporary DBG probe lines in
+  qttest.cpp (8 hits, `getenv("ASTROLOG_DBG")`-gated — strip or keep,
+  inert without the env var; the probe additions at lines ~13290,
+  ~19514 and ~20400 are the only instrumentation). Backup copies the
+  agent kept: `/nvm/work/calc.cpp.4c4` and siblings. Verify by
+  reading, then gate in THIS order: the fork fix FIRST (previous
+  bullet), then full `make check -j4` on eph4sel (all 35 steps; with
+  the fork fixed it should go green in one pass), the battery re-run
+  on the final tree (artifacts: /nvm/work/eph4-mx-*), the warning
+  gate, ASan suite (`tools/asan-suite.sh` bare, timeout 1500 — the
+  US initializer was rewritten, this is not optional). Then ONE
+  commit on eph4sel (fold 4d in; it is effectively already there),
+  push, and merge to ephv4.
+
+- **THE MERGE COLLISION, pre-analyzed:** eph4sel branched at 6f7eef1;
+  ephv4 has since gained the phase-7 merge and phase 5 (c3c3d7c).
+  Both 4c and 5 edited qtdialog.cpp's Calculation-Settings combo
+  region: 4c minimally (deleted-field reads removed so it compiles),
+  5 fully (the combo's real replacement, gated 5944/0). RESOLUTION:
+  take phase 5's side of that region — its dialog is the shipped
+  surface; 4c's edit there was scaffolding. Everything else merges
+  clean (the two trees' suite-group additions sit in different
+  regions). After the merge: full `make check` on ephv4 once more,
+  push.
+
+- **Work-log items for phase 4: 8 of this document, items start at
+  13** (10-12 are phase 7). Keep the maintainer's keep-full-record
+  rule: append after the last item, never renumber landed ones.
+
+- **Open review items, from /nvm/work/ephv4-review.md (read it — every
+  finding has a disposition):** F1 landed in 4c's tree (verify it
+  survives the commit), F2/F3 relayed to phase 4 (check the 4c commit
+  carries them), F4 FALSIFIED (do not re-try: Swiss has no
+  corrections-off form for planetary nodes; 10.4761" measured), F5
+  two-line band re-land pending (the mask-6/7 legs' ceilings become
+  bands, in ephv4's qttest.cpp leg 8), F10/F11 open (phase-5 dialog
+  test coverage — the phase-5 agent landed its own 44-check dialog
+  group, which may cover F10; F11's two unreachable parameters are
+  epServerUrl/epServerToken, unreachable pending phase 6's
+  transports).
+
+- **Remaining plan, in order:** 4c lands (above) -> phase 6 (remote
+  adapter/transports, server+horizons plugins, required-server dialog
+  and exit 86 removed — unblocks the peer's armed corrApplied
+  live-traffic check) -> phase 8 (branch review; the review doc is
+  most of it already) -> the maintainer's squash-to-qt decision.
+  Also outstanding, small: the server-side kind-4 wiring (the fork's
+  `swe_calc_orbel_r` at 8c4a23a exists and is verified; the server
+  end is unwritten).
+
+- **Scratch that must survive (do not delete):** /nvm/work/ephv4*
+  (drop, verdicts, mails, review.md), eph4sel, eph4base (the baseline
+  binary for matrices), eph4verify, tidprobe*.c (the diagnosis
+  probes), calc.cpp.4c4, the eph4-mx-* artifacts. The peer channel:
+  /nvm/work/ephv4-mail-to-astrolog.md (their migration is complete;
+  nothing owed until phase 6's traffic check).
+
+- **House rules that bind whoever picks this up:** locked artifacts
+  (`ephsrv/ephproto.h`, `registries.json`, `conformance/`) are
+  byte-untouchable — a change is a new named drop, never an edit.
+  `/shares/swisseph` is additive-only and has its own gates.
+  `/shares/ephemeris-prometheia` is read-only. `nrvate.as` is the
+  maintainer's. Scratch in /nvm/work, never /tmp. `-j4` cap (NAS).
+  `env -u DISPLAY` for binaries. No `pkill -f astrolog` — stop by
+  PID. No `Claude-Session:` lines in commits; `Co-Authored-By:` fine;
+  new commits never amend; subjects one short sentence. Commits on
+  ephv4 push immediately; the branch squashes to qt only when the
+  maintainer says so.
+
+---
+## Status — superseded handoff blocks (kept; see the 00:20 handoff above)
+
 - **HANDOFF BLOCK (2026-09-17 ~21:00, for the next agent).** The live state,
   all of it:
   - **ephv4 head `5ac12d2`** (dates corrected; everything happened the 17th;
