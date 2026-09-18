@@ -2386,6 +2386,57 @@ the gates the phase touches.
    did not exist before this corpus and is the reason 6h was called
    unverifiable.
 
+25. **The cross-test with Ephemeris Prometheia (2026-09-18).** Two
+   independent engines, two independent servers, one protocol, asked the
+   same questions and compared. It found **five defects in
+   `astrolog-ephd` that nothing in this tree could have found**, because
+   everything we own compares Swiss against Swiss.
+
+   | finding | what | outcome |
+   |---|---|---|
+   | error code | A.17 4 where 3 was meant at the first instant of the .se1 span | fixed, plus a second instance they had not hit |
+   | delta-T | the request's value never reached Swiss's own UT<->TT, so a topocentric observer sat where Swiss's model put them | fixed, 0.000 -> 16.72 arcsec |
+   | corrections | WELCOME advertised masks at the Sun's centre and the barycentre whose effect a body never sees | fixed, and broader than reported |
+   | helio light time | ~1% against Horizons | **upstream Swiss**, see below |
+   | Beta Sco | our plugin re-derived a decision their library already makes | fixed (item 23) |
+
+   **The three lessons worth keeping:**
+
+   - **A report can be right about the symptom and wrong about the
+     cause, and still be worth everything.** Their delta-T finding said
+     "the request's delta T is ignored". It is not: a UT1 request moves
+     the Moon 75.46 arcsec between deltaTSec 0 and 100. Their probe sent
+     TT, where the conversion has nothing to do -- and that is exactly
+     the configuration where the OTHER half of 3.5's promise, Earth
+     rotation, is the only half there is. They found a real defect by a
+     route that made it look like a different one.
+
+   - **"Advertised is promised" has a second edge.** Narrowing WELCOME to
+     the truth broke the server on the next gate run, because acceptance
+     was validated against the advertisement -- so an honest WELCOME
+     began refusing heliocentric mask 7, which is what Astrolog's own
+     casts send. The two are now deliberately different questions:
+     WELCOME says what the server will DO, acceptance declines only what
+     it cannot parse.
+
+   - **What the gates structurally cannot see.** `ephsrv-golden` compares
+     this server against the fork's Swiss with hand-written flags and
+     passes 149 comparisons bit-exact, including `obs=helio,corr=1`. So
+     the heliocentric light time IS Swiss's, exactly, and the 1% against
+     Horizons lives in Swiss's model rather than our wiring of it. **A
+     differential against yourself cannot find a shared premise**, which
+     is the whole argument for this exercise and for the Horizons corpus
+     in item 22.
+
+   `tools/crosstest-prom.sh` is our half of leg 2, run by hand like every
+   eph gate; nothing in `make check` starts a foreign daemon. **Its first
+   run reported five FALSE mismatches**, including the one case the two
+   projects had just settled, because it began probing when the daemon
+   logged "listening" rather than when it could answer. A readiness check
+   that is not the thing being waited for is how a harness invents
+   findings, and a table of error codes is the worst place for it: a
+   wrong answer there is indistinguishable from a real disagreement.
+
 24. **P1's missing net, closed (2026-09-18).** The one thing the three
    reviews left open, and the reason it stayed open for a day: a fixed
    star through the Ephemeris Server could not be tested because the
