@@ -187,6 +187,12 @@ for w in -Xb -Xbw -Xbb -Xbp -Xbn -Xbc -Xbv -Xba -XM \
          -XV -Xp -Xp0; do
   g $w; g $w -XG; g $w -g
 done
+# The old-engine locks, accepted since their engines went and kept only
+# so saved settings files load: -0b locked the Matrix formulas out of
+# the dialogs, -0n the network backends. Neither touches what a Swiss
+# files cast renders, which is the claim tools/inert_option_audit.py
+# holds them to.
+g -0b; g -0b -XG; g -0n; g -0n -XG
 # The multi-wheel charts, which need extra chart slots loaded and so are
 # not reachable from a bare switch. Work log item 147's fix lived here.
 A="$T/a.dat"

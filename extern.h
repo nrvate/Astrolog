@@ -565,6 +565,8 @@ extern flag FSwissPlanet
 extern int CEphSrc P((void));
 extern EPHSRCDEF *PephsrcGet P((int));
 extern int IEphSrcFromKey P((CONST char *));
+extern flag FEphSrcKeyKnown P((CONST char *));
+extern flag FEphSrcKeyKnownN P((CONST char *, int));
 extern int IEphSrcPrimary P((void));
 extern void EphQueryInit P((EPHQUERY *, real));
 extern flag FEphQueryAdd P((EPHQUERY *, int, int, int, char *));
@@ -576,6 +578,20 @@ extern flag FEphSubmitSide P((EPHQUERY *));
 extern flag FEphRead
   P((CONST EPHQUERY *, int, real *, real *, real *, real *, real *, real *));
 extern flag FEphReadRaw P((CONST EPHQUERY *, int, real *));
+
+// The selection state (EPHEMERIS_PLUGINS_PLAN.md 5.1): the chain
+// us.szEphemSource holds, the parameter values us.rgszEphParam[] carries,
+// and the two directions that keep them and the legacy fields in step
+// while both representations live.
+extern CONST char *SzEphSourceDefault P((void));
+extern void SzEphChainHead P((CONST char *, char *, int));
+extern void EphSourceChanged P((void));
+extern int IEphParamFromKey P((CONST char *));
+extern flag FEphParamSet P((int, CONST char *));
+extern flag FEphParamDefaulted P((int));
+extern void EphLegacyFromChain P((void));
+extern void EphSourceSet P((CONST char *));
+extern flag FEphChainFromLegacy P((void));
 
 // The fixed stars' decision-and-execution pair, the FSwissPlanet()
 // analogue for one star: resolve nothing here -- the caller hands the
@@ -1284,6 +1300,7 @@ extern flag API DlgRestrict P((HWND, uint, WORD, LONG));
 extern flag API DlgStar     P((HWND, uint, WORD, LONG));
 extern flag API DlgMoons    P((HWND, uint, WORD, LONG));
 extern flag API DlgCalc     P((HWND, uint, WORD, LONG));
+extern flag API DlgEphem    P((HWND, uint, WORD, LONG));
 extern flag API DlgDisplay  P((HWND, uint, WORD, LONG));
 extern flag API DlgTransit  P((HWND, uint, WORD, LONG));
 extern flag API DlgProgress P((HWND, uint, WORD, LONG));

@@ -467,11 +467,20 @@ void DisplaySwitches(void)
   PrintS(" _Aa <aspect> <angle>: Change the actual angle of an aspect.");
   PrintS("\nSwitches which affect how a chart is computed:");
 #ifdef EPHEM
-  PrintS(" _b: Use ephemeris files for more accurate location computations.");
+  PrintS(" _bE <src[,src..]>: Select ephemeris source(s) in fallback order,");
+  PrintS("  e.g. _bE swiss or _bE server,swiss,moshier; unavailable sources");
+  PrintS("  are skipped when a chart is cast, not when they are selected.");
+  PrintS(" _bP <source.param> <value>: Set one ephemeris source parameter,");
+  PrintS("  e.g. _bP server.url wss://host or _bP jpl.file de431.eph; \"\"");
+  PrintS("  restores the parameter's own default.");
 #endif
   PrintS(" _b0: Display locations and times to the nearest second.");
   PrintS(" _b1: Display locations/times to nearest millisecond instead.");
   PrintS(" _b2: Display ':00' part of time/location/zone only if non-zero.");
+  PrintS(
+    "  The older backend spellings still select too: _b, _bs, _bj, _bJ,");
+  PrintS("  _bS, _bm, _bW, and _bT (one line for all of them, for looking");
+  PrintS("  up a settings file that uses one; _bE is the one to type).");
 #ifdef SWISS
   PrintS(
     " _bj: Use more accurate JPL ephemeris file instead of Swiss Ephemeris.");

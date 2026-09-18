@@ -1609,6 +1609,7 @@ CONST char *szPntSwiss[] = {"", "n", "s", "p", "a"};
 flag FOutputSettings()
 {
   char sz[cchSzMax];
+  int iep;
   FILE *file;
   int i;
   char szForce[cchSzDef];
@@ -1827,6 +1828,33 @@ flag FOutputSettings()
   sprintf2(S(sz), "%cb      ", ChDashF(us.fEphemFiles)); PrintFSz();
   PrintF(
     "; Use ephemeris files       [\"=b\" uses them, \"_b\" doesn't      ]\n");
+  // The selection's own spellings (EPHEMERIS_PLUGINS_PLAN.md 5.3): one
+  // -bE line for the chain, then one -bP line per parameter that sits
+  // away from its default. They follow the legacy spellings above so a
+  // file this writer produced loads to the state it was written from
+  // whichever line lands last; once the legacy spellings go, these are
+  // the only lines left, and order stops mattering. The chain is written
+  // even at its default, so a poisoned marker survives the round trip;
+  // the parameters are written only when set, and "" or NULL -- the
+  // default -- writes nothing, which is why the sweep's poison-to-empty
+  // reads back as still default rather than lost.
+  PrintF("-bE "); PrintQuotedParamSz(file, SzSet(us.szEphemSource));
+  PrintF("\n");
+  PrintF(
+    "; Ephemeris source chain    [\"swiss\"; \"server,swiss,moshier\" orders "
+    "the fallback]\n");
+  for (iep = 0; iep < cEphParam; iep++) {
+    if (FEphParamDefaulted(iep))
+      continue;
+    sprintf2(S(sz), "-bP %s.%s ", rgephparam[iep].szSrc,
+      rgephparam[iep].ep.szKey);
+    PrintFSz();
+    PrintQuotedParamSz(file, us.rgszEphParam[iep]);
+    PrintF("\n");
+  }
+  PrintF(
+    "; Ephemeris parameters      [\"-bP server.url <address>\" sets one; "
+    "\"\" is its default]\n");
   sprintf2(S(sz), "%c0b     ", ChDashF(us.fNoOldCalc)); PrintFSz();
   PrintF(
     "; Disable old calculations  [\"=0b\" disables them, \"_0b\" allows ]\n");

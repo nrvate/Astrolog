@@ -2261,6 +2261,78 @@ static int NSwA(CONST char *szSwitch, PARSEIN *pin)
   return 2;
 }
 
+// -bE: the selection's own spelling (EPHEMERIS_PLUGINS_PLAN.md 5.2): the
+// fallback chain as a comma list of source keys, primary first. Setting
+// it is idempotent -- the chain is set, not toggled -- and every legacy
+// spelling beside it re-derives the chain from its own shadow (NSwb). ""
+// restores the default chain. A key this build does not compile is not
+// an error -- the walk skips it, the same rule an unavailable source
+// follows -- but a key no source defines is refused, because the chain's
+// head falls through to the Swiss files and a silent typo would both
+// cast from the wrong source and be written back into the settings.
+
+static int NSwbE(CONST char *szSwitch, PARSEIN *pin)
+{
+  char szErr[cchSzMax];
+  CONST char *pch, *pchTok;
+
+  if (FErrorArgc("bE", pin->argc, 1))
+    return tcError;
+  if (FSzSet(pin->argv[1]))
+    for (pchTok = pin->argv[1];; pchTok = pch + 1) {
+      for (pch = pchTok; *pch && *pch != ','; pch++)
+        ;
+      if (pch == pchTok) {
+        PrintError("The -bE chain needs a source key between its commas, "
+          "like \"-bE swiss\" or \"-bE server,swiss,moshier\".");
+        return tcError;
+      }
+      if (!FEphSrcKeyKnownN(pchTok, (int)(pch - pchTok))) {
+        // The key is quoted in the message through its range, never
+        // copied: a token can be any length, and a truncated copy could
+        // name a different key than the one the user typed.
+        sprintf2(S(szErr), "Unknown ephemeris source '%.*s'",
+          (int)(pch - pchTok), pchTok);
+        PrintError(szErr);
+        return tcError;
+      }
+      if (*pch != ',')
+        break;
+    }
+  EphSourceSet(pin->argv[1]);
+  return 1;
+}
+
+
+// -bP: one parameter of one source, "source.param", and its value. ""
+// restores the parameter's declared default (ephparam.h). An unknown key
+// is refused the way an unknown switch is: a settings file this build
+// cannot name is better refused than silently dropped.
+
+static int NSwbP(CONST char *szSwitch, PARSEIN *pin)
+{
+  char szErr[cchSzDef];
+  int iep;
+
+  if (FErrorArgc("bP", pin->argc, 2))
+    return tcError;
+  iep = IEphParamFromKey(pin->argv[1]);
+  if (iep < 0) {
+    sprintf2(S(szErr), "Unknown ephemeris parameter '%s'", pin->argv[1]);
+    PrintError(szErr);
+    return tcError;
+  }
+  FEphParamSet(iep, pin->argv[2]);
+  // No mirror back into us.szEphSrv/us.szEphSrvToken here, on purpose:
+  // the legacy spellings mirror INTO the parameters when they are
+  // written, and these lines must map to their own fields and nothing
+  // else. The settings sweep is the proof: it sets both representations
+  // of the server address to different markers, saves, and requires
+  // both back, which a reader that let -bP clobber -bW would fail.
+  return 2;
+}
+
+
 // The -b ephemeris-selection family: the digit suffixes, -bW and -bT (the
 // server's address and token, not backend choices) stand alone; every other spelling
 // also turns ephemeris files on, exactly as the retired case fell
@@ -2354,6 +2426,7 @@ static int NSwb(CONST char *szSwitch, PARSEIN *pin)
     // toggle. Turning the server off still falls through, as those do.
     if (us.nSwissEph == 5) {
       us.fEphemFiles = fTrue;
+      FEphChainFromLegacy();
       return 0;
     }
   }
@@ -2367,6 +2440,10 @@ static int NSwb(CONST char *szSwitch, PARSEIN *pin)
     // not garbage: the settings writer emits -bW "" for it, and a file
     // that failed to load its own output would be no format at all.
     FCloneSz(*SzSet(pin->argv[1]) ? pin->argv[1] : NULL, &us.szEphSrv);
+    // The address's parameter representation rides along while both
+    // spellings live (-bP server.url is the other way to write it).
+    FCloneSz(*SzSet(pin->argv[1]) ? pin->argv[1] : NULL,
+      &us.rgszEphParam[epServerUrl]);
     return 1;
   }
   else if (ch1 == 'T') {
@@ -2376,9 +2453,15 @@ static int NSwb(CONST char *szSwitch, PARSEIN *pin)
     if (FErrorArgc("bT", pin->argc, 1))
       return tcError;
     FCloneSz(*SzSet(pin->argv[1]) ? pin->argv[1] : NULL, &us.szEphSrvToken);
+    FCloneSz(*SzSet(pin->argv[1]) ? pin->argv[1] : NULL,
+      &us.rgszEphParam[epServerToken]);
     return 1;
   }
   SwitchF(us.fEphemFiles);
+  // Every spelling that reaches here has moved the selection's legacy
+  // fields; the chain is re-derived from them so the two representations
+  // stay one selection (ephem.cpp).
+  FEphChainFromLegacy();
   return 0;
 }
 
@@ -4131,6 +4214,10 @@ static CONST SWITCHDEF rgswitchdef[] = {
   {"1",    0,           NSwOne}, {"10",   0,           NSwOne0},
   {"2",    0,           NSwTwo}, {"20",   0,           NSwTwo0},
   {"4",    0,           NSwFour},
+  // -bE and -bP are the selection's own spellings (EPHEMERIS_PLUGINS_PLAN.md
+  // 5.2) and sit ahead of the bare -b row, which would otherwise prefix-
+  // match them first.
+  {"bE",   grfSwPrefix, NSwbE},  {"bP",   grfSwPrefix, NSwbP},
   {"b",    grfSwPrefix, NSwb},
   {"c",    grfSwPrefix, NSwc},
   {"s",    grfSwPrefix, NSws},

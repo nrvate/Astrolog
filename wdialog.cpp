@@ -2328,24 +2328,6 @@ flag API DlgCalc(HWND hdlg, uint message, WORD wParam, LONG lParam)
 
   switch (message) {
   case WM_INITDIALOG:
-#ifdef SWISS
-    SetCombo(dcSe_b, szEphem[cmSwiss]);
-    SetCombo(dcSe_b, szEphem[cmMoshier]);
-    SetCombo(dcSe_b, szEphem[cmJPL]);
-#endif
-#ifdef JPLWEB
-    if (!us.fNoNetwork)
-      SetCombo(dcSe_b, szEphem[cmJPLWeb]);
-#endif
-#ifdef MATRIX
-    if (!us.fNoOldCalc)
-      SetCombo(dcSe_b, szEphem[cmMatrix]);
-#endif
-    SetCombo(dcSe_b, szEphem[cmNone]);
-    i = FCmSwissEph() ? cmSwiss : (FCmSwissMosh() ? cmMoshier :
-      (FCmSwissJPL() ? cmJPL :
-      (FCmMatrix() ? cmMatrix : (FCmJPLWeb() ? cmJPLWeb : cmNone))));
-    SetEdit(dcSe_b, szEphem[i]);
     SetEditR(hdlg, dcSe_s, us.rZodiacOffset, 6);
     for (i = 0; *rgZodiacOffset[i].sz; i++) {
       FormatR(S(sz), rgZodiacOffset[i].r, 6);
@@ -2400,24 +2382,6 @@ flag API DlgCalc(HWND hdlg, uint message, WORD wParam, LONG lParam)
       EnsureR(rx, FValidHarmonic(rx), "harmonic factor");
       EnsureN(n4, FValidDwad(n4), "dwad nesting");
       EnsureN(n1, FItem(n1), "Solar chart planet");
-      GetEdit(dcSe_b, sz);
-      us.fEphemFiles = us.fMatrixPla = fFalse;
-      us.nSwissEph = 0;
-#ifdef SWISS
-      if (FMatchSz(sz, szEphem[cmSwiss])) {
-        us.fEphemFiles = fTrue; us.nSwissEph = 0;
-      } else if (FMatchSz(sz, szEphem[cmMoshier])) {
-        us.fEphemFiles = fTrue; us.nSwissEph = 1;
-      } else if (FMatchSz(sz, szEphem[cmJPL])) {
-        us.fEphemFiles = fTrue; us.nSwissEph = 2;
-      } else if (FMatchSz(sz, szEphem[cmJPLWeb])) {
-        us.fEphemFiles = fTrue; us.nSwissEph = 3;
-      }
-#endif
-#ifdef MATRIX
-      if (FMatchSz(sz, szEphem[cmMatrix]))
-        us.fMatrixPla = fTrue;
-#endif
       us.rZodiacOffset = rs;
       us.nHouseSystem = nc;
       SetCentric(nh);
@@ -2446,6 +2410,282 @@ flag API DlgCalc(HWND hdlg, uint message, WORD wParam, LONG lParam)
       wi.fCast = fTrue;
     }
     if (wParam == IDOK || wParam == IDCANCEL) {
+      EndDialog(hdlg, fTrue);
+      return fTrue;
+    }
+    break;
+  }
+  return fFalse;
+}
+
+
+// The ephemeris settings dialog (EPHEMERIS_PLUGINS_PLAN.md 5.4): the
+// selection as the source registry itself sees it -- the chain, the
+// compiled-in sources with their availability, and the source parameters.
+// No source is named in this dialog: the list is rgephsrc[] at runtime, so
+// a build with a plugin this one predates shows the extra row with nothing
+// here edited, and a source a build did not compile is listed with the
+// reason it gives for being unavailable rather than hidden.
+
+// The four parameter rows bind these of the shared index space (section
+// 4.3): the JPL file, the one parameter whose source is in every build and
+// which no setting could name before; the Ephemeris Server's address and
+// token, which Calculation Settings used to carry beside its method combo
+// and which moved here when the combo did; and Prometheia's ephemeris
+// file, so a build with that plugin has its main setting without this
+// dialog growing a row. The rows are otherwise generic: the label and the
+// kind come from the generated table, an epkToken row is masked, and
+// Browse is offered to the path kinds only, so a regenerated table changes
+// what the rows say without this file being touched.
+
+static CONST int rgiepEphemParam[4] =
+  { epJplFile, epServerUrl, epServerToken, epPrometheiaEphemeris };
+
+
+// Compose the status line: the primary source's state and the once-per-cast
+// notice that a fallback served something. A chain head this build's
+// registry does not resolve is named for what it is rather than reported as
+// an error, which is the same rule the fallback walk follows; the
+// connecting state cycles its dots, because a wait that stands still reads
+// as broken, although no source reports it before phase 6's remote ones.
+
+static void SetEphemStatusW(HWND hdlg, int nTick)
+{
+  EPHSRCDEF *pephsrc;
+  char sz[cchSzMax], szHead[cchSzDef], szState[cchSzDef];
+  char *pch;
+  int nState;
+
+  SzEphChainHead(us.szEphemSource, S(szHead));
+  pephsrc = PephsrcGet(IEphSrcFromKey(szHead));
+  if (pephsrc != NULL) {
+    nState = pephsrc->State(S(szState));
+    if (nState == esConnecting)
+      sprintf2(S(sz), "%s: %s%.*s", szHead, szState, nTick % 3 + 1, "...");
+    else
+      sprintf2(S(sz), "%s: %s", szHead, szState);
+  } else if (FEphSrcKeyKnown(szHead))
+    sprintf2(S(sz), "'%s' is not built into this program", szHead);
+  else
+    sprintf2(S(sz), "'%s' is not a source this program defines", szHead);
+  if (FEphFallbackNotice()) {
+    pch = sz; while (*pch) pch++;
+    sprintf2(SO(pch, sz), "; a fallback source served part of the last cast");
+  }
+  SetEdit(dsEp_st, sz);
+}
+
+
+// Put the chain together for a newly picked primary: the picked source
+// first, then the old chain's tail with the picked source dropped from it,
+// so choosing a different head never duplicates a source the walk would
+// otherwise ask twice. Tokens the user typed are kept as typed; OK is
+// where anything unknown is refused.
+
+static void SetEphemChainW(HWND hdlg, CONST char *szKey)
+{
+  char sz[cchSzMax], szT[cchSzMax];
+  CONST char *pch, *pchTail, *pchTok;
+  char *pchDst;
+
+  GetEdit(deEp_chain, szT);
+  for (pchTail = szT; *pchTail && *pchTail != ','; pchTail++)
+    ;
+  sprintf2(S(sz), "%s", szKey);
+  pchDst = sz + CchSz(sz);
+  for (pchTok = pchTail; ; pchTok = pch + 1) {
+    for (pch = pchTok; *pch && *pch != ','; pch++)
+      ;
+    if (pch == pchTok)
+      break;
+    sprintf2(S(szT), "%.*s", (int)(pch - pchTok), pchTok);
+    if (!FEqSz(szT, szKey)) {
+      sprintf2(SO(pchDst, sz), ",%s", szT);
+      pchDst += CchSz(pchDst);
+    }
+    if (*pch != ',')
+      break;
+  }
+  SetEdit(deEp_chain, sz);
+}
+
+
+// Processing function for the ephemeris settings dialog, as brought up with
+// the Setting / Ephemeris Settings menu command.
+
+flag API DlgEphem(HWND hdlg, uint message, WORD wParam, LONG lParam)
+{
+  EPHSRCDEF *pephsrc;
+  CONST EPHPARAMROW *pep;
+  char sz[cchSzMax], szHead[cchSzDef], szT[cchSzMax];
+  CONST char *pch, *pchTok;
+  int i, j;
+  // The dialog's own state, kept across the messages like DlgObjectSel
+  // keeps its rows: the list row whose selection was last applied (so the
+  // poll below only acts on a change the user made), the status line's
+  // tick (the connecting dots), and for how many more ticks a Connect
+  // report holds the line before the live state takes it back.
+  static int isrcLast = -1, nTick = 0, nHoldStatus = 0;
+
+  switch (message) {
+  case WM_INITDIALOG:
+    // The list is the registry, in its fallback quality order, with each
+    // unavailable source showing the reason its own callback gives.
+    for (i = 0; i < CEphSrc(); i++) {
+      pephsrc = PephsrcGet(i);
+      if (pephsrc->FAvailable(S(szT)))
+        sprintf2(S(sz), "%s", pephsrc->szName);
+      else
+        sprintf2(S(sz), "%s - %s", pephsrc->szName, szT);
+      j = SetListSz(hdlg, dlEp_src, sz);
+      SendDlgItemMessage(hdlg, dlEp_src, LB_SETITEMDATA, j, (LPARAM)i);
+    }
+    // The chain's head selects its row, when the head is one of this
+    // build's sources; a head from a newer build's settings file has no
+    // row, and the edit below shows it as it is.
+    SzEphChainHead(us.szEphemSource, S(szHead));
+    i = IEphSrcFromKey(szHead);
+    if (i >= 0)
+      for (j = 0; j < CEphSrc(); j++)
+        if ((int)SendDlgItemMessage(hdlg, dlEp_src, LB_GETITEMDATA, j, 0) == i) {
+          SendDlgItemMessage(hdlg, dlEp_src, LB_SETCURSEL, j, 0);
+          break;
+        }
+    isrcLast = i;
+    SetEdit(deEp_chain, SzSet(us.szEphemSource));
+    if (i >= 0)
+      SetEdit(dsEp_ds, PephsrcGet(i)->szDesc);
+    else
+      SetEdit(dsEp_ds, "The primary source is not one this build compiles in.");
+    for (i = 0; i < 4; i++) {
+      pep = &rgephparam[rgiepEphemParam[i]];
+      // The table's labels are names ("JPL file"), not captions, so the
+      // colon every other row label in this dialog carries is added here
+      // rather than baked into the generated table.
+      sprintf2(S(sz), "%s:", pep->ep.szLabel);
+      SetEdit(dsEp_p1 + i, sz);
+      SetEdit(deEp_p1 + i, SzSet(us.rgszEphParam[rgiepEphemParam[i]]));
+      if (pep->ep.nKind == epkToken)
+        SendDlgItemMessage(hdlg, deEp_p1 + i, EM_SETPASSWORDCHAR,
+          (WPARAM)'*', 0);
+      ShowWindow(GetDlgItem(hdlg, dbEp_b1 + i),
+        pep->ep.nKind == epkPath || pep->ep.nKind == epkFile ?
+        SW_SHOW : SW_HIDE);
+    }
+    SetEphemStatusW(hdlg, nTick);
+    SetTimer(hdlg, 1, 250, NULL);
+    SetFocus(GetDlgItem(hdlg, deEp_chain));
+    return fFalse;
+
+  case WM_TIMER:
+    if (wParam != 1)
+      break;
+    nTick++;
+    // The dialog procs here take a 16 bit wParam, which is where a list
+    // box's LBN_SELCHANGE would arrive, so the selection is polled instead:
+    // a row the user picks applies once, and typing in the chain edit is
+    // never fought over.
+    j = (int)SendDlgItemMessage(hdlg, dlEp_src, LB_GETCURSEL, 0, 0);
+    i = j >= 0 ? (int)SendDlgItemMessage(hdlg, dlEp_src, LB_GETITEMDATA, j, 0)
+      : -1;
+    if (i != isrcLast) {
+      isrcLast = i;
+      if (i >= 0) {
+        pephsrc = PephsrcGet(i);
+        SetEdit(dsEp_ds, pephsrc->szDesc);
+        SetEphemChainW(hdlg, pephsrc->szKey);
+      }
+    }
+    // A Connect report holds the line for a few ticks, then the live state
+    // takes it back.
+    if (nHoldStatus > 0)
+      nHoldStatus--;
+    else
+      SetEphemStatusW(hdlg, nTick);
+    return fTrue;
+
+  case WM_COMMAND:
+    if (wParam == dbEp_ct) {
+      // Connect, or for a local source, test it: the registry's own
+      // availability and state, reported through the status line. A source
+      // this build's registry does not resolve has no transport to try --
+      // the remote plugins are phase 6's -- and saying so is the honest
+      // answer, not an error.
+      GetEdit(deEp_chain, sz);
+      SzEphChainHead(sz, S(szHead));
+      pephsrc = PephsrcGet(IEphSrcFromKey(szHead));
+      if (pephsrc != NULL) {
+        if (pephsrc->FAvailable(S(szT))) {
+          pephsrc->State(S(sz));
+          sprintf2(S(szT), "%s: %s", szHead, sz);
+          SetEdit(dsEp_st, szT);
+        } else {
+          sprintf2(S(sz), "%s: unavailable - %s", szHead, szT);
+          SetEdit(dsEp_st, sz);
+        }
+      } else if (FEphSrcKeyKnown(szHead)) {
+        sprintf2(S(sz), "Connect: '%s' has no transport in this build",
+          szHead);
+        SetEdit(dsEp_st, sz);
+      } else {
+        sprintf2(S(sz), "Connect: '%s' is not a source this program defines",
+          szHead);
+        SetEdit(dsEp_st, sz);
+      }
+      nHoldStatus = 12;
+      return fTrue;
+    }
+
+    // Browse for the one row's parameter that is path shaped today; the
+    // buttons of the other rows stay hidden (above), and a regenerated
+    // parameter table re-decides which they are.
+    for (i = 0; i < 4; i++) {
+      if ((int)wParam != dbEp_b1 + i)
+        continue;
+      GetEdit(deEp_p1 + i, sz);
+      sprintf2(S(szFileName), "%.*s", cchSzMaxFile-1, sz);
+      ofn.lpstrFilter = "Ephemeris Files (*.eph)\0*.eph\0All Files (*.*)\0*.*\0";
+      ofn.lpstrTitle = "Browse";
+      if (GetOpenFileName((LPOPENFILENAME)&ofn))
+        SetEdit(deEp_p1 + i, szFileName);
+      return fTrue;
+    }
+
+    if (wParam == IDOK) {
+      // The chain is validated exactly as the -bE switch validates it
+      // (switch.cpp): every comma token must name a source some build
+      // defines, and the refusal names the token, never truncating it into
+      // a different key. Refused means the dialog stays open; nothing is
+      // applied and nothing is silently dropped.
+      GetEdit(deEp_chain, sz);
+      for (pchTok = sz; ; pchTok = pch + 1) {
+        for (pch = pchTok; *pch && *pch != ','; pch++)
+          ;
+        if (pch == pchTok) {
+          if (pch == sz && *pch == chNull)
+            break;   // An empty chain is the default chain, as "" is for -bE.
+          PrintWarning("The fallback order needs a source key between its "
+            "commas, like \"swiss\" or \"server,swiss,moshier\".");
+          return fTrue;
+        }
+        if (!FEphSrcKeyKnownN(pchTok, (int)(pch - pchTok))) {
+          sprintf2(S(szT), "Unknown ephemeris source '%.*s' in the fallback "
+            "order", (int)(pch - pchTok), pchTok);
+          PrintWarning(szT);
+          return fTrue;
+        }
+        if (*pch != ',')
+          break;
+      }
+      EphSourceSet(sz);
+      for (i = 0; i < 4; i++) {
+        GetEdit(deEp_p1 + i, sz);
+        FEphParamSet(rgiepEphemParam[i], sz);
+      }
+      wi.fCast = fTrue;
+    }
+    if (wParam == IDOK || wParam == IDCANCEL) {
+      KillTimer(hdlg, 1);
       EndDialog(hdlg, fTrue);
       return fTrue;
     }

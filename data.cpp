@@ -137,12 +137,28 @@ US us = {
   0, 5, 200, cPart, 22, 0.0, 0.0, rDayInYear, 1.0, 0.5, ccNone, ccNone,
   24, 0, 0, rInvalid, 0.0, 0.0, 0.0, oEar, oEar, 0, 0, BIODAYS, 0, 0, 0,
 
-  // AstroExpressions
+  // AstroExpressions. The original initializer sat two entries short of
+  // the struct's 54 expression hooks -- szExpListY and szExpADB silently
+  // zero-initialized, which is what they were anyway -- and is exact now,
+  // because a positional list that is not exact cannot take two more
+  // members below it without eating them.
   NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
   NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
   NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
   NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
-  NULL, NULL, NULL, NULL};
+  NULL, NULL, NULL, NULL, NULL, NULL,
+
+  // The ephemeris selection (EPHEMERIS_PLUGINS_PLAN.md 5.1), appended
+  // after every positional slot above so none of them can shift. The
+  // chain is NULL here -- a string constant cannot initialize a char*
+  // without a -Wwrite-strings warning the warning audit owns -- and
+  // InitProgram() applies the default (SzEphSourceDefault(): "swiss"
+  // under EPHEM, "matrix" without it) before any file or switch loads.
+  // Every parameter starts at its source's own default (NULL, which is
+  // ephparam.h's "" for each row); the NULL list is one per generated
+  // parameter, so it grows when ephparam.h does.
+  NULL,
+  {NULL, NULL, NULL, NULL, NULL, NULL}};
 
 IS is = {
 #ifdef SWITCHES

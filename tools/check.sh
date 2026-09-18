@@ -73,6 +73,7 @@ gen  "dialogs from astrolog.rc"  qtrcdlg.h   python3 tools/rc2qt.py astrolog.rc
 gen  "accelerators"              qtrcaccel.h python3 tools/rc_accel.py astrolog.rc
 gen  "command ids"               qtrccmd.h   python3 tools/rc_cmd.py astrolog.rc resource.h
 gen  "settings fields"           settingsfields.h python3 tools/gen_settings_fields.py astrolog.h
+gen  "ephemeris parameters"      ephparam.h python3 tools/gen-eph-params.py --stdout
 # Appendix A's registries as JSON, for a second implementation to vendor:
 # generated from the prose, and the codec test below requires ephproto.h's own
 # constants to agree with the file, so prose, file and code cannot drift.

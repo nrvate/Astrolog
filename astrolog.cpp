@@ -605,6 +605,10 @@ void InitProgram()
   SetCI(ciDefa, MM, DD, YY, TT, 0, DEFAULT_ZONE, DEFAULT_LONG, DEFAULT_LAT);
   is.S = stdout;
   ClearB((pbyte)szStarCustom, sizeof(szStarCustom));
+  // The ephemeris selection's default chain (data.cpp leaves it NULL, so
+  // the positional initializer cannot convert a string constant to
+  // char*): "swiss" under EPHEM, the Matrix legacy cast without it.
+  EphSourceSet(NULL);
   InitRestrictions(fTrue);
   // Before any switch, so these hold the compiled defaults the settings
   // writer compares against (data.cpp, by ruler1Def).
@@ -727,6 +731,11 @@ void FinalizeProgram(flag fSkip)
   DeallocatePIf(grid);
   for (i = 0; i < 10; i++)
     DeallocatePIf(us.rgszPath[i]);
+  DeallocatePIf(us.szEphemSource);
+  for (i = 0; i < cEphParam; i++)
+    DeallocatePIf(us.rgszEphParam[i]);
+  DeallocatePIf(us.szEphSrv);
+  DeallocatePIf(us.szEphSrvToken);
   DeallocatePIf(us.szADB);
   DeallocatePIf(us.szStarsColor);
   DeallocatePIf(us.szAstColor);

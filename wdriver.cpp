@@ -1928,6 +1928,10 @@ int NWmCommand(WORD wCmd)
     WiDoDialog(DlgCalc, dlgCalc);
     break;
 
+  case cmdEphem:
+    WiDoDialog(DlgEphem, dlgEphem);
+    break;
+
   case cmdDisplay:
     WiDoDialog(DlgDisplay, dlgDisplay);
     break;
