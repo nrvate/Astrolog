@@ -1115,6 +1115,47 @@ static void ComputeObjectRows(swe_ctx *ctx, const eph::Request &req, uint32_t iO
         std::string text;
         m.firstFailedRow = r;
         m.errCode = ObjErrOf(serr, c.kind == eph::swiss::kCallFixstar, &text);
+        // "The file is missing" and "this instant needs data from outside
+        // the span" are the same Swiss message, and they meant the same
+        // A.17 code here: 4. They are not the same thing, and the
+        // difference is exactly what a client acts on -- one says try
+        // another instant, the other says the server is misconfigured.
+        //
+        // At the first instant of the .se1 span, a light-time correction
+        // has to look a few minutes EARLIER, into a century file this
+        // server does not carry, and Swiss says the file is not found.
+        // We answered 4 with the text "not on the server's path", which
+        // was untrue: the file for the instant asked about is right
+        // there. Found by the Prometheia project's cross-test, leg 2.
+        //
+        // So ask the cheap question directly, and only on the error
+        // path: does this BODY compute at an instant we know is covered?
+        // If it does, the body's data is on the path and what failed is
+        // about the INSTANT -- coverage (3). If it fails there too, the
+        // body's file really is absent -- data missing (4).
+        //
+        // One probe settles three cases that used to be one: the first
+        // instant of the span with a light-time correction (the body
+        // computes at J2000, so 3); an instant far outside any century
+        // file (likewise 3, which the narrower first version of this fix
+        // still got wrong); and an asteroid whose .se1 was never shipped
+        // (fails at J2000 too, so 4).
+        //
+        // TRUEPOS on the probe so the probe itself cannot fail for the
+        // reach reason it is trying to distinguish. J2000 is the
+        // reference because every ephemeris this server is meant to
+        // carry spans it; a bundle that did not would report 4 where 3
+        // was meant, which is the honest limit of this test.
+        if (m.errCode == eph::kOErrDataMissing &&
+            c.kind == eph::swiss::kCallCalc) {
+          double xxT[6];
+          char serrT[AS_MAXCH];
+          if (swe_calc_r(ctx, 2451545.0, c.ipl, c.iflag | SEFLG_TRUEPOS, xxT,
+                         serrT) >= 0) {
+            m.errCode = eph::kOErrCoverage;
+            text = "the instant is outside this ephemeris's coverage";
+          }
+        }
         m.errText = WireText(text.c_str());
       }
       continue;
