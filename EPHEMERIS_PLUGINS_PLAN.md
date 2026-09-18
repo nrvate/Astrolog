@@ -115,8 +115,12 @@ version 3, and this section is the design authority behind it.
   and reaches 0.3 mas only in the case contrived to accumulate 173
   orbits. Left alone on purpose: the constant is upstream Swiss's, and
   changing it would make this the only Swiss consumer that disagrees
-  with the rest about where a Hamburg point is. A fifth sentence for
-  3.5a carries the durable half. Still owed: their verdict. **§3.5a itself is not edited in this
+  with the rest about where a Hamburg point is. A **fifth sentence** carries the durable
+  half -- derive k from the radian value at full double precision rather
+  than carrying a rounded decimal in your working units -- released as an
+  amendment on the maintainer's approval, 2026-09-18. Prometheia has
+  verdicted the fixture: it conforms, every row, and is a permanent gate
+  on their side. The drop is closed. **§3.5a itself is not edited in this
   document until the drop is verdicted**, which is the rule the approval
   condition exists to enforce.
 
