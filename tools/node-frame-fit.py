@@ -42,6 +42,7 @@ def sep(a,b):
     y=math.sin(b1)*math.sin(b2)+math.cos(b1)*math.cos(b2)*math.cos(dl)
     return math.atan2(x,y)/D*3600
 jds=sorted({k[0] for k in d})
+worst = 0.0
 for jd in jds:
     A=d[(jd,'mod')]; B=d[(jd,'j2000')]
     bodies=[k for k in A if k!='node' and k in B]
@@ -68,5 +69,18 @@ for jd in jds:
     print("   node of date                       lon %11.6f  lat %+9.4f\""%(n0[0],n0[1]*3600))
     print("   that node ROTATED into J2000       lon %11.6f  lat %+9.4f\""%(pred[0]%360,pred[1]*3600))
     print("   what the server ANSWERS in J2000   lon %11.6f  lat %+9.4f\""%(n2[0],n2[1]*3600))
-    print("   server vs rotated: %.3f\"   |   server vs 'lat kept 0': %.4f\"\n"%(
-        sep((pred[0]%360,pred[1]),n2), abs(n2[1])*3600))
+    rSep = sep((pred[0]%360,pred[1]),n2)
+    print("   server vs rotated: %.4f\"   |   server vs 'lat kept 0': %.4f\"\n"%(
+        rSep, abs(n2[1])*3600))
+    worst = max(worst, rSep)
+
+# The gate. A node must follow the very rotation its own bodies take -- the
+# tolerance is for float64 and the fit, not for a model difference, so it is
+# tight on purpose. EPHEMERIS_ACCURACY_REGISTRY.md 4.2.
+TOL = 0.001
+if worst <= TOL:
+    print("NODE FRAME PASS: the node follows the bodies' rotation, worst %.5f\"" % worst)
+    sys.exit(0)
+print("NODE FRAME FAIL: worst %.4f\" against a %.3f\" tolerance -- the node in a"
+      " fixed frame is not the of-date node rotated" % (worst, TOL))
+sys.exit(1)

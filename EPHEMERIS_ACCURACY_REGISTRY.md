@@ -337,92 +337,61 @@ have one fix — if the zero point is a projected direction, the plane transform
 is our own arithmetic rather than a Swiss sidereal mode, and it then works for
 all 47 tokens instead of 31.
 
-### 4.2 Nodes in a J2000/ICRF frame — DECIDED 2026-09-18, and ours to fix
+### 4.2 Nodes in a J2000/ICRF frame — FIXED 2026-09-18
 
-**§3.5a is amended and this server is wrong.** Not in the way this entry
-used to say, which is the part worth reading.
+**§3.5a as amended:** a node lies on the mean ecliptic of date; the profile's
+frame gives the coordinates it is expressed in and does not change which point
+it is. Approved by both maintainers; Prometheia implemented it in their
+`18f84ac`, this server in the commit carrying this entry.
 
-The amended sentence, approved by both maintainers and already implemented
-on the Prometheia side: *a node lies on the mean ecliptic of date; the
-profile's frame gives the coordinates it is expressed in and does not change
-which point it is.* Their maintainer's reasoning was astrological rather
-than geometric — the node of date is where eclipses fall, which is what an
+Their maintainer's reasoning was astrological rather than geometric, and is the
+better one: **the node of date is where eclipses fall**, which is what an
 astrologer means by the node, and Uranian orbs are tight enough that a
 frame-dependent node would move pictures.
 
-**What this entry claimed, and why it was wrong.** It said this server
-"computes the node against the ecliptic OF DATE and then rotates it", and
-put that forward as the reading §3.5a should be amended to. The first half
-is false. Measured by fitting the date→J2000 rotation from five ordinary
-bodies at the same instant — which recovers it to **rms 0.00000″**, since
-every direction takes the same rotation — and then asking whether the node
-follows that same rotation:
+**What was wrong.** `eph_srv.cpp` passed the profile's frame flags straight to
+`swe_nod_aps`, and Swiss handed a fixed frame answers a **third point** —
+neither reading. Measured by fitting the date→J2000 rotation from five ordinary
+bodies (every direction takes the same rotation, so it fits to rms 0.00000″)
+and asking whether the node follows it:
 
-| epoch | node of date | rotated into J2000 | what this server answers |
+| epoch | node of date | rotated into J2000 | was answered |
 |---|---|---|---|
-| 1800 | lon 33.246026, lat 0 | lon 36.038513, lat **+61.358″** | lon 36.038516, lat **+10.013″** |
-| 1900 | lon 259.156463, lat 0 | lon 260.553025, lat **−46.882″** | lon 260.553025, lat **−0.884″** |
-| 2100 | lon 350.910313, lat 0 | lon 349.513118, lat **+4.191″** | lon 349.513118, lat **−3.208″** |
+| 1800 | lon 33.246026 | lon 36.038513, lat **+61.358″** | lon 36.038516, lat **+10.013″** |
+| 1900 | lon 259.156463 | lon 260.553025, lat **−46.882″** | lon 260.553025, lat **−0.884″** |
+| 2100 | lon 350.910313 | lon 349.513118, lat **+4.191″** | lon 349.513118, lat **−3.208″** |
 
-The **longitudes agree to 0.003″** — so the longitude really is the of-date
-node's, precessed. The **latitudes do not**, and at 2100 not even in sign.
-So this server answers a **third point**: neither the node of date expressed
-in J2000 (the amended sentence), nor the node against the J2000 ecliptic
-(the old sentence, latitude exactly 0). The +10.013″ and −3.208″ this entry
-used to quote were real numbers attached to a wrong explanation, and they
-looked small enough to seem like the rotation rather than unlike it.
+The longitudes agreed to 0.003″, so the longitude really was the of-date node's,
+precessed; the latitudes did not, and at 2100 not even in sign.
 
-`eph_srv.cpp`'s `kCallNodAps` passes the profile's frame flags — `SEFLG_J2000`
-among them — straight to `swe_nod_aps`, so what comes back is Swiss's own
-choice and nothing here has ever asked what that choice is.
+**The fix.** The node is computed on the mean ecliptic of date and rotated here,
+through `swi_precess` — *the same precession `swe_calc` gives the bodies*. That
+property is the point, and it is Prometheia's criterion: a J2000 chart has to be
+internally consistent, and a precession model reimplemented here would disagree
+with our own planets before it disagreed with anyone else's. `swi_precess` is
+linkable in both Swiss copies and this codebase's shared core has always called
+that family (`swi_epsiln`, `swi_nutation` in `calc.cpp`), so it is an
+established kind of call rather than a new dependency — **no fork release was
+needed**, which is where this entry expected to end up.
 
-**The fix, and what it needs.** Compute the node with of-date flags and
-rotate the result into the requested frame here, rather than delegating the
-frame to Swiss. **Swiss exports no precession routine** — `swe_cotrans` is a
-single-axis obliquity rotation and that is all — so the rotation has to come
-from somewhere. Two routes, and it is the maintainer's call which:
+**Frames 0 and 1 are untouched, and that is measured rather than assumed.**
+Nutation rotates the *equator*, not the ecliptic, so a point on the mean
+ecliptic of date lies on the true ecliptic of date too. Asking Swiss for the
+node both ways and comparing gives the same numbers to every digit, so only
+frames 2 and 3 were ever affected.
 
-- an **additive entry point in the Swiss fork** exposing the precession it
-  already computes, the same shape as the elements entry point phase 2 added
-  (a fork release, a sibling repo, its own gates);
-- **deriving the rotation from Swiss itself**, measured viable below;
-- ~~implementing the precession model here~~ — **ruled out.** Prometheia put
-  the criterion better than the framing above did: what matters is that our
-  node rotates exactly as *our own bodies* do in that frame. Any model written
-  here, however correct to its own specification, will differ from Swiss in
-  the last digits — and then the node disagrees with our own bodies before it
-  disagrees with anyone else's. That is the failure mode to avoid.
+**Net:** `tools/node-frame-probe.sh` piped to `tools/node-frame-fit.py`, which
+now exits nonzero. It is assumption-free: it derives the rotation from the
+*bodies* and requires the node to follow it, to 0.001″. **0.00000″ after the
+fix, 51.345″ before it.** The golden gate could never have caught this — it
+compares bit-exact against the same Swiss the defect came from, and it passes
+149 comparisons either way.
 
-**The derived route, measured 2026-09-18.** The rotation does not have to be
-reproduced; it can be derived, because three independent directions in both
-frames determine it and Swiss will give any body in both frames. The node
-then rotates by literally the same rotation the bodies got — the criterion
-satisfied by construction rather than by care.
-
-The objection is conditioning: every body sits near the ecliptic, so does a
-rotation fitted from them hold off it? Fitting from **bodies only** and then
-predicting **stars** is the out-of-sample test:
-
-| fitted from 5 bodies within ±1.7° of the ecliptic | predicted vs actual |
-|---|---|
-| Aldebaran, latitude −5.5° | 9.1e-11″ |
-| Sirius, latitude −39.6° | 3.5e-11″ |
-| Vega, latitude +61.7° | 8.7e-11″ |
-| Polaris, latitude +66.1° | 4.9e-11″ |
-
-That is the float64 noise floor, at three epochs. Near-coplanarity only had to
-leave the fit non-degenerate, not well-spread: a rotation has three parameters
-and five directions over-determine it. `tools/frame-rotation-fit.py`.
-
-So this route needs no sibling-repo release, and the fit residual is its own
-health guard — a degenerate instant announces itself rather than returning a
-quiet wrong matrix. Against that, the fork entry point is conceptually
-cleaner: no cache, no derived matrix, no guard. **The maintainer's call.**
-
-**Net when it lands:** Prometheia's own shape, which is the right one — ask
-for the node in a fixed frame, rotate the of-date answer with the frame
-matrices, require equality. Found by their points leg after the check
-flipped to test the amended rule.
+**One trap, recorded because it produced a plausible wrong answer.**
+`swi_polcart_sp`/`swi_cartpol_sp` work in **radians**; `swe_nod_aps` answers in
+degrees. The first build fed degrees to them and put the 1800 node 34° from
+where it belongs — far enough to be obvious, but the same mistake on a smaller
+angle would not have been.
 
 ### 4.3 Planetary mean nodes and apsides — 60″ to 3,300″
 

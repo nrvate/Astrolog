@@ -35,6 +35,13 @@
 #include <App.h>
 
 #include <swephexp.h>
+// The internal headers, for the precession a node's frame needs (see
+// RotateNodeToFixedFrame below). swephexp.h wraps itself for C++;
+// these do not, so the declarations would mangle and fail to link.
+extern "C" {
+#include <sweph.h>
+#include <swephlib.h>
+}
 
 #include <openssl/err.h>
 #include <openssl/pem.h>
@@ -1043,6 +1050,72 @@ static void PrepareObject(swe_ctx *ctx, const eph::Request &req, uint32_t iObj,
   if (pf.speeds) m.flags |= eph::kMetaRatesApprox;
 }
 
+// A node's frame, per 3.5a as the 2026-09-18 drop amended it: a node lies on
+// the mean ecliptic of DATE, and the profile's frame gives the coordinates it
+// is expressed in rather than which point it is.
+//
+// Swiss handed a fixed frame answers a THIRD point, which is what this server
+// shipped until now. The of-date node's longitude comes back precessed and
+// correct, and the latitude is neither the rotation's nor zero: +10.013" at
+// 1800 where rotating the of-date node gives +61.358", -0.884" at 1900 against
+// -46.882", and at 2100 not even the same sign. Found by Ephemeris
+// Prometheia's cross-test; EPHEMERIS_ACCURACY_REGISTRY.md 4.2.
+//
+// So the node is computed on the mean ecliptic of date and rotated here.
+// swi_precess is the same precession swe_calc gives the BODIES, which is the
+// property that matters: a J2000 chart has to be internally consistent, and a
+// model reimplemented here would disagree with our own planets before it
+// disagreed with anyone else's. tools/frame-rotation-fit.py is the net --
+// it derives the rotation from the bodies alone and requires the node to
+// follow it.
+//
+// Frames 0 and 1 are NOT touched, and that is measured rather than assumed:
+// nutation rotates the equator, not the ecliptic, so a point on the mean
+// ecliptic of date lies on the true ecliptic of date too. Asking Swiss for
+// both and comparing gives the same numbers to every digit.
+static void RotateNodeToFixedFrame(swe_ctx *ctx, double jdEt, int32 iflag,
+                                   double *xx) {
+  double v[6], pol[6];
+  const bool fRect = (iflag & SEFLG_XYZ) != 0;
+  const bool fEqu = (iflag & SEFLG_EQUATORIAL) != 0;
+  // swi_polcart_sp() and swi_cartpol_sp() work in RADIANS; swe_nod_aps()
+  // answers in degrees unless the caller asked otherwise. Feeding degrees
+  // to them silently produces a direction somewhere else entirely -- the
+  // first build of this put the 1800 node 34 degrees from where it belongs.
+  const double toRad = (iflag & SEFLG_RADIANS) ? 1.0 : DEGTORAD;
+  double eps;
+
+  if (fRect) {
+    memcpy(v, xx, sizeof(v));
+  } else {
+    memcpy(pol, xx, sizeof(pol));
+    pol[0] *= toRad; pol[1] *= toRad; pol[3] *= toRad; pol[4] *= toRad;
+    swi_polcart_sp(pol, v);
+  }
+  // Precession is defined on the equator, so ecliptic input goes there and
+  // back. The obliquity out is J2000's, not the instant's.
+  if (!fEqu) {
+    eps = swi_epsiln(ctx, jdEt, 0);
+    swi_coortrf(v, v, -eps);
+    swi_coortrf(v + 3, v + 3, -eps);
+  }
+  swi_precess(ctx, v, jdEt, 0, J_TO_J2000);
+  swi_precess_speed(ctx, v, jdEt, 0, J_TO_J2000);
+  if (iflag & SEFLG_ICRS) swi_bias(ctx, v, jdEt, iflag, FALSE);
+  if (!fEqu) {
+    eps = swi_epsiln(ctx, J2000, 0);
+    swi_coortrf(v, v, eps);
+    swi_coortrf(v + 3, v + 3, eps);
+  }
+  if (fRect) {
+    memcpy(xx, v, sizeof(v));
+  } else {
+    swi_cartpol_sp(v, pol);
+    pol[0] /= toRad; pol[1] /= toRad; pol[3] /= toRad; pol[4] /= toRad;
+    memcpy(xx, pol, sizeof(pol));
+  }
+}
+
 // Rows [row0, row0 + rows) of one prepared object into the entry (3.5
 // columns): the base six, then the extra columns present in bit order --
 // ayanamsa (the profile's, 0 tropical) and the delta T used, in seconds.
@@ -1114,11 +1187,20 @@ static void ComputeObjectRows(swe_ctx *ctx, const eph::Request &req, uint32_t iO
         break;
       case eph::swiss::kCallNodAps: {
         double xn[6], xd[6], xp[6], xa[6];
+        // The point is the one on the mean ecliptic of date; the frame only
+        // says what to express it in. See RotateNodeToFixedFrame() above.
+        const bool fFixedFrame = (c.iflag & SEFLG_J2000) != 0;
+        const int32 iflagNode = fFixedFrame
+          ? ((c.iflag & ~(int32)(SEFLG_J2000 | SEFLG_ICRS)) | SEFLG_NONUT)
+          : c.iflag;
         ret = c.fUT && !fDtGiven
-                ? swe_nod_aps_ut_r(ctx, jd, c.ipl, c.iflag, c.nodMethod, xn, xd, xp, xa, serr)
-                : swe_nod_aps_r(ctx, jdEt(), c.ipl, c.iflag, c.nodMethod, xn, xd, xp, xa, serr);
+                ? swe_nod_aps_ut_r(ctx, jd, c.ipl, iflagNode, c.nodMethod, xn, xd, xp, xa, serr)
+                : swe_nod_aps_r(ctx, jdEt(), c.ipl, iflagNode, c.nodMethod, xn, xd, xp, xa, serr);
         const double *px = c.point == 0 ? xn : c.point == 1 ? xd : c.point == 2 ? xp : xa;
-        if (ret >= 0) memcpy(xx, px, sizeof(xx));
+        if (ret >= 0) {
+          memcpy(xx, px, sizeof(xx));
+          if (fFixedFrame) RotateNodeToFixedFrame(ctx, jdEt(), c.iflag, xx);
+        }
         break;
       }
       case eph::swiss::kCallFixstar:
