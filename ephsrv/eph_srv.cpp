@@ -1079,6 +1079,28 @@ static void ComputeObjectRows(swe_ctx *ctx, const eph::Request &req, uint32_t iO
       if (fDtGiven) return jd + dtRow / 86400.0;
       return jd + swe_deltat_ex_r(ctx, jd, SEFLG_SWIEPH, nullptr);
     };
+    // 3.5 says the request's delta T governs "UT1<->TT AND EARTH
+    // ROTATION". Converting the instant above satisfies the first half
+    // only. The second half is inside Swiss: a topocentric observer's
+    // place comes from sidereal time, which Swiss derives from UT = TT
+    // minus ITS OWN delta T, whatever the client sent. So a TT request
+    // with an explicit delta T moved nothing at all -- byte-identical
+    // output for deltaTSec 0 and 100 -- while the observer sat where
+    // Swiss's model put them.
+    //
+    // Found by the Prometheia cross-test, reported as "the delta T a
+    // request sends is ignored". It is not ignored: a UT1 request moves
+    // the Moon 75.46 arcsec between those two values, through the
+    // conversion above. What was ignored is the Earth-rotation half, and
+    // a TT request is where that is the ONLY half, which is why their
+    // probe saw nothing move.
+    //
+    // swe_set_delta_t_userdef_r puts the client's value inside Swiss for
+    // every conversion it makes internally, which is what the sentence
+    // asks for. Reset to SE_DELTAT_AUTOMATIC afterwards, or one
+    // request's delta T would leak into the next on this loop's engine.
+    if (fDtGiven)
+      swe_set_delta_t_userdef_r(ctx, dtRow / 86400.0);
     double xx[6];
     int32_t ret = -1;
     serr[0] = '\0';
@@ -1108,6 +1130,8 @@ static void ComputeObjectRows(swe_ctx *ctx, const eph::Request &req, uint32_t iO
         snprintf(serr, sizeof(serr), "unsupported call");
         break;
     }
+    if (fDtGiven)
+      swe_set_delta_t_userdef_r(ctx, SE_DELTAT_AUTOMATIC);
     double *dst = dst0 + (size_t)r * nCols;
     if (ret < 0) {
       for (uint32_t k = 0; k < nCols; k++) dst[k] = NAN;
