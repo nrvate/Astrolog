@@ -44,7 +44,11 @@
 // selection that names no source.
 
 EPHSRCDEF * CONST rgephsrc[cEphSrcBuiltIn] = {
-  &ephsrcSwiss, &ephsrcJpl, &ephsrcMoshier, &ephsrcMatrix, &ephsrcNone
+  &ephsrcSwiss, &ephsrcJpl, &ephsrcMoshier, &ephsrcMatrix,
+#ifdef PROMETHEIA
+  &ephsrcPrometheia,
+#endif
+  &ephsrcNone
 };
 
 

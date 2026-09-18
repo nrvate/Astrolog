@@ -12,9 +12,10 @@
 // 3.5a (including the carve-out: a proper subset of the correction terms
 // is this engine's own convention and MUST NOT be compared across
 // servers), fixed stars under 3.5a's name grammar with ambiguity as
-// error 6. The source registry (EPHSRCDEF, phase 3, branch eph3) is
-// being built in parallel; the shapes here are the 4.1 sketch's, so
-// registration is glue.
+// error 6. As a registered source it carries ephswiss.cpp's delegation
+// philosophy: what an object IS is decided by FSwissPlanetSpec(), the
+// one function the program has always used, and converted to
+// Prometheia's options -- never re-derived here.
 //
 // Thread safety: one engine handle, one cast at a time, like the Swiss
 // path -- the library's engine is not safe for concurrent use, and
@@ -29,16 +30,17 @@
 #include <string.h>
 
 // --------------------------------------------------------------------------
-// Parameters (4.2/4.3).
-
-// The kind is epkFile's position in 4.3's own list (epkText, epkPath,
-// epkFile, ...) until phase 3's shared index space exists to name it;
-// the keys are the contract, not the numbers.
-EPHPROMPARAM rgEphPromParam[cepPromParam] = {
-  {"prometheia.ephemeris", "Ephemeris File", 2, "", ""},
-  {"prometheia.catalog", "Small-body Catalog", 2, "", ""},
-  {"prometheia.perturbers", "Perturber Kernel", 2, "", ""},
+// Parameters (4.2/4.3). The table is the registry's own EPHPARAM shape
+// (ephem.h); the values live here until phase 4 moves them into
+// us.rgszEphParam[], with the empty string meaning the source's own
+// default.
+CONST EPHPARAM rgEphPromParam[cepPromParam] = {
+  {"ephemeris", "Ephemeris File", epkFile, ""},
+  {"catalog", "Small-body Catalog", epkFile, ""},
+  {"perturbers", "Perturber Kernel", epkFile, ""},
 };
+
+static char rgszEphPromValue[cepPromParam][256];
 
 void EphPromSetParam(int iParam, CONST char *szValue)
 {
@@ -46,16 +48,15 @@ void EphPromSetParam(int iParam, CONST char *szValue)
     return;
   if (szValue == NULL)
     szValue = "";
-  if (!FEqSz(szValue, rgEphPromParam[iParam].szValue)) {
-    sprintf2(S(rgEphPromParam[iParam].szValue), "%s", szValue);
+  if (!FEqSz(szValue, rgszEphPromValue[iParam])) {
+    sprintf2(S(rgszEphPromValue[iParam]), "%s", szValue);
     EphPromStop();          // the next question reopens from the new value
   }
 }
 
 CONST char *SzEphPromParam(int iParam)
 {
-  return FBetween(iParam, 0, cepPromParam-1) ?
-    rgEphPromParam[iParam].szValue : "";
+  return FBetween(iParam, 0, cepPromParam-1) ? rgszEphPromValue[iParam] : "";
 }
 
 // --------------------------------------------------------------------------
@@ -245,7 +246,8 @@ flag FEphPromStart(char *szWhy, int cch)
 
 int NEphPromState(char *sz, int cch)
 {
-  sprintf2(sz, cch, "%s", szEphPromState);
+  if (sz != NULL)
+    sprintf2(sz, cch, "%s", szEphPromState);
   return fEphPromOpen ? 0 :
     (strncmp(szEphPromState, "failed", 6) == 0 ? 2 : 1);
 }
@@ -369,39 +371,6 @@ flag FEphPromStarResolve(CONST char *sz, int *pidx, uint16_t *pnErr,
   }
   *pidx = istar;
   return fTrue;
-}
-
-int NEphPromLookup(CONST char *sz, EPHPROMMATCH *rgm, int cMax)
-{
-  prometheia_star_match rgmStar[32];
-  int cms, i, cm = 0;
-  prometheia_error err;
-
-  if (sz == NULL || rgm == NULL || cMax <= 0)
-    return 0;
-  // The catalog bodies first (kind 5 resolves exactly as LOOKUP does),
-  // then the star namespace.
-  if (pephProm != NULL) {
-    int naif;
-    if (prometheia_engine_lookup(pephProm, sz, &naif, &err) ==
-      PROMETHEIA_OK && cm < cMax) {
-      sprintf2(S(rgm[cm].szName), "%s", sz);
-      rgm[cm].naif = naif;
-      rgm[cm].nKind = eph::kObjBody;
-      rgm[cm].nQuality = PROMETHEIA_MATCH_EXACT;
-      cm++;
-    }
-  }
-  cms = prometheia_star_lookup(sz, 0, rgmStar,
-    (int)(sizeof(rgmStar)/sizeof(*rgmStar)));
-  for (i = 0; i < cms && cm < cMax; i++) {
-    sprintf2(S(rgm[cm].szName), "%s", rgmStar[i].matched);
-    rgm[cm].naif = rgmStar[i].index;
-    rgm[cm].nKind = eph::kObjStar;
-    rgm[cm].nQuality = rgmStar[i].quality;
-    cm++;
-  }
-  return cm;
 }
 
 // --------------------------------------------------------------------------
@@ -633,5 +602,312 @@ flag FEphPromCompute(CONST EPHPROMQ *pq, EPHPROMANSWER rga[])
   g_rDeltaTSec = rInvalid;
   return fTrue;
 }
+
+// --------------------------------------------------------------------------
+// The source (4.1): the EPHSRCDEF the registry holds. The decisions about
+// what an object IS come from FSwissPlanetSpec() -- the same function the
+// local Swiss path has always used -- and are converted to Prometheia's
+// options, so a cast through this source answers the question the local
+// path answers, and the row arithmetic is FSwissPlanet()'s own: the
+// answer's longitude carries is.rSid subtracted, which the host re-adds,
+// because that is how the program's two halves have always met.
+
+// A Swiss body id to the NAIF/SPK-ID the plugin computes. The system
+// barycentres from Mars on are Prometheia's own convention (C_API.md:
+// PROMETHEIA_MARS is 4, not 499); the small bodies are their SPK-IDs,
+// 20000000 + the asteroid's number. Bodies the engine does not serve --
+// the fictitious points, the planetary moons -- return ephNativeNone.
+static int NNaifFromSwiss(int iobj)
+{
+  switch (iobj) {
+  case SE_SUN:       return PROMETHEIA_SUN;
+  case SE_MOON:      return PROMETHEIA_MOON;
+  case SE_MERCURY:   return PROMETHEIA_MERCURY;
+  case SE_VENUS:     return PROMETHEIA_VENUS;
+  case SE_EARTH:     return PROMETHEIA_EARTH;
+  case SE_MARS:      return PROMETHEIA_MARS;
+  case SE_JUPITER:   return PROMETHEIA_JUPITER;
+  case SE_SATURN:    return PROMETHEIA_SATURN;
+  case SE_URANUS:    return PROMETHEIA_URANUS;
+  case SE_NEPTUNE:   return PROMETHEIA_NEPTUNE;
+  case SE_PLUTO:     return PROMETHEIA_PLUTO;
+  case SE_CHIRON:    return 20002060;
+  case SE_CERES:     return 20000001;
+  case SE_PALLAS:    return 20000002;
+  case SE_JUNO:      return 20000003;
+  case SE_VESTA:     return 20000004;
+  default:
+    if (iobj > SE_AST_OFFSET && iobj < SE_VARUNA + 99000)
+      return 20000000 + (iobj - SE_AST_OFFSET);
+    return ephNativeNone;
+  }
+}
+
+static flag FAvailableProm(char *szWhy, int cch)
+{
+  // Compiled in is available: a missing data file is a per-object
+  // failure, or a failed submit that walks on, exactly as the Swiss
+  // sources treat their files (ephswiss.cpp).
+  if (szWhy != NULL)
+    sprintf2(szWhy, cch, "%s", "compiled in");
+  return fTrue;
+}
+
+static void GetCapsProm(EPHCAPS *pcaps)
+{
+  ClearB((pbyte)pcaps, sizeof(EPHCAPS));
+  pcaps->fBody = fTrue;
+  pcaps->fOrbitPoint = fTrue;
+  pcaps->fStar = fTrue;
+  pcaps->fSpeeds = fTrue;
+}
+
+static int StateProm(char *sz, int cch)
+{
+  int nState = NEphPromState(sz, cch);
+
+  return nState;   // NEphPromState(NULL is not allowed) writes the text
+}
+
+static void StartProm()
+{
+  char szWhy[256];
+
+  FEphPromStart(szWhy, (int)sizeof(szWhy));   // a failed open is FSubmit's
+                                              // fFalse, walking on
+}
+
+static void StopProm()
+{
+  EphPromStop();
+}
+
+// One EPHQUERY: one instant, objects by Astrolog index, settings by the
+// program's own fields. The internal layer answers each object through
+// one profile built from FSwissPlanetSpec()'s decisions; the row is the
+// answer's first six in the protocol's order, longitude carrying
+// is.rSid subtracted like FSwissPlanet()'s own output.
+static flag FSubmitProm(EPHQUERY *pq)
+{
+  char szWhy[256], szStar[cchSzDef];
+  char *pch;
+  eph::Profile rgpf[objMax];
+  eph::Object rgobj[objMax];
+  double rgval[objMax * kEphPromStride];
+  EPHPROMANSWER rga[objMax];
+  EPHPROMQ q;
+  SWISSSPEC ss;
+  EPHROW *prow;
+  int i, naif, naifCent;
+  flag fSiderealBad = fFalse;
+
+  if (!FEphPromStart(szWhy, (int)sizeof(szWhy)))
+    return fFalse;               // the walk asks the next source
+
+  for (i = 0; i < pq->cobj; i++) {
+    rgpf[i] = eph::Profile();
+    rgobj[i] = eph::Object();
+    rga[i].prgVal = rgval + i * kEphPromStride;
+    prow = &pq->rgrow[i];
+    if (pq->rgisrc[i] != ephSrcNone)
+      continue;                  // another source in the walk won it
+
+    if (pq->rgszName[i] != NULL) {
+      // A fixed star. rgszName carries the Swiss canonical form,
+      // "Name,bayer"; the plugin resolves the name part in Prometheia's
+      // own namespace, which knows the same IAU names. The center and
+      // the corrections are FSwissStar()'s: GetSwissFlags() and the
+      // heliocentric bit it adds for a non-Earth center.
+      sprintf2(S(szStar), "%s", pq->rgszName[i]);
+      pch = strchr(szStar, ',');
+      if (pch != NULL)
+        *pch = chNull;           // the name alone
+      rgobj[i].kind = eph::kObjStar;
+      rgobj[i].name = szStar;
+      if (us.objCenter == oEar)
+        rgpf[i].observer = eph::kObsGeo;
+      else
+        rgpf[i].observer = us.fBarycenter ? eph::kObsBary : eph::kObsHelio;
+      rgpf[i].corrections = us.fTruePos ? eph::kCorrLightTime : eph::kCorrMask;
+      rgpf[i].frame = us.fNoNutation ? eph::kFrameMeanOfDate :
+        eph::kFrameTrueOfDate;
+      if (us.fSidereal) {
+        if (us.fSidereal2)
+          fSiderealBad = fTrue;  // the solar-system plane: not served
+        else
+          rgpf[i].zodiac = "fagan-bradley";
+      }
+      continue;
+    }
+
+    if (!FSwissPlanetSpec(pq->rgobj[i], pq->rgcent[i], &ss)) {
+      // A body the program itself cannot map: the South Node, a custom
+      // body that maps to nothing. ephswiss.cpp answers these
+      // "data unavailable" because its delegation cannot tell; this
+      // conversion can -- nothing was mapped, so it is unsupported.
+      prow->nErr = ephErrUnsupported;
+      continue;
+    }
+    if (ss.nSidMode != SE_SIDM_FAGAN_BRADLEY && ss.iflag & SEFLG_SIDEREAL)
+      fSiderealBad = fTrue;      // the solar-system plane: not served
+
+    if (ss.iobj == SE_TRUE_NODE || ss.iobj == SE_MEAN_NODE) {
+      // The Moon's named node bodies are kind 1 here: the ascending
+      // node, osculating or mean as the setting chose.
+      rgobj[i].kind = eph::kObjOrbitPoint;
+      rgobj[i].naif = PROMETHEIA_MOON;
+      rgobj[i].point = eph::kPtAscNode;
+      rgobj[i].method = ss.iobj == SE_TRUE_NODE ? eph::kMethOsculating :
+        eph::kMethMean;
+    } else if (ss.iobj == SE_OSCU_APOG || ss.iobj == SE_MEAN_APOG) {
+      rgobj[i].kind = eph::kObjOrbitPoint;
+      rgobj[i].naif = PROMETHEIA_MOON;
+      rgobj[i].point = eph::kPtApo;
+      rgobj[i].method = ss.iobj == SE_OSCU_APOG ? eph::kMethOsculating :
+        eph::kMethMean;
+    } else if (ss.iobj == SE_INTP_APOG || ss.iobj == SE_INTP_PERG) {
+      // The "natural" apogee and perigee: Prometheia serves no
+      // interpolated points (A.14's method 2 is unanswered).
+      prow->nErr = ephErrUnsupported;
+      continue;
+    } else if (ss.nPnt > 0) {
+      // A node or apsis of a planet, through a customized object.
+      rgobj[i].kind = eph::kObjOrbitPoint;
+      naif = NNaifFromSwiss(ss.iobj);
+      if (naif == ephNativeNone) {
+        prow->nErr = ephErrUnsupported;
+        continue;
+      }
+      rgobj[i].naif = naif;
+      rgobj[i].point = (uint8_t)(ss.nPnt - 1);
+      rgobj[i].method = ss.nNodMethod == SE_NODBIT_OSCU ? eph::kMethOsculating :
+        eph::kMethMean;
+    } else {
+      rgobj[i].kind = eph::kObjBody;
+      naif = NNaifFromSwiss(ss.iobj);
+      if (naif == ephNativeNone) {
+        prow->nErr = ephErrUnsupported;
+        continue;
+      }
+      rgobj[i].naif = naif;
+    }
+
+    // The profile the spec's flags spell.
+    if (ss.iobjCent >= 0) {
+      rgpf[i].observer = eph::kObsBody;
+      naifCent = NNaifFromSwiss(ss.iobjCent);
+      if (naifCent == ephNativeNone) {
+        prow->nErr = ephErrUnsupported;
+        continue;
+      }
+      rgpf[i].observerBody = naifCent;
+    } else if (ss.iflag & SEFLG_HELCTR)
+      rgpf[i].observer = eph::kObsHelio;
+    else if (ss.iflag & SEFLG_BARYCTR)
+      rgpf[i].observer = eph::kObsBary;
+    else if (ss.iflag & SEFLG_TOPOCTR) {
+      rgpf[i].observer = eph::kObsTopo;
+      rgpf[i].siteLonEastDeg = -ciCore.lon;
+      rgpf[i].siteLatDeg = ciCore.lat;
+      rgpf[i].siteHeightM = us.elvDef;
+    }
+    rgpf[i].corrections = (ss.iflag & SEFLG_TRUEPOS) ? eph::kCorrLightTime :
+      eph::kCorrMask;
+    rgpf[i].frame = (ss.iflag & SEFLG_NONUT) ? eph::kFrameMeanOfDate :
+      eph::kFrameTrueOfDate;
+    rgpf[i].speeds = (ss.iflag & SEFLG_SPEED) != 0;
+    if (ss.iflag & SEFLG_SIDEREAL)
+      rgpf[i].zodiac = "fagan-bradley";
+  }
+
+  // One internal question: one row per object, at the query's instant,
+  // on the UT1 scale rJD already is (it is the instant FSwissPlanet()
+  // consumes, and the plugin's delta T hook is bound to the chart's own
+  // model).
+  q.nTs = eph::kTimeUT1; q.fList = fFalse;
+  q.jd1 = pq->rJD; q.jd2 = 0.0; q.stepNs = 0; q.cRow = 1;
+  q.prgJd = NULL;
+  q.rDeltaTSec = rInvalid;
+  q.cprof = pq->cobj; q.pargprof = rgpf;
+  q.cobj = pq->cobj; q.pargobj = rgobj;
+  if (!FEphPromCompute(&q, rga))
+    return fFalse;               // the engine could not serve the cast
+
+  for (i = 0; i < pq->cobj; i++) {
+    if (pq->rgisrc[i] != ephSrcNone)
+      continue;
+    prow = &pq->rgrow[i];
+    if (fSiderealBad && rga[i].errCode == ephErrNone) {
+      prow->nErr = ephErrUnsupported;
+      continue;
+    }
+    if (rga[i].rowsOk < 1) {
+      prow->nErr = rga[i].errCode;   // the A.17 values are the ephErr* ones
+      continue;
+    }
+    prow->rg[0] = rga[i].prgVal[0] - is.rSid;
+    prow->rg[1] = rga[i].prgVal[1];
+    prow->rg[2] = rga[i].prgVal[2];
+    prow->rg[3] = rga[i].prgVal[3];
+    prow->rg[4] = rga[i].prgVal[4];
+    prow->rg[5] = rga[i].prgVal[5];
+    prow->nErr = ephErrNone;
+    prow->nNativeRes = rga[i].naif == eph::kNaifNone ? ephNativeNone :
+      rga[i].naif;
+    prow->fApprox = fFalse;
+  }
+  return fTrue;
+}
+
+static flag FReadProm(CONST EPHQUERY *pq, int iObj, int iRow, EPHROW *prow)
+{
+  if (iObj < 0 || iObj >= pq->cobj || pq->rgisrc[iObj] == ephSrcNone ||
+    iRow != 0)
+    return fFalse;
+  *prow = pq->rgrow[iObj];
+  return fTrue;
+}
+
+static void HintProm(CONST EPHQUERY *pq)
+{
+}
+
+// LOOKUP: the catalog bodies when the engine is open, then the star
+// namespace, which needs no engine at all. nNative carries the SPK-ID
+// or the star index -- the source's own id for the body (ephem.h).
+static int NLookupProm(CONST char *sz, EPHMATCH *rgm, int cMax)
+{
+  prometheia_star_match rgmStar[32];
+  int cms, i, cm = 0;
+  prometheia_error err;
+
+  if (sz == NULL || rgm == NULL || cMax <= 0)
+    return 0;
+  if (pephProm != NULL) {
+    int naif;
+    if (prometheia_engine_lookup(pephProm, sz, &naif, &err) ==
+      PROMETHEIA_OK && cm < cMax) {
+      rgm[cm].nQuality = PROMETHEIA_MATCH_EXACT;
+      rgm[cm].nNative = naif;
+      cm++;
+    }
+  }
+  cms = prometheia_star_lookup(sz, 0, rgmStar,
+    (int)(sizeof(rgmStar)/sizeof(*rgmStar)));
+  for (i = 0; i < cms && cm < cMax; i++) {
+    rgm[cm].nQuality = rgmStar[i].quality;
+    rgm[cm].nNative = rgmStar[i].index;
+    cm++;
+  }
+  return cm;
+}
+
+EPHSRCDEF ephsrcPrometheia = {
+  "prometheia", "Ephemeris Prometheia",
+  "The cleanroom Prometheia engine over JPL DE and SBDB files.",
+  rgEphPromParam, cepPromParam,
+  FAvailableProm, GetCapsProm, StateProm, StartProm, StopProm,
+  FSubmitProm, FReadProm, HintProm, NLookupProm
+};
 
 #endif // PROMETHEIA

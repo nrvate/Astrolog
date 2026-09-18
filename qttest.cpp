@@ -19210,7 +19210,7 @@ static void TestPrometheiaQt()
 #else
   char szWhy[cchSzMax], szErr[256], szState[512];
   char szStateAfter[512];
-  EPHPROMMATCH rgm[8];
+  EPHMATCH rgm[8];
   flag fCat = fFalse;
   int idx, cm;
   uint16_t nErr;
@@ -19220,10 +19220,11 @@ static void TestPrometheiaQt()
   // ---- The parameter table (4.2/4.3): keys, defaults, set and reset --
   Check(cepPromParam == 3, "the source carries its three parameters (%d)",
     cepPromParam);
-  Check(FEqSz(rgEphPromParam[0].szKey, "prometheia.ephemeris") &&
-    FEqSz(rgEphPromParam[1].szKey, "prometheia.catalog") &&
-    FEqSz(rgEphPromParam[2].szKey, "prometheia.perturbers"),
-    "the parameter keys are the 4.2 table's");
+  Check(FEqSz(rgEphPromParam[0].szKey, "ephemeris") &&
+    FEqSz(rgEphPromParam[1].szKey, "catalog") &&
+    FEqSz(rgEphPromParam[2].szKey, "perturbers") &&
+    rgEphPromParam[0].nKind == epkFile,
+    "the parameter keys are the 4.2 table's, bare like jpl's file");
   Check(*SzEphPromParam(epPromEphemeris) == chNull,
     "the ephemeris default is the source's own");
   EphPromSetParam(epPromCatalog, "catalog-test.epm");
@@ -19490,23 +19491,220 @@ static void TestPrometheiaQt()
     Check(rga[9].errCode == eph::kOErrAmbiguous,
       "an ambiguous star computes as error 6 (%d)", rga[9].errCode);
 
-    // LOOKUP: bodies first, then the star namespace.
-    cm = NEphPromLookup("Chiron", rgm, 8);
+    // LOOKUP, through the source's own entry point: bodies first, then
+    // the star namespace. nNative carries the SPK-ID or the star index.
+    cm = ephsrcPrometheia.NLookup("Chiron", rgm, 8);
     if (fCat)
-      Check(cm >= 1 && rgm[0].nKind == eph::kObjBody &&
-        rgm[0].naif == 20002060,
-        "Chiron resolves to its SPK-ID (cm %d naif %d)",
-        cm, cm > 0 ? rgm[0].naif : -1);
+      Check(cm >= 1 && rgm[0].nNative == 20002060,
+        "Chiron resolves to its SPK-ID (cm %d native %d)",
+        cm, cm > 0 ? rgm[0].nNative : -1);
     else
       Check(cm == 0, "no catalog, no Chiron (%d)", cm);
-    cm = NEphPromLookup("Beta Sco", rgm, 8);
-    Check(cm == 2 && rgm[0].nKind == eph::kObjStar && rgm[1].nKind ==
-      eph::kObjStar, "the ambiguous star LOOKUPs as both components (%d)",
+    cm = ephsrcPrometheia.NLookup("Beta Sco", rgm, 8);
+    Check(cm == 2, "the ambiguous star LOOKUPs as both components (%d)",
       cm);
 
     // The oracle: the plugin against the local Swiss path, while the
     // engine is open and the settings are still ours to borrow.
     TestPrometheiaOracleQt();
+
+    // ---- The host path: the source through the phase 3 registry ------
+    // The registry group's own borrows, a query built the way
+    // ComputeEphem() builds its, submitted down a chain that holds the
+    // prometheia source alone, and every row compared against the
+    // direct call it replaces -- angular separations again, with the
+    // registry group's byte-equality reserved for the delegation it
+    // exists to pin.
+    {
+      Borrow bFiles(us.fEphemFiles, fTrue), bMat(us.fMatrixPla, fFalse);
+      Borrow bSid(us.fSidereal, fFalse), bSid2(us.fSidereal2, fFalse);
+      Borrow bTopo(us.fTopoPos, fFalse), bTrue(us.fTruePos, fFalse);
+      Borrow bBary(us.fBarycenter, fFalse), bNoNut(us.fNoNutation, fFalse);
+      Borrow bCtr(us.objCenter, (int)oEar);
+      Borrow bZoff(us.rZodiacOffset, 0.0), bZall(us.rZodiacOffsetAll, 0.0);
+      Borrow bElv(us.elvDef, 0.0);
+      Borrow bTrueN(us.fTrueNode, fFalse);
+      Borrow bTyp(rgTypSwiss[0], 0), bObj(rgObjSwiss[0], 0);
+      Borrow bPnt(rgPntSwiss[0], 0), bFlg(rgFlgSwiss[0], 0);
+      int rgisrc[1], iH;
+      EPHQUERY eqh;
+      char szLeg2[cchSzDef];
+      real h1, h2, h3, h4, h5, h6, r1, r2, r3, r4, r5, r6, rD;
+      flag fHost, fDirect, fSav;
+
+      Check(IEphSrcFromKey("prometheia") == 4 + (cEphSrcPrometheia - 1) &&
+        PephsrcGet(IEphSrcFromKey("prometheia")) == &ephsrcPrometheia &&
+        rgephsrc[cEphSrcBuiltIn-1] == &ephsrcNone,
+        "the prometheia source sits in the registry before none (%d)",
+        IEphSrcFromKey("prometheia"));
+      rgisrc[0] = IEphSrcFromKey("prometheia");
+
+      // Geocentric apparent tropical bodies, the cast question's shape.
+      OraclePinUtQt(2026, 9, 17, 0.0);
+      ciCore.lon = 0.0; ciCore.lat = 0.0;
+      CastChart(0);
+      jd = JulianDayFromTime(is.T);
+      EphQueryInit(&eqh, jd);
+      FEphQueryAdd(&eqh, oSun, 0, oEar, NULL);
+      FEphQueryAdd(&eqh, oMoo, 0, oEar, NULL);
+      FEphQueryAdd(&eqh, oMar, 0, oEar, NULL);
+      FEphQueryAdd(&eqh, oJup, 0, oEar, NULL);
+      Check(FEphSubmitChain(&eqh, rgisrc, 1), "the host path answers a "
+        "cast-shaped query");
+      for (iH = 0; iH < 4; iH++) {
+        int objH = iH == 0 ? oSun : (iH == 1 ? oMoo : (iH == 2 ? oMar :
+          oJup));
+        fHost = FEphRead(&eqh, objH, &h1, &h2, &h3, &h4, &h5, &h6);
+        fDirect = FSwissPlanet(objH, jd, oEar, &r1, &r2, &r3, &r4, &r5, &r6);
+        Check(fHost && fDirect, "%s answered on both paths",
+          szObjName[objH]);
+        if (!fHost || !fDirect)
+          continue;
+        rD = SphDistance(h1, h2, r1, r2) * 3600.0;
+        sprintf2(S(szLeg2), "host path %s vs FSwissPlanet",
+          szObjName[objH]);
+        printf("  oracle %-46s %9.4f\"\n", szLeg2, rD);
+        Check(rD < 0.2, "%s within 0.2\" (%.4f\")", szLeg2, rD);
+        Check(eqh.rgisrc[iH == 0 ? 0 : (iH == 1 ? 1 : (iH == 2 ? 2 : 3))] ==
+          rgisrc[0] && FEqSz(eqh.rgrow[iH == 0 ? 0 : (iH == 1 ? 1 :
+          iH == 2 ? 2 : 3)].szSrc, "prometheia"),
+          "the host row's provenance names the prometheia source");
+      }
+
+      // The Moon's true node through the kind-1 conversion.
+      {
+        Borrow bTN(us.fTrueNode, fTrue);
+        EphQueryInit(&eqh, jd);
+        FEphQueryAdd(&eqh, oNod, 0, oEar, NULL);
+        Check(FEphSubmitChain(&eqh, rgisrc, 1), "the node query computes");
+        fHost = FEphRead(&eqh, oNod, &h1, &h2, &h3, &h4, &h5, &h6);
+        fDirect = FSwissPlanet(oNod, jd, oEar, &r1, &r2, &r3, &r4, &r5, &r6);
+        if (fHost && fDirect) {
+          rD = SphDistance(h1, h2, r1, r2) * 3600.0;
+          printf("  oracle %-46s %9.4f\"\n",
+            "host path Moon true node vs FSwissPlanet", rD);
+          Check(rD < 1.0, "the host path's true node within 1\" (%.4f\")",
+            rD);
+        } else
+          Check(fFalse, "the host path's true node did not compute");
+      }
+
+      // Sidereal: the row carries is.rSid subtracted, the same
+      // convention FSwissPlanet's own output carries, and the host
+      // re-adds it -- so the comparison below is of like with like.
+      {
+        Borrow bSidT(us.fSidereal, fTrue);
+        CastChart(0);
+        jd = JulianDayFromTime(is.T);
+        EphQueryInit(&eqh, jd);
+        FEphQueryAdd(&eqh, oSun, 0, oEar, NULL);
+        Check(FEphSubmitChain(&eqh, rgisrc, 1), "the sidereal query "
+          "computes");
+        fHost = FEphRead(&eqh, oSun, &h1, &h2, &h3, &h4, &h5, &h6);
+        fDirect = FSwissPlanet(oSun, jd, oEar, &r1, &r2, &r3, &r4, &r5, &r6);
+        if (fHost && fDirect) {
+          rD = SphDistance(h1, h2, r1, r2) * 3600.0;
+          printf("  oracle %-46s %9.4f\"\n",
+            "host path sidereal Sun vs FSwissPlanet", rD);
+          Check(rD < 0.05, "the host path's sidereal Sun within 0.05\" "
+            "(%.4f\")", rD);
+        } else
+          Check(fFalse, "the host path's sidereal Sun did not compute");
+      }
+
+      // Topocentric, with the site the spec's own fields carry.
+      {
+        Borrow bTopoT(us.fTopoPos, fTrue);
+        OraclePinUtQt(2026, 9, 17, 0.0);
+        ciCore.lon = 122.3; ciCore.lat = 47.6;
+        CastChart(0);
+        jd = JulianDayFromTime(is.T);
+        EphQueryInit(&eqh, jd);
+        FEphQueryAdd(&eqh, oMoo, 0, oEar, NULL);
+        Check(FEphSubmitChain(&eqh, rgisrc, 1), "the topo query computes");
+        fHost = FEphRead(&eqh, oMoo, &h1, &h2, &h3, &h4, &h5, &h6);
+        fDirect = FSwissPlanet(oMoo, jd, oEar, &r1, &r2, &r3, &r4, &r5, &r6);
+        if (fHost && fDirect) {
+          rD = SphDistance(h1, h2, r1, r2) * 3600.0;
+          printf("  oracle %-46s %9.4f\"\n",
+            "host path topocentric Moon vs FSwissPlanet", rD);
+          Check(rD < 0.2, "the host path's topocentric Moon within 0.2\" "
+            "(%.4f\")", rD);
+        } else
+          Check(fFalse, "the host path's topocentric Moon did not compute");
+      }
+
+      // A fixed star through the host path, against the plugin's own
+      // internal answer (the star grammar and the fixstar comparison
+      // are the legs above).
+      {
+        eph::Profile pfHX;
+        real lonHX, latHX, dAX, dTX;
+        EphQueryInit(&eqh, jd);
+        FEphQueryAdd(&eqh, starLo, 0, 0, (char *)"Aldebaran");
+        Check(FEphSubmitChain(&eqh, rgisrc, 1), "the star query computes");
+        fHost = FEphRead(&eqh, starLo, &h1, &h2, &h3, &h4, &h5, &h6);
+        pfHX = eph::Profile();
+        fSav = FPromOneRowQt(eph::kTimeUT1, jd, &pfHX, eph::kObjStar, -1, 0,
+          0, "Aldebaran", &lonHX, &latHX, &dAX, &dTX);
+        Check(fHost && fSav && SphDistance(h1, h2, lonHX, latHX) * 3600.0 <
+          0.001, "the host path's star row is the internal answer");
+      }
+
+      // A custom body that is Jupiter's ascending node, the registry
+      // group's scenario 6, through the kind-1 conversion.
+      {
+        Borrow bTN(us.fTrueNode, fTrue);
+        rgTypSwiss[0] = 2; rgObjSwiss[0] = oJup; rgPntSwiss[0] = 1;
+        rgFlgSwiss[0] = 0;
+        EphQueryInit(&eqh, jd);
+        FEphQueryAdd(&eqh, custLo, 0, oEar, NULL);
+        Check(FEphSubmitChain(&eqh, rgisrc, 1), "the custom node query "
+          "computes");
+        fHost = FEphRead(&eqh, custLo, &h1, &h2, &h3, &h4, &h5, &h6);
+        fDirect = FSwissPlanet(custLo, jd, oEar, &r1, &r2, &r3, &r4, &r5,
+          &r6);
+        if (fHost && fDirect) {
+          rD = SphDistance(h1, h2, r1, r2) * 3600.0;
+          printf("  oracle %-46s %9.4f\"\n",
+            "host path Jupiter node (custom) vs FSwissPlanet", rD);
+          Check(rD < 1.0, "the host path's Jupiter node within 1\" "
+            "(%.4f\")", rD);
+        } else
+          Check(fFalse, "the host path's Jupiter node did not compute");
+      }
+
+      // The walk: with the ephemeris parameter pointed at a file that
+      // is not there, the source's submit refuses and every object
+      // stays open; with the Swiss source behind it, the fallback
+      // serves and the notice says so.
+      {
+        EPHQUERY eqw;
+        EphPromSetParam(epPromEphemeris,
+          "/nvm/work/eph7prom-scratch/no-such-ephemeris.440");
+        EphQueryInit(&eqw, jd);
+        FEphQueryAdd(&eqw, oSun, 0, oEar, NULL);
+        Check(!FEphSubmitChain(&eqw, rgisrc, 1), "a source whose files are "
+          "missing submits nothing");
+        Check(!FEphRead(&eqw, oSun, &h1, &h2, &h3, &h4, &h5, &h6),
+          "the refused object stays open");
+        {
+          int rgisrc2[2];
+          rgisrc2[0] = rgisrc[0];
+          rgisrc2[1] = IEphSrcFromKey("swiss");
+          EphQueryInit(&eqw, jd);
+          FEphQueryAdd(&eqw, oSun, 0, oEar, NULL);
+          Check(FEphSubmitChain(&eqw, rgisrc2, 2), "the fallback behind a "
+            "refused source serves");
+          Check(FEphRead(&eqw, oSun, &h1, &h2, &h3, &h4, &h5, &h6) &&
+            FEqSz(eqw.rgrow[0].szSrc, "swiss"),
+            "the fallback's provenance names the swiss source");
+          Check(FEphFallbackNotice(), "a fallback serving something raises "
+            "the notice");
+        }
+        EphPromSetParam(epPromEphemeris, "");
+      }
+    }
 
 LStop:
     ;
@@ -20387,8 +20585,10 @@ static void TestEphemRegistryQt()
       "sources (%d)", cEphSrcBuiltIn, CEphSrc());
     Check(IEphSrcFromKey("swiss") == 0 && IEphSrcFromKey("jpl") == 1 &&
       IEphSrcFromKey("moshier") == 2 && IEphSrcFromKey("matrix") == 3 &&
-      IEphSrcFromKey("none") == 4 && IEphSrcFromKey("nonesuch") < 0,
-      "every source resolves by its key, and a bad key resolves to none");
+      IEphSrcFromKey("none") == 4 + cEphSrcPrometheia &&
+      IEphSrcFromKey("nonesuch") < 0,
+      "every source resolves by its key, and a bad key resolves to none "
+      "(the phase 7 source, compiled in, sits at index 4)");
     Check(IEphSrcPrimary() == IEphSrcFromKey("swiss"),
       "today's selection derives the swiss source as the chain's head");
 

@@ -217,7 +217,17 @@ extern EPHSRCDEF ephsrcJpl;
 extern EPHSRCDEF ephsrcMatrix;
 extern EPHSRCDEF ephsrcNone;
 
-#define cEphSrcBuiltIn 5
+// The Prometheia source (phase 7) is compiled in only when PROMETHEIA is
+// defined -- the makefiles' pkg-config detection -- and sits in the table
+// before none, so the five indexes above never move.
+#ifdef PROMETHEIA
+extern EPHSRCDEF ephsrcPrometheia;
+#define cEphSrcPrometheia 1
+#else
+#define cEphSrcPrometheia 0
+#endif
+
+#define cEphSrcBuiltIn (5 + cEphSrcPrometheia)
 
 // The registry order, the fallback chain's quality order (section 4.2:
 // swiss, jpl, moshier, matrix), none last: it serves nothing, and a chain

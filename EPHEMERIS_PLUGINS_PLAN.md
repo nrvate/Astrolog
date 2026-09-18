@@ -2327,6 +2327,71 @@ the gates the phase touches.
      default build, all clear, suite 5689 passed, 0 failed. The locked
      artifacts untouched.
 
+8. **Phase 7, reconciled onto the landed registry (2026-09-17).** Phase
+   3 landed while increments 1 and 2 were in flight, so the branch was
+   rebased onto ephv4 a4c6b89 -- never merged, per the coordination
+   rule -- and the module was rewritten against the interface as it
+   landed, which deviates from 4.1's sketch in exactly the ways the
+   deviation note records: EPHQUERY is ONE instant with objects by
+   Astrolog index and a host-only native hint, the EPHROW carries the
+   six columns in the protocol's order with A.17's own error values,
+   and the types live in ephem.h, not in the locked ephproto.h. What
+   the reconciliation changed:
+   - **The source is registered.** `EPHSRCDEF ephsrcPrometheia` sits in
+     `rgephsrc[]` before none -- index 4 with the plugin compiled in,
+     so the five indexes phase 3 pinned never move and phase 3's own
+     key check became conditional on `cEphSrcPrometheia` (its one-line
+     amendment, reason recorded here). `CEphSrc()` is now
+     `5 + cEphSrcPrometheia`: five without the plugin, six with.
+   - **The delegation philosophy, kept.** FSubmitProm() derives what
+     every object IS from `FSwissPlanetSpec()` -- the same function the
+     local Swiss path has always used -- and converts the SWISSSPEC to
+     Prometheia's options instead of re-deriving: TRUEPOS becomes the
+     light-time-only mask, NONUT becomes the mean-of-date frame, the
+     solar-system-plane sidereal mode becomes per-object error 2 (the
+     engine serves no such plane), the Moon's named node bodies become
+     kind 1 orbit points (osculating or mean as the setting chose),
+     SE_INTP_APOG/PERG become error 2 (no interpolated points here),
+     swe_calc_pctr's centres become CENTER_BODY, and the Swiss body ids
+     map to NAIF/SPK-IDs with the barycentres-from-Mars-on convention
+     the C API names -- Mars 4, not 499; asteroids 20000000+N.
+   - **The row arithmetic is FSwissPlanet()'s own.** The answer's
+     longitude carries is.rSid subtracted, which the host re-adds --
+     the same convention the program's two halves have always met at,
+     and the reason the sidereal rows below compare like with like.
+   - **The parameters took the registry's shape.** The table is the
+     shared EPHPARAM (keys bare: "ephemeris", "catalog", "perturbers",
+     like jpl's "file" -- the source prefix is the CLI's business),
+     with the values held beside it until phase 4 moves them into
+     us.rgszEphParam[]; NLookup answers EPHMATCH, nNative carrying the
+     SPK-ID or the star index.
+   - **The host path is measured.** A query built the way
+     ComputeEphem() builds its, submitted down a chain holding the
+     prometheia source alone, every row against the direct call it
+     replaces: geocentric Sun, Moon and Mars 0.0000", Jupiter 0.0043",
+     the Moon's true node 0.0896", the sidereal Sun 0.0000", the
+     topocentric Moon 0.0384", a customized Jupiter ascending node
+     0.5264" (the two engines' Jupiter-model gap, the same figure the
+     internal layer's mask-6 leg measures), and a star row identical to
+     the internal answer. And the walk: with the ephemeris parameter
+     pointed at a missing file the source's submit refuses whole, every
+     object stays open, the swiss source behind it serves, the row's
+     provenance names swiss, and the fallback notice rises.
+   - **One trap the rebase itself left, recorded because it reads like
+     a link error and is nothing of the kind:** switching between the
+     PROMETHEIA and no-PROMETHEIA configurations recompiles nothing
+     unless the objects are removed -- -DPROMETHEIA lives in CPPFLAGS,
+     which the .d files do not record, and a stale ephem.o compiled
+     with the define failed to link against the empty plugin. Delete
+     ephem.o (all three object directories) when switching.
+   - **Gates:** the prometheia group 141 passed, 0 failed with the
+     engine open (DE440 both sides); the full suite with PROMETHEIA
+     compiled in, 5782 passed, 0 failed (no data paths -- the group
+     skips its engine legs with the reason printed); make check in the
+     default build, all clear, suite 5751 passed, 0 failed; the
+     registry group 64 passed, 0 failed under the plugin. The locked
+     artifacts untouched.
+
 2. **Phase 2, protocol version 4 in code (2026-09-17).** `astrolog-ephd`,
    `eph_wsclient` and the Qt client speak version 4 and nothing else, in one
    commit, because the break is clean and the suite's live group casts
