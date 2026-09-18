@@ -105,8 +105,18 @@ version 3, and this section is the design authority behind it.
   byte-identical to the corrApplied set and to `cf83dc9`, and kind 4's
   encoding is unchanged -- so it is a drop rather than an edit because §3
   is locked, not because the wire moved. Prometheia is building against
-  it. Still owed: the numeric fixture (four cases, named in the drop),
-  generated here and checked there. **§3.5a itself is not edited in this
+  it. The numeric fixture is generated (`tools/kind4-fixture.sh`,
+  sha256 `121ab3c6f9bed858b3f8aa949843f8e045850680054ca11aa184e289b58b3e63`)
+  and **cross-checked**: Prometheia produced the same four cases from
+  their engine and from a separate textbook Kepler implementation, and
+  every case agrees. The one residual is accounted for -- Swiss carries
+  the Gaussian constant truncated to ten significant figures in degrees
+  per day, 1.446e-12 relative, which enters only through the mean motion
+  and reaches 0.3 mas only in the case contrived to accumulate 173
+  orbits. Left alone on purpose: the constant is upstream Swiss's, and
+  changing it would make this the only Swiss consumer that disagrees
+  with the rest about where a Hamburg point is. A fifth sentence for
+  3.5a carries the durable half. Still owed: their verdict. **§3.5a itself is not edited in this
   document until the drop is verdicted**, which is the rule the approval
   condition exists to enforce.
 
