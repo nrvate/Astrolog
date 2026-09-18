@@ -92,6 +92,39 @@ server and the vendored library, with the tolerance stated.
 
 ---
 
+### 1.4 Five names for one star — Toliman and Proxima Centauri corrected
+
+`sefstars.txt` shipped **Rigil Kentaurus, Rigel Kentaurus, Toliman, Bungula
+and Proxima Centauri** as five names on ONE entry, at identical coordinates
+and proper motion. Two of those five are not that star:
+
+| name | IAU assigns it to | was | error |
+|---|---|---|---|
+| Toliman | α Cen **B** (WGSN 2018-08-10) | α Cen A's position | **16.45″** |
+| Proxima Centauri | α Cen **C** (WGSN 2016-08-21) | α Cen A's position | **2.18° = 7,860″** |
+
+A client asking for Proxima Centauri — the nearest star to the Sun, V = 11.13,
+parallax 768 mas — got α Cen A.
+
+**This fork now carries its own astrometry for both**, from SIMBAD, and
+`sefstars.txt` is no longer byte-identical to the Swiss sibling's. Rigil
+Kentaurus, Rigel Kentaurus and Bungula are untouched: all three are names for
+α Cen A, and an alias sharing a position is correct.
+
+**Why the earlier reasoning was wrong.** This entry sat in §2 — "Swiss is
+wrong and we still follow it" — on the argument that a vendored data file is a
+provenance decision rather than a code fix. That reasoning mistakes the kind
+of thing at stake. Parity is worth having only where it is parity with the
+truth; a program that answers a documented, two-degree falsehood because its
+upstream does is not compatible, it is jointly wrong.
+
+**Net:** `tools/star_identity_audit.py`, which checks catalogued positions by
+name and requires the IAU's distinct components of a multiple system to sit at
+different places. It reports **5 failures** against the unfixed file and none
+against this one, and carries four control stars so a broken parser cannot
+pass it by finding nothing. Found by the Prometheia cross-test's fixed-star
+leg, which agrees with this server to 0.008″ on the other 29 stars it checks.
+
 ## 2. Where Swiss is known WRONG and this fork still follows it
 
 Recorded so that nobody re-derives them, and so that the cost of each is
@@ -131,23 +164,6 @@ sign missing by 2×.
 **This is the one worth a decision.** It is not a choice between two
 defensible conventions, and **every topocentric chart the application draws
 carries it.**
-
-### 2.4 Five names for one star, one of them 2.18° wrong
-
-`sefstars.txt` carries **Rigil Kentaurus, Rigel Kentaurus, Toliman,
-Bungula and Proxima Centauri** as five names on ONE entry, at identical
-coordinates and proper motion. Toliman is α Cen B, 16.45″ from the entry.
-**Proxima Centauri is 2.18 degrees away — 7,860 arcsec** — and is the
-nearest star to the Sun, not a component of the pair's photocentre.
-
-So a client asking for Proxima by name gets α Cen.
-
-**Why this fork still carries it:** `sefstars.txt` is a vendored Swiss data
-file, and editing it means users whose own catalogue differs get different
-answers from the same program version. That is a decision about data
-provenance rather than a code fix. Found by the Prometheia cross-test's
-fixed-star leg, which agrees with this server to 0.008″ on the other 29
-stars it checks.
 
 ### 2.3 Deflection at a planet-centred observer — up to 0.544″, and it bends the Sun's own light
 
@@ -192,44 +208,76 @@ Listed because they are real and measured, but with no outside reference
 saying who is right. They are NOT §1 entries: this fork is not claiming to
 be more correct, only different.
 
-### 4.1 The sidereal zero point on the invariable plane — ~31.5″
+### 4.1 The sidereal zero point on the invariable plane — RESOLVED 2026-09-18
 
-Sidereal plane 2 (A.8's invariable plane). Both engines' planes coincide —
-latitudes agree to 0.03″ — but longitudes differ by a constant: **−31.51″
-under Fagan/Bradley, −30.42″ under Lahiri**.
+**Decided by measurement; implementation pending the §3.5a drop's approval, on
+which it moves to §1.**
 
-**What Swiss does**, read from `swi_trop_ra2sid_lon_sosy()`
-(`sweph.c:4016`): it takes the **equinox of t0** as a vector, rotates it
-into the invariable-plane frame through exactly the chain the bodies take,
-measures the body from that longitude **in the plane**, and only then
-subtracts the ayanamsa as a flat scalar in the plane's own longitude. It
-never carries the sidereal zero point itself onto the plane.
+Sidereal plane 2 (A.8's invariable plane). Both engines' planes coincide and
+longitudes differ by a constant: **−31.51″ under Fagan/Bradley, −30.42″ under
+Lahiri** as the cross-test measured it.
 
-Prometheia instead carries the point at longitude A0 **on the ecliptic of
-t0** onto the plane.
+**What decides it**, and it needs nothing from the other engine. Two coordinate
+systems on the sky differ by exactly one rotation, and a z-x-z rotation has
+three angles. Fitting all three from this server's own plane-0 and plane-2
+output over six stars spanning latitude −39.6° to +61.7° recovers an
+inclination of **1.5787010°** — Swiss's own invariable-plane constant to seven
+digits — and explains all twelve observables to **rms 0.00000″**. So the planes
+are not in dispute and the entire disagreement is the third angle: where
+longitude starts.
 
-Projection between planes inclined by `i` is not longitude-preserving —
-the distortion is second order, about `(i²/2)·sin(2(λ−Ω))`, and
-`i = 1.578701°` gives 78″ of available distortion — so walking the
-ayanamsa's arc before projecting differs from walking it after by tens of
-arcseconds. **It predicts the zodiac dependence too:** the two treatments
-diverge in proportion to the arc walked, and Fagan/Bradley and Lahiri
-differ by ~0.9° of A0, about 3.5% of 24.7° — and 3.5% of 31.5″ is 1.1″,
-which is the measured gap between them. That agreement is why this is
-recorded as understood rather than merely observed.
+Evaluating that rotation at the one direction whose answer is fixed by
+definition — the zodiac's own zero point, sidereal longitude 0 on the ecliptic
+of t0 — gives what our plane 2 calls it:
 
-A smaller term: Swiss's plane constants (`sweph.h:312`, `:316`) are node
-107.582569°, inclination 1.578701°, against Prometheia's 107.582322° and
-1.578700°. The node differs by 0.89″, so a little of the gap is that, but
-it is not the mechanism.
+| zodiac | ayanamsa at J2000 | our plane-2 longitude of the zodiac's zero point |
+|---|---|---|
+| Fagan/Bradley | 24.7365° | **+31.4685″** |
+| Lahiri | 23.8563° | **+30.3904″** |
+| Raman | ≈22.4° (derived from the fit) | **+27.5764″** |
 
-**Why this is not a §1 entry:** the registry's rule is that a claim of
-being more correct is earned by measurement against something outside this
-project, and there is none here — only a reading of what each side does.
-The ayanamsa is a convention about a direction and the invariable plane is
-a dynamical object, so which frame the convention is applied in may
-genuinely matter; absent an argument from the physics, picking on
-aesthetics would be exactly the reasoning this file exists to prevent.
+Under any reading that carries the zero point as a **direction** that column is
+0 by construction. Prometheia answers 0; these reproduce the independently
+measured server-to-server offsets to 0.04″.
+
+**The number depends on the zodiac, and that is the argument.** A plane does not
+know which ayanamsa was requested. Ours puts a different sky direction at 0° for
+each one and never the one the zodiac names, so the origin is not tied to the
+sky at all — it is tied to the equinox, and where it lands is a by-product of
+how far that ayanamsa happened to have moved. Consistent with Swiss walking the
+arc **in the plane** from the projected equinox rather than on the ecliptic
+before projecting (predicts 32.23″ and 31.06″ against 31.47″ and 30.39″; the
+0.7″ residual is anchor-epoch handling and is not claimed to be explained).
+
+**Why the zodiac's direction is the invariant.** A sidereal zodiac is defined by
+a direction in the sky, and the registry's own token names say so: `true-citra`
+is Spica at 180°, `aldebaran-15tau` is Aldebaran at 45°, `galcent-0sag` is the
+galactic centre at 240°. Lahiri and Fagan/Bradley are numerical fits to
+statements of the same kind. The arc from the equinox is the *derived* quantity
+— recomputed for every instant as the equinox precesses, different tomorrow. A
+reference plane is a choice of how to *measure* directions and may not change
+*which* direction a zodiac starts at, any more than a frame change may answer a
+different body (§4.2's principle, reached separately).
+
+**This supersedes the earlier reasoning** in this entry, which declined §1 for
+want of "an argument from the physics". The argument is above and the
+measurement is reproducible: `tools/sidplane-origin.py`.
+
+**A second defect found on the way.** Sweeping all 47 registry zodiac tokens on
+planes 0, 1 and 2: **16 return the plane-0 answer bit-identically for both
+`sidplane=1` and `sidplane=2`**, with no error — `b1950`, `j1900`, `j2000`,
+`true-citra`, `true-mula`, `true-pushya`, `true-revati`, `true-sheoran`,
+`galcent-0sag`, `galcent-cochrane`, `galcent-mula-wilhelm`, `galcent-rgilbrand`,
+`galequ-iau1958`, `galequ-mula`, `galequ-true`, `galalign-mardyks`.
+`ephswiss.h:165` sets `SE_SIDBIT_SSY_PLANE` for every token and Swiss declines
+to honour it for these sixteen. These are exactly the star- and frame-anchored
+ayanamsas, the ones whose definitions are most explicitly directions, so a plane
+change genuinely must move them. Answering a different plane than the one asked
+for is a protocol violation either way: A.8 is a request field, and a field the
+server cannot honour is `kOErrUnsupported`, not a different answer. Both defects
+have one fix — if the zero point is a projected direction, the plane transform
+is our own arithmetic rather than a Swiss sidereal mode, and it then works for
+all 47 tokens instead of 31.
 
 ### 4.2 Nodes in a J2000/ICRF frame — up to 10″ latitude
 
