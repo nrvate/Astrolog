@@ -20996,18 +20996,26 @@ static void TestEphemRegistryQt()
           {"=bm", "_b", NULL, NULL},
           {"-bm", "-bU", "-b", NULL},
           {"_bs", "=bm", "_bU", "_b"}};
+        // Its own array: the enclosing rgsz[] holds five, and the
+        // longest sequence here needs six -- argv[0], four switches and
+        // the NULL. Writing that NULL through rgsz[5] was a stack
+        // overflow, and only AddressSanitizer saw it; the suite passed.
+        char *rgszSeq[6];
         int iseq, c;
 
         for (iseq = 0; iseq < (int)(sizeof(rgseq)/sizeof(*rgseq)); iseq++) {
           EphSourceSet("swiss");
-          rgsz[0] = (char *)szAppNameCore;
+          rgszSeq[0] = (char *)szAppNameCore;
           c = 1;
-          rgsz[c++] = (char *)rgseq[iseq].szSw1;
-          if (rgseq[iseq].szSw2 != NULL) rgsz[c++] = (char *)rgseq[iseq].szSw2;
-          if (rgseq[iseq].szSw3 != NULL) rgsz[c++] = (char *)rgseq[iseq].szSw3;
-          if (rgseq[iseq].szSw4 != NULL) rgsz[c++] = (char *)rgseq[iseq].szSw4;
-          rgsz[c] = NULL;
-          Check(FProcessSwitches(c, rgsz, NULL), "\"%s ...\" parses",
+          rgszSeq[c++] = (char *)rgseq[iseq].szSw1;
+          if (rgseq[iseq].szSw2 != NULL)
+            rgszSeq[c++] = (char *)rgseq[iseq].szSw2;
+          if (rgseq[iseq].szSw3 != NULL)
+            rgszSeq[c++] = (char *)rgseq[iseq].szSw3;
+          if (rgseq[iseq].szSw4 != NULL)
+            rgszSeq[c++] = (char *)rgseq[iseq].szSw4;
+          rgszSeq[c] = NULL;
+          Check(FProcessSwitches(c, rgszSeq, NULL), "\"%s ...\" parses",
             rgseq[iseq].szSw1);
           Check(FSrcChainHead("matrix"),
             "\"%s ...\" keeps the Matrix selection rather than losing it "
