@@ -211,29 +211,32 @@ version 3, and this section is the design authority behind it.
   (use `atan2(|a x b|, a.b)`); and a subset check that reads only the
   mask-0 answer is vacuous against a server that echoes the request.
 
-- **A DROP IS DRAFTED AND AWAITS THE MAINTAINER: the distance of a MEAN
-  orbit point** (`/nvm/work/ephv4-drop-meanpoint/DROP.md`, drafted at
-  `f0f3488`). **Not sent to Prometheia as a proposal until it is
-  approved here.** It moves no artifact bytes -- it adds sentences to
-  §3.5a, like the kind-4 drop.
+- **A DROP WAS DRAFTED AND WITHDRAWN: the distance of a MEAN orbit point.**
+  Worth keeping as a record of a wrong diagnosis, because it was wrong in
+  an expensive direction.
 
-  **What it is.** Two conforming servers put the Moon's MEAN node at the
-  same direction and a different distance: 368,130 km against our
-  384,407, which is the Moon's mean distance CONSTANT. §3.5a does not say
-  what the column means, so neither is wrong -- and Astrolog re-centres
-  with it (`calc.cpp:1221` adds Earth's position to a node built from the
-  row's distance), so a Mars-centred chart of the two servers differs by
-  4.18 arcsec. The drop defines a mean point's distance as the radius its
-  own elements give, covers the mean apsides as well as the nodes, and
-  says a client may re-centre with it.
+  The cross-test measured the Moon's mean node 4.18 arcsec out between the
+  two servers in a planet-centred chart, and traced it to the DISTANCE:
+  ours 384,400 km, theirs 368,130. I read that as a SPEC gap -- two
+  defensible conventions for a column §3.5a leaves undefined -- drafted a
+  drop to define it, and argued that `astrolog-ephd` could not conform
+  because it is bit-exact with Swiss.
 
-  **THE DECISION IS NOT TECHNICAL.** `astrolog-ephd` will NOT conform:
-  it is bit-exact with Swiss by design, and Swiss returns the constant.
-  So this publishes a rule our own server does not follow, joining the
-  three standing upstream-Swiss divergences. The draft argues that is
-  right -- a column whose meaning is undefined means whatever the nearest
-  implementation does -- but whether to publish such a rule is the
-  maintainer's to decide knowingly.
+  **Every step of that was wrong.** Swiss's own `swe_nod_aps` answers
+  368,148.6 km, agreeing with Prometheia to 18 km, which is the
+  DE440-against-refit floor. Swiss simply answers the question TWICE --
+  the named `SE_MEAN_NODE` body carries the mean distance constant with
+  zero rates -- and this project had chosen the degenerate one. There was
+  no convention to define, no upstream divergence to carry, and the fix
+  was ours to make: commit `477ad49`.
+
+  **The lesson is about which way the suspicion ran.** "Our server is
+  bit-exact with Swiss, so a disagreement with another engine is the other
+  engine's or the spec's" is a comfortable inference and it was false
+  here: we were bit-exact with the WRONG ONE OF SWISS'S OWN TWO ANSWERS.
+  Checking what Swiss actually returns took one probe and would have
+  saved a drop, a wrong recommendation to the maintainer, and a message
+  to the other project asserting a gap that did not exist.
 
 - **A NAMED DROP IS CLOSED: correction masks per object KIND**
   (`/nvm/work/ephv4-drop-corrkind/DROP.md`, cut at `050a5a4`, implemented
