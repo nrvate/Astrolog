@@ -1041,8 +1041,6 @@ void ComputeEphem(real t)
 #ifdef SWISS
   EPHQUERY eq;
 #endif
-#ifdef QT
-#endif
   PT3R ptPla, ptEar, vEar;
 #ifdef JPLWEB
   flag fSav;
@@ -1052,8 +1050,6 @@ void ComputeEphem(real t)
   // asteroids, Lilith, North Node, and Uranians using ephemeris files.
 
   fJPLPla = FSrcChainHead("horizons");
-#ifdef QT
-#endif
   objCentCalc = us.objCenter;
   if (objCentCalc > oNorm || FNodal(objCentCalc) ||
     (fJPLPla && us.objCenter > oSun) ||
