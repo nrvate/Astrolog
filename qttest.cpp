@@ -214,6 +214,7 @@ extern void SetWelcMaxObjsSrvTestQt(uint32_t);
 extern void SetWelcMaxCellsSrvTestQt(uint32_t);
 extern void SzEphSrvStatusQt(char *, int);
 extern int NChunkProbeSrvTestQt(int);
+extern CONST char *SzObjNameProbeSrvTestQt(int);
 extern flag FSendEphSrvQt(eph::Request *);
 extern void ClampEphSrvReqQt(eph::Request *);
 extern void EphSrvFinalizeQt();
@@ -18376,6 +18377,16 @@ static void TestEphSrvQt()
     "refused, not copied");
   Check(NChunkProbeSrvTestQt(2) == -1, "an f32 chunk for an f64 window is "
     "refused");
+
+  // M1: a per-object failure message names the body it is about, and a
+  // STAR's plan slot holds its catalogue number rather than an object
+  // index -- so naming it from szObjName[] gave an unrelated planet.
+  Check(CchSz(SzObjNameProbeSrvTestQt(0)) > 0 &&
+    FEqSz(SzObjNameProbeSrvTestQt(0), "Aldebaran"),
+    "a star's failure message names the star, not the planet whose object "
+    "index its catalogue number collides with");
+  Check(FEqSz(SzObjNameProbeSrvTestQt(1), szObjName[1]),
+    "an ordinary body's failure message still names it from szObjName[]");
 
   // C13: the Swiss calls Astrolog still makes locally under this backend
   // ask the Swiss files, as under the Swiss backend -- not a JPL file.

@@ -2301,10 +2301,14 @@ the gates the phase touches.
      already answered and one already-answered out-of-range object could
      refuse the whole query.
 
-   - **M1, still open and cosmetic:** a per-object failure message names
+   - **M1: a per-object failure message named the wrong body.** It used
      `szObjName[obj]` for a star whose object slot holds its CATALOGUE
-     NUMBER, so `-XU` can report "could not compute Moon" for star #1.
-     Positions are unaffected -- the same index writes and reads.
+     NUMBER, so `-XU` reported "could not compute Moon" for star #1.
+     Positions were never affected -- the same index writes and reads --
+     but a user hunting a star that would not draw was sent to a planet.
+     `SzSrvObjNameQt()` reads the name off the request's own object,
+     which is right for either kind, and the net asserts both halves:
+     the star names the star, an ordinary body still names szObjName[].
 
    - **And the sanitizer found one more, in a NET.** AddressSanitizer
      over the changed groups caught a stack overflow in the E1 test

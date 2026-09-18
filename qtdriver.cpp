@@ -9090,6 +9090,24 @@ static void SrvWarnOnceQt(real jd, CONST char *szWhy)
   PrintWarning(s_szSrvWarnQt);
 }
 
+// Which body a per-object message is about. The plan is indexed by
+// Astrolog object, and for a planet szObjName[] is that object's name --
+// but a STAR's plan slot is its SWISS CATALOGUE NUMBER, because
+// SwissComputeStar() passes istar where an object index goes, so
+// szObjName[] there names an unrelated planet: "could not compute Moon"
+// for star #1. Positions are unaffected -- the same index writes and
+// reads -- and only the sentence was wrong. The request's own object
+// carries the name that was asked for, which is right for either kind.
+static CONST char *SzSrvObjNameQt(CONST EPHWINDOW *pwin, int iObj, int obj)
+{
+  if (pwin != NULL && iObj >= 0 && iObj < (int)pwin->req.objs.size() &&
+    pwin->req.objs[iObj].kind == eph::kObjStar &&
+    !pwin->req.objs[iObj].name.empty())
+    return pwin->req.objs[iObj].name.c_str();
+  return FBetween(obj, 0, objMax-1) ? szObjName[obj] : "an object";
+}
+
+
 flag FSrvPlanetQt(int obj, real jd, real *objPos, real *objAlt, real *dir,
   real *dist, real *diralt, real *dirlen)
 {
@@ -9134,7 +9152,8 @@ flag FSrvPlanetQt(int obj, real jd, real *objPos, real *objAlt, real *dir,
     // This object failed on the server: its A.17 code and the server's own
     // text, where FSwissPlanet() would have printed Swiss's.
     sprintf2(S(sz), "the Ephemeris Server could not compute %s (error %d: %.120s)",
-      szObjName[obj], (int)pwin->rgmeta[pent->iObj].errCode,
+      SzSrvObjNameQt(pwin, pent->iObj, obj),
+      (int)pwin->rgmeta[pent->iObj].errCode,
       pwin->rgmeta[pent->iObj].errText.c_str());
     SrvWarnOnceQt(jd, sz);
     return fFalse;
@@ -9161,7 +9180,8 @@ flag FSrvPlanetQt(int obj, real jd, real *objPos, real *objAlt, real *dir,
     // failure's code and text (EPHEMERIS_REVIEW.md S9).
     if (FColNanSrvQt(xx[0])) {
       sprintf2(S(sz), "the Ephemeris Server could not compute %s (error %d: %.120s)",
-        szObjName[obj], (int)pwin->rgmeta[pent->iObj].errCode,
+        SzSrvObjNameQt(pwin, pent->iObj, obj),
+        (int)pwin->rgmeta[pent->iObj].errCode,
         pwin->rgmeta[pent->iObj].errText.c_str());
       SrvWarnOnceQt(jd, sz);
       return fFalse;
@@ -9227,6 +9247,29 @@ int CRecastSrvTestQt() { return s_cSrvRecastQt; }
 flag FWaitingSrvTestQt() { return s_fSrvWaitingQt; }
 void SetWelcMaxObjsSrvTestQt(uint32_t dw) { esrv.welc.maxObjs = dw; }
 void SetWelcMaxCellsSrvTestQt(uint32_t dw) { esrv.welc.maxCells = dw; }
+// Which name a per-object failure message would use, for one object of a
+// hand-built window. iCase 0 is a STAR in the plan slot of Astrolog object
+// 1, which is the Moon -- the shape SwissComputeStar() makes, and the one
+// that printed "could not compute Moon" for star #1. iCase 1 is an
+// ordinary body, which must still be named from szObjName[].
+CONST char *SzObjNameProbeSrvTestQt(int iCase)
+{
+  static EPHWINDOW winT;
+  eph::Object o;
+
+  winT.req.objs.clear();
+  if (iCase == 0) {
+    o.kind = eph::kObjStar;
+    o.name = "Aldebaran";
+  } else {
+    o.kind = eph::kObjBody;
+    o.naif = 10;
+  }
+  winT.req.objs.push_back(o);
+  return SzSrvObjNameQt(&winT, 0, 1);
+}
+
+
 // Feed hand-built DATA chunks to a window of rows 2, one object, f64, held
 // under a request id nothing else uses, and say what became of it:
 // 1 done, 0 still waiting, -1 failed. The cases are the chunk defects the
