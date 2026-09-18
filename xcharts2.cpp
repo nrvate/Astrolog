@@ -87,7 +87,7 @@ flag FProper(int i)
         f = fFalse;
     }
     if (gi.nMode == gOrbit)
-      f &= FThing(i) && (us.fEphemFiles || !FGeo(i));
+      f &= FThing(i) && (FEphSpeeds() || !FGeo(i));
     else if (fMap || gi.nMode == gGlobe || gi.nMode == gPolar)
       f &= FThing2(i);
     else if (gi.nMode == gEphemeris)

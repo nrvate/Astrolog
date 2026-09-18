@@ -143,14 +143,14 @@ extern void FinalizeProgram P((flag));
 #define FProperEphem2(o) (!(us.nRel <= rcTransit ? ignore2[o] : ignore[o]) && \
   !(gs.fAlt && ((o) == oMoo || (o) == oFor)))
 
-#define FCmSwissAny() (us.fEphemFiles)
-#define FCmSwissEph() (us.fEphemFiles && us.nSwissEph <= 0)
-#define FCmSwissMosh() (us.fEphemFiles && us.nSwissEph == 1)
-#define FCmSwissJPL() (us.fEphemFiles && us.nSwissEph == 2)
-#define FCmSwissStar() (us.fEphemFiles && !us.fMatrixStar)
-#define FCmMatrix() (!us.fEphemFiles && us.fMatrixPla)
-#define FCmJPLWeb() (us.fEphemFiles && us.nSwissEph >= 3)
-#define FCmSrv() (us.fEphemFiles && us.nSwissEph == 5)
+// The FCm* family is gone (EPHEMERIS_PLUGINS_PLAN.md 4.1): the
+// selection is the chain, and its two questions are functions now --
+// FEphSpeeds() for "the rates columns are real rates" and
+// FEphLegacyCast() for "the Matrix-or-None legacy cast answers" -- both
+// in ephem.cpp. What the old FCmSwissStar() asked ("stars through the
+// Swiss path, unless -bU") is FEphSpeeds() && !us.fMatrixStar at its
+// three sites, and what FCmSrv() and FCmJPLWeb() asked about the cast's
+// backend is FSrcChainHead("server") / FSrcChainHead("horizons").
 
 extern US us;
 extern IS is;
@@ -567,11 +567,17 @@ extern EPHSRCDEF *PephsrcGet P((int));
 extern int IEphSrcFromKey P((CONST char *));
 extern flag FEphSrcKeyKnown P((CONST char *));
 extern flag FEphSrcKeyKnownN P((CONST char *, int));
-extern int IEphSrcPrimary P((void));
+extern flag FSrcChainHead P((CONST char *));
+extern flag FEphSpeeds P((void));
+extern flag FEphLegacyCast P((void));
+extern int CEphChainSrc P((CONST char *, int *, int));
+extern int NEphSourceGen P((void));
 extern void EphQueryInit P((EPHQUERY *, real));
 extern flag FEphQueryAdd P((EPHQUERY *, int, int, int, char *));
 extern flag FEphFallbackNotice P((void));
-extern int IEphSrcSideCall P((void));
+extern int NSwissEphem P((void));
+extern int SwissSetEphemCast P((int));
+extern void SwissRestoreEphemCast P((int));
 extern flag FEphSubmitChain P((EPHQUERY *, CONST int *, int));
 extern flag FEphSubmit P((EPHQUERY *));
 extern flag FEphSubmitSide P((EPHQUERY *));
@@ -580,18 +586,18 @@ extern flag FEphRead
 extern flag FEphReadRaw P((CONST EPHQUERY *, int, real *));
 
 // The selection state (EPHEMERIS_PLUGINS_PLAN.md 5.1): the chain
-// us.szEphemSource holds, the parameter values us.rgszEphParam[] carries,
-// and the two directions that keep them and the legacy fields in step
-// while both representations live.
+// us.szEphemSource holds, the parameter values us.rgszEphParam[]
+// carries, the default, and the shadow of the three old fields the
+// legacy spellings toggle, which re-derives the chain after each one.
 extern CONST char *SzEphSourceDefault P((void));
 extern void SzEphChainHead P((CONST char *, char *, int));
 extern void EphSourceChanged P((void));
 extern int IEphParamFromKey P((CONST char *));
 extern flag FEphParamSet P((int, CONST char *));
 extern flag FEphParamDefaulted P((int));
-extern void EphLegacyFromChain P((void));
+extern void EphShadowFromChain P((flag *, int *, flag *));
 extern void EphSourceSet P((CONST char *));
-extern flag FEphChainFromLegacy P((void));
+extern void EphSourceSetShadow P((flag, int, flag));
 
 // The fixed stars' decision-and-execution pair, the FSwissPlanet()
 // analogue for one star: resolve nothing here -- the caller hands the
@@ -601,6 +607,7 @@ extern flag FSwissStar P((char *, real, real *));
 extern void SwissHouse P((real, real, real, int,
   real *, real *, real *, real *, real *, real *, real *, real *));
 extern real RObliquityTrue P((real));
+extern void SwissEnsurePath P((void));
 extern void SwissComputeStars P((real, flag));
 extern flag SwissComputeStar P((real, ES *));
 extern flag SwissComputeStarSort P((real, ES *));

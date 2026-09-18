@@ -598,7 +598,7 @@ flag FOutputData(void)
         rT = planetalt[i] < 0.0 && planetalt[i] > -1.0 ?
           planetalt[i] : RFract(RAbs(planetalt[i]));
         fprintf(file, "%4d %13.9f,", (int)planetalt[i], rT*60.0);
-        rT = i > oNorm ? 999.0 : (i == oMoo && !us.fEphemFiles ? 0.0026 :
+        rT = i > oNorm ? 999.0 : (i == oMoo && !FEphSpeeds() ? 0.0026 :
           PtLen(space[i]));
         fprintf(file, " %13.9f %13.9f\n", ret[i], rT);
       }
@@ -1793,51 +1793,19 @@ flag FOutputSettings()
   sprintf2(S(sz), "%cb2     ", ChDashF(us.fSecondHide)); PrintFSz();
   PrintF(
     "; Don't display :00 seconds [\"_b2\" shows anyway, \"=b2\" skips   ]\n");
-  // The ephemeris backend is three fields (astrolog.h, "-b" state table)
-  // and all three have to be written, or a chart cast with Moshier, JPL
-  // or Matrix comes back as Swiss.
-  // Order is load-bearing twice: every "-b" suffix also toggles
-  // fEphemFiles, so the plain "=b"/"_b" line has to come last to settle
-  // it; and the four nSwissEph spellings are mutually exclusive toggles
-  // that each clear the field, so one forced line carries the choice.
-  // These also precede the "=0b" and "=0n" lines below on purpose, so a
-  // saved file applies its backend before locking the old engines out.
-  sprintf2(S(sz), "%-8s", us.nSwissEph == 1 ? "=bs" : us.nSwissEph == 2 ?
-    "=bj" : us.nSwissEph == 3 ? "=bJ" : us.nSwissEph == 5 ? "=bS" :
-    "_bs"); PrintFSz();
-  PrintF(
-    "; Ephemeris backend         "
-    "[\"_bs\" Swiss \"=bs\" Mosh \"=bj\" JPL \"=bJ\" web \"=bS\" serv]\n");
-  // Written in pieces, never through sprintf2(): the address is user
-  // text, and a truncated one loses its closing quote, so the next word
-  // becomes a switch. Same discipline as the -Y5i line below.
-  PrintF("-bW "); PrintQuotedParamSz(file, us.szEphSrv); PrintF("\n");
-  PrintF(
-    "; Ephemeris server address  [ws:// URL or host:port; \"\" is "
-    "localhost:47190]\n");
-  PrintF("-bT "); PrintQuotedParamSz(file, us.szEphSrvToken); PrintF("\n");
-  PrintF(
-    "; Ephemeris server token    [for a server that requires one; \"\" is "
-    "none]\n");
-  sprintf2(S(sz), "%cbm     ", ChDashF(us.fMatrixPla)); PrintFSz();
-  PrintF(
-    "; Use Matrix formulas       [\"=bm\" uses them, \"_bm\" doesn't   ]\n");
+  // The selection's own spellings (EPHEMERIS_PLUGINS_PLAN.md 5.3): one
+  // -bE line for the chain, then one -bP line per parameter that sits
+  // away from its default. No order dependence: these are the only
+  // lines the selection has. The chain is written even at its default,
+  // so a round trip always carries it; the parameters are written only
+  // when set, and "" or NULL -- the default -- writes nothing, which is
+  // why the sweep's poison-to-empty reads back as still default rather
+  // than lost. The -bU Matrix-stars flag is the one legacy -b spelling
+  // still written: it is a preference beside the selection, not part
+  // of it.
   sprintf2(S(sz), "%cbU     ", ChDashF(us.fMatrixStar)); PrintFSz();
   PrintF(
     "; Matrix fixed stars only   [\"=bU\" uses them, \"_bU\" doesn't   ]\n");
-  sprintf2(S(sz), "%cb      ", ChDashF(us.fEphemFiles)); PrintFSz();
-  PrintF(
-    "; Use ephemeris files       [\"=b\" uses them, \"_b\" doesn't      ]\n");
-  // The selection's own spellings (EPHEMERIS_PLUGINS_PLAN.md 5.3): one
-  // -bE line for the chain, then one -bP line per parameter that sits
-  // away from its default. They follow the legacy spellings above so a
-  // file this writer produced loads to the state it was written from
-  // whichever line lands last; once the legacy spellings go, these are
-  // the only lines left, and order stops mattering. The chain is written
-  // even at its default, so a poisoned marker survives the round trip;
-  // the parameters are written only when set, and "" or NULL -- the
-  // default -- writes nothing, which is why the sweep's poison-to-empty
-  // reads back as still default rather than lost.
   PrintF("-bE "); PrintQuotedParamSz(file, SzSet(us.szEphemSource));
   PrintF("\n");
   PrintF(
@@ -1855,9 +1823,6 @@ flag FOutputSettings()
   PrintF(
     "; Ephemeris parameters      [\"-bP server.url <address>\" sets one; "
     "\"\" is its default]\n");
-  sprintf2(S(sz), "%c0b     ", ChDashF(us.fNoOldCalc)); PrintFSz();
-  PrintF(
-    "; Disable old calculations  [\"=0b\" disables them, \"_0b\" allows ]\n");
   sprintf2(S(sz), "%cv0     ", ChDashF(us.fVelocity)); PrintFSz();
   PrintF(
     "; Show average velocities   [\"=v0\" average, \"_v0\" does absolute]\n");
@@ -2068,9 +2033,6 @@ flag FOutputSettings()
   sprintf2(S(sz), "-YP %d   ", us.nArabicNight); PrintFSz();
   PrintF(
     "; Arabic part formula       [\"1\" is fixed, \"0\" checks if night ]\n");
-  sprintf2(S(sz), "%c0n     ", ChDashF(us.fNoNetwork)); PrintFSz();
-  PrintF(
-    "; Internet Web queries      [\"=0n\" disables them, \"_0n\" allows ]\n");
 
   PrintF("\n-Yw "); FormatR(S(sz), us.rStation, 5); PrintFSz();
   PrintF("       ; Stationary movement threshold  [0.0 is never \"S\"]\n");
@@ -4059,13 +4021,6 @@ flag GetJPLHorizons(int id, real *obj, real *objalt, real *dir, real *dist,
   int hr[3], min[3], phase = -1, i;
   flag fSemicolon;
 
-  if (us.fNoNetwork) {    // Don't allow if -0n set.
-    if (!is.fNoEphFile) {
-      is.fNoEphFile = fTrue;
-      PrintWarning("Internet features are disabled.");
-    }
-    return fFalse;
-  }
 
   // Determine time range to get ephemeris for.
   for (i = 0; i < 3; i++) {

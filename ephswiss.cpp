@@ -121,16 +121,16 @@ static flag FSubmitSwissLocalBit(EPHQUERY *pq, int nEph)
   real r1, r2, r3, r4, r5, r6, rgxx[6];
   int i, ix;
 
-  // This source's OWN ephemeris bit, not the setting's: the three
+  // This source's OWN ephemeris bit, not the selection's: the three
   // sources differ only in the SEFLG ephemeris bit (section 4.2), and a
   // chain would be meaningless while every source inherited the same
-  // bit from us.nSwissEph. Borrowed for the delegated calls, so the
+  // bit from the chain's head. Borrowed for the delegated calls, so the
   // moshier source answers from the analytic formulas and the jpl
-  // source from a JPL file even when the selection names another
-  // source. Under every production chain this phase -- one source, and
-  // its bit equals the setting it was derived from -- the borrow is a
-  // no-op and the delegated call is byte-identical to today's.
-  Borrow bEph(us.nSwissEph, nEph);
+  // source from a JPL file even when the chain names another source
+  // first. Under every single-source chain the bit equals the source
+  // named, so the borrow is a no-op and the delegated call is
+  // byte-identical to a direct one.
+  int nSav = SwissSetEphemCast(nEph);
   for (i = 0; i < pq->cobj; i++) {
     if (pq->rgisrc[i] != ephSrcNone)
       continue;   // Another source in the walk already answered this one.
@@ -161,6 +161,7 @@ static flag FSubmitSwissLocalBit(EPHQUERY *pq, int nEph)
     prow->nErr = ephErrNone;
     prow->nNativeRes = pq->rgnNative[i];
   }
+  SwissRestoreEphemCast(nSav);
   return fTrue;
 }
 

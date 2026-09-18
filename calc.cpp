@@ -66,7 +66,7 @@
 long MdyToJulian(int mon, int day, int yea)
 {
 #ifdef MATRIX
-  if (!us.fEphemFiles)
+  if (FEphLegacyCast())
     return MatrixMdyToJulian(mon, day, yea);
 #endif
 #ifdef EPHEM
@@ -121,7 +121,7 @@ void JulianToMdy(real JD, int *mon, int *day, int *yea)
 #endif
 
 #ifdef MATRIX
-  if (!us.fEphemFiles) {
+  if (FEphLegacyCast()) {
     MatrixJulianToMdy(JD, mon, day, yea);
     return;
   }
@@ -623,7 +623,7 @@ void ComputeStars(real t, real Off)
   // Read in star positions.
 
 #ifdef SWISS
-  if (FCmSwissStar())
+  if (FEphSpeeds() && !us.fMatrixStar)
     SwissComputeStars(t, fFalse);
   else
 #endif
@@ -1052,9 +1052,9 @@ void ComputeEphem(real t)
   // Can compute the positions of Sun through Pluto, Chiron, the four
   // asteroids, Lilith, North Node, and Uranians using ephemeris files.
 
-  fJPLPla = us.nSwissEph == 3;
+  fJPLPla = FSrcChainHead("horizons");
 #ifdef QT
-  fSrvPla = FCmSrv();
+  fSrvPla = FSrcChainHead("server");
 #endif
   objCentCalc = us.objCenter;
   if (objCentCalc > oNorm || FNodal(objCentCalc) ||
@@ -1757,7 +1757,7 @@ real CastChart(int nContext)
   // Go calculate house cusp and angle positions.
 
 #ifdef SWISS
-  if (FCmSwissAny()) {
+  if (FEphSpeeds()) {
     SwissHouse(us.fProgress && us.nProgress != ptSolarArc ? is.Tp : is.T,
       OO, AA, us.nHouseSystem,
       &is.Asc, &is.MC, &is.RA, &is.Vtx, &is.EP, &is.OB, &is.rOff, &is.rNut);
@@ -1782,7 +1782,9 @@ real CastChart(int nContext)
 #ifdef MATRIX
   // Go calculate planet, Moon, and North Node positions.
 
-  if (FCmMatrix()) {
+  // The Matrix source's half of the legacy cast (None casts nothing):
+  // ComputePlanets() runs under a Matrix primary and no other.
+  if (FSrcChainHead("matrix")) {
     ComputePlanets();
     if (!ignore[oMoo] || !ignore[oNod] || !ignore[oSou] || !ignore[oFor]) {
       ComputeLunar(&planet[oMoo], &planetalt[oMoo],
@@ -1800,8 +1802,10 @@ real CastChart(int nContext)
 
 #ifdef EPHEM
   // Compute more accurate ephemeris positions for certain objects.
+  // The legacy-cast sources -- Matrix and None -- are exactly the ones
+  // the old files switch ruled out.
 
-  if (us.fEphemFiles)
+  if (FEphSpeeds())
     ComputeEphem(is.T);
 #endif
 
@@ -1812,7 +1816,7 @@ real CastChart(int nContext)
   planetalt[us.objCenter] = -planetalt[i];
   ret[us.objCenter] = ret[i];
   retalt[us.objCenter] = -retalt[i];
-  if (!us.fEphemFiles) {
+  if (!FEphSpeeds()) {
     planet[oSou] = Mod(planet[oNod] + rDegHalf);
     if (!us.fVelocity) {
       ret[oNod] = ret[oSou] = -0.053;
@@ -1832,7 +1836,7 @@ real CastChart(int nContext)
     planet[oNad] = Mod(is.MC + rDegHalf);
   }
   for (i = oVtx; i <= cuspHi; i++) {
-    r = FCmSwissAny() ? ret[i] : (rDegMax + 1.0);
+    r = FEphSpeeds() ? ret[i] : (rDegMax + 1.0);
     if (us.fVelocity)
       r /= (rDegMax + 1.0);
     ret[i] = r;
@@ -2289,7 +2293,7 @@ int GetParallel(CONST GRDOBJR &planet1, CONST GRDOBJR &planet2,
     }
     rOrb = GetOrb(i, j, asp);
     if (us.nAppSep == 1) {
-      if (FCmSwissAny()) {
+      if (FEphSpeeds()) {
         retalt1a = us.nRel > rcTransit ? altdir1 : 0.0;
         rDiff *= RSgn2(altdir2 - retalt1a);
       } else {
@@ -2360,7 +2364,7 @@ int GetDistance(CONST PT3R *space1, CONST PT3R *space2,
     // away, or are overtaking each other.
 
     if (us.nAppSep == 1) {
-      if (FCmSwissAny()) {
+      if (FEphSpeeds()) {
         retlen1a = us.nRel > rcTransit ? retlen1[i] : 0.0;
         rDiff *= RSgn2(retlen2[j]-retlen1a);
       } else {
@@ -3207,6 +3211,13 @@ void SwissEnsurePath()
   }
   swe_set_ephe_path(szPath);
   is.fSwissPathSet = fTrue;
+
+  // Delta-T is a function of WHICH ephemeris answers: the library takes
+  // its tidal acceleration from the moon file's DE number, and
+  // swe_set_ephe_path() has just closed every file and re-read that
+  // number. A Delta-T cached against the old path is not a value for
+  // this one, and the cache is keyed on the date alone.
+  is.jdDeltaT = 0.0;
 }
 
 
@@ -3759,13 +3770,13 @@ static int GetSwissFlags()
   int iflag;
 
   iflag = SEFLG_SPEED;
-  // The Ephemeris Server backend (nSwissEph 5) is the Swiss files on
-  // another machine, so the calls Astrolog still makes locally under it --
-  // a progressed arc, a star, a phase -- ask the local Swiss files too.
-  // They used to fall to SEFLG_JPLEPH, the value for "anything else", and
-  // went looking for a JPL file nobody chose.
-  iflag |= (us.nSwissEph <= 0 || us.nSwissEph == 5 ? SEFLG_SWIEPH :
-    (us.nSwissEph == 1 ? SEFLG_MOSEPH : SEFLG_JPLEPH));
+  // The ephemeris bit is the current Swiss-family work's own source's
+  // (ephem.cpp, NSwissEphem): the chain's first Swiss-family source,
+  // borrowed around a delegated call when a chain's SECOND source is
+  // answering. Under every single-source chain the bit is the source
+  // named, which is what the old us.nSwissEph mapping produced.
+  iflag |= (NSwissEphem() <= 0 ? SEFLG_SWIEPH :
+    (NSwissEphem() == 1 ? SEFLG_MOSEPH : SEFLG_JPLEPH));
   if (us.fSidereal) {
     swe_set_sid_mode(!us.fSidereal2 ? SE_SIDM_FAGAN_BRADLEY :
       SE_SIDBIT_SSY_PLANE, 0.0, 0.0);
@@ -3920,12 +3931,7 @@ flag FSwissPlanet(int ind, real jd, int indCent,
   SWISSSPEC ss;
   double jde, xx[6], xnasc[6], xndsc[6], xperi[6], xaphe[6], *px;
   char serr[AS_MAXCH], szErr[AS_MAXCH + cchSzDef];
-  static int nSwissEph = 0;
 
-  // Reset Swiss Ephemeris if changing computation method.
-  if (us.nSwissEph != nSwissEph)
-    is.fSwissPathSet = fFalse;  // Ensure swe_set_ephe_path() gets called.
-  nSwissEph = us.nSwissEph;
   SwissEnsurePath();
 
   // What the object is to Swiss, and how the settings want it computed.
@@ -3997,6 +4003,20 @@ void SwissHouse(real jd, real lon, real lat, int housesystem, real *asc,
   double cusp[cSign+1], ascmc[11], cuspr[cSign+1], ascmcr[11], rSid;
   int i;
   char serr[AS_MAXCH], ch;
+
+  // Houses need no ephemeris file, but the Delta-T below does: the
+  // library reads its tidal acceleration from the moon file's DE number,
+  // and with no file open it falls through to SE_TIDAL_DEFAULT (DE431)
+  // instead of the file's own (DE441 in the bundled ephem/). The two
+  // terms differ by 0.136, which is 0.037 s of Delta-T at 1900.
+  //
+  // This was the one Delta-T site of the four that did not ensure the
+  // path first. A whole cast does not expose it -- CastChart() reaches
+  // the bodies before the houses, and they set the path on their way
+  // past -- so what was wrong here is a chart whose cusps come through
+  // SwissHouse() directly: computed on the wrong tidal term, and
+  // silently, since no oracle leg compares a cusp against the library.
+  SwissEnsurePath();
 
   // Translate Astrolog house index to Swiss Ephemeris house character.
   // Don't do hsWhole houses ('W') yet, until after is.rSid computed.

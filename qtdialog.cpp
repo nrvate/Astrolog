@@ -5123,38 +5123,34 @@ void ShowCalcDialogQt()
     // running the cm* constants in numeric order: JPL Web sits after the
     // three Swiss entries there, not last, and an ephemeris the user has
     // switched off is left out entirely -- no JPL Web under "-0n", no
-    // Matrix under "-0b". Offering one that is disabled invites
-    // a lookup that cannot happen. The selection is read back by name
-    // below rather than by index, so a shorter list needs nothing else.
+    // Matrix under "-0b". The locks are retired spellings now (-0b/-0n
+    // are inert), so the list is always whole. The selection is read
+    // back by name below rather than by index, so a shorter list needs
+    // nothing else.
 #ifdef SWISS
     pcbEphem->addItem(szEphem[cmSwiss]);
     pcbEphem->addItem(szEphem[cmMoshier]);
     pcbEphem->addItem(szEphem[cmJPL]);
 #endif
 #ifdef JPLWEB
-    if (!us.fNoNetwork)
-      pcbEphem->addItem(szEphem[cmJPLWeb]);
+    pcbEphem->addItem(szEphem[cmJPLWeb]);
 #endif
 #ifdef EPHEM
-    if (!us.fNoNetwork)
-      pcbEphem->addItem(szEphem[cmEphSrv]);
+    pcbEphem->addItem(szEphem[cmEphSrv]);
 #endif
 #ifdef MATRIX
-    if (!us.fNoOldCalc)
-      pcbEphem->addItem(szEphem[cmMatrix]);
+    pcbEphem->addItem(szEphem[cmMatrix]);
 #endif
     pcbEphem->addItem(szEphem[cmNone]);
-    // The edit text is the szEphem row of the calculation method, through
-    // the FCm* predicates as Windows does (wdialog.cpp, the same dialog).
-    // nSwissEph is NOT an szEphem index: Horizons is nSwissEph 3 and row
-    // cmJPLWeb (4), and row 3 is Matrix, so indexing by it showed "Matrix
-    // Formulas" for a Horizons selection and OK switched the backend to
-    // Matrix (EPHEMERIS_REVIEW.md C15). The server is tested first because
-    // FCmJPLWeb() is true for nSwissEph 5 too.
-    pcbEphem->setEditText(szEphem[FCmSrv() ? cmEphSrv :
-      (FCmSwissEph() ? cmSwiss : (FCmSwissMosh() ? cmMoshier :
-      (FCmSwissJPL() ? cmJPL : (FCmMatrix() ? cmMatrix :
-      (FCmJPLWeb() ? cmJPLWeb : cmNone)))))]);
+    // The edit text is the szEphem row the chain's head selects, as
+    // Windows does (wdialog.cpp, the same dialog). The head is the test,
+    // not a number: the old FCmJPLWeb() was true for the server too
+    // (EPHEMERIS_REVIEW.md C15), and the two are different rows here.
+    pcbEphem->setEditText(szEphem[FSrcChainHead("server") ? cmEphSrv :
+      FSrcChainHead("horizons") ? cmJPLWeb :
+      FSrcChainHead("moshier") ? cmMoshier : FSrcChainHead("jpl") ? cmJPL :
+      FSrcChainHead("matrix") ? cmMatrix : FSrcChainHead("none") ? cmNone :
+      cmSwiss]);
     // The server backend's address, beside the method's controls and
     // visible only while it is the selection (EPHEMERIS_CLIENT_PLAN.md
     // §7; the Windows dialog has no such row). Empty means the default,
@@ -5169,12 +5165,12 @@ void ShowCalcDialogQt()
     if (peditToken != NULL) {
       peditToken->setEchoMode(QLineEdit::PasswordEchoOnEdit);
       peditToken->setPlaceholderText("none");
-      if (SzSet(us.szEphSrvToken))
-        peditToken->setText(QString::fromUtf8(us.szEphSrvToken));
+      if (SzSet(us.rgszEphParam[epServerToken]))
+        peditToken->setText(QString::fromUtf8(us.rgszEphParam[epServerToken]));
     }
     if (peditAddr != NULL) {
-      if (SzSet(us.szEphSrv))
-        peditAddr->setText(QString::fromUtf8(us.szEphSrv));
+      if (SzSet(us.rgszEphParam[epServerUrl]))
+        peditAddr->setText(QString::fromUtf8(us.rgszEphParam[epServerUrl]));
       else
         peditAddr->setPlaceholderText(QString("localhost:%1")
           .arg(eph::kDefaultPort));
@@ -5287,43 +5283,44 @@ void ShowCalcDialogQt()
 
   if (pcbEphem != NULL) {
     SzFieldQt(sz, pcbEphem->currentText());
-    us.fEphemFiles = us.fMatrixPla = fFalse;
-    us.nSwissEph = 0;
-#ifdef SWISS
-    if (FMatchSz(sz, szEphem[cmSwiss]))        { us.fEphemFiles = fTrue; us.nSwissEph = 0; }
-    else if (FMatchSz(sz, szEphem[cmMoshier])) { us.fEphemFiles = fTrue; us.nSwissEph = 1; }
-    else if (FMatchSz(sz, szEphem[cmJPL]))     { us.fEphemFiles = fTrue; us.nSwissEph = 2; }
-    else if (FMatchSz(sz, szEphem[cmJPLWeb]))  { us.fEphemFiles = fTrue; us.nSwissEph = 3; }
+    // The combo writes the selection the way it always did -- through
+    // the same {files, n, matrix} triple the legacy spellings toggle --
+    // and the chain is derived from it (ephem.cpp), so the dialog
+    // writes the spelling it always wrote and the selection is one
+    // thing. The address and token are their parameters; an empty
+    // field is the default, exactly as -bW and -bT read "".
+    if (FMatchSz(sz, szEphem[cmSwiss]))
+      EphSourceSetShadow(fTrue, 0, fFalse);
+    else if (FMatchSz(sz, szEphem[cmMoshier]))
+      EphSourceSetShadow(fTrue, 1, fFalse);
+    else if (FMatchSz(sz, szEphem[cmJPL]))
+      EphSourceSetShadow(fTrue, 2, fFalse);
+#ifdef JPLWEB
+    else if (FMatchSz(sz, szEphem[cmJPLWeb]))
+      EphSourceSetShadow(fTrue, 3, fFalse);
 #endif
 #ifdef EPHEM
-    else if (FMatchSz(sz, szEphem[cmEphSrv]))  { us.fEphemFiles = fTrue; us.nSwissEph = 5; }
+    else if (FMatchSz(sz, szEphem[cmEphSrv]))
+      EphSourceSetShadow(fTrue, 5, fFalse);
 #endif
 #ifdef MATRIX
-    if (FMatchSz(sz, szEphem[cmMatrix]))
-      us.fMatrixPla = fTrue;
+    else if (FMatchSz(sz, szEphem[cmMatrix]))
+      EphSourceSetShadow(fFalse, 0, fTrue);
 #endif
-    // The address rides along with the server selection: stored as
-    // typed, and an empty field is the default, exactly as -bW reads
-    // "" (EPHEMERIS_CLIENT_PLAN.md §3).
+    else
+      EphSourceSetShadow(fFalse, 0, fFalse);
     QLineEdit *peditAddr = (QLineEdit *)PwRcFindQt(rgbuilt, "deSe_W");
-    if (peditAddr != NULL && FCmSrv()) {
+    if (peditAddr != NULL && FSrcChainHead("server")) {
       char szAddr[cchSzMax];
       SzFieldQt(szAddr, peditAddr->text());
-      FCloneSz(szAddr[0] ? szAddr : NULL, &us.szEphSrv);
-      FCloneSz(szAddr[0] ? szAddr : NULL, &us.rgszEphParam[epServerUrl]);
+      FEphParamSet(epServerUrl, szAddr);
     }
     QLineEdit *peditToken = (QLineEdit *)PwRcFindQt(rgbuilt, "deSe_T");
-    if (peditToken != NULL && FCmSrv()) {
+    if (peditToken != NULL && FSrcChainHead("server")) {
       char szToken[cchSzMax];
       SzFieldQt(szToken, peditToken->text());
-      FCloneSz(szToken[0] ? szToken : NULL, &us.szEphSrvToken);
-      FCloneSz(szToken[0] ? szToken : NULL, &us.rgszEphParam[epServerToken]);
+      FEphParamSet(epServerToken, szToken);
     }
-    // The combo wrote the selection's legacy fields, and the address and
-    // token their parameter representations; the chain is re-derived
-    // from the fields so both representations say the same thing
-    // (ephem.cpp, the selection state).
-    FEphChainFromLegacy();
   }
   us.rZodiacOffset = rs;
   us.nHouseSystem = nc;

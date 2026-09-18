@@ -111,6 +111,28 @@
 #include <stddef.h>
 #include "settingsfields.h"
 
+// Borrow the ephemeris selection for the current scope: sets the chain
+// at construction, restores it at the closing brace. The engine-
+// selection idiom the oracle and dialog groups use -- the old
+// Borrow(us.fEphemFiles/nSwissEph/fMatrixPla) trio, which named three
+// fields for what is one chain now.
+class EphSelBorrow {
+private:
+  char *szSav;
+public:
+  EphSelBorrow(CONST char *szChain) {
+    szSav = NULL;
+    FCloneSz(SzSet(us.szEphemSource), &szSav);
+    EphSourceSet(szChain);
+  }
+  ~EphSelBorrow() {
+    EphSourceSet(szSav);
+    DeallocatePIf(szSav);
+  }
+  EphSelBorrow(const EphSelBorrow &) = delete;
+  EphSelBorrow &operator=(const EphSelBorrow &) = delete;
+};
+
 // This file needs the Swiss Ephemeris. The core still builds without it --
 // astrolog.h's "#define SWISS" can be commented out -- but this file does
 // not: compiled with that define removed, it fails 112 times in 15
@@ -11031,60 +11053,40 @@ static void TestChartListFilterQt()
 }
 
 
-// Windows leaves an ephemeris out of this list when the user has switched
-// it off; see plan item 41. The maintainer's own settings file sets both
-// restrictions, so this is the list they actually get.
+// The ephemeris list is whole now: the -0b/-0n locks that used to omit
+// rows are retired spellings, inert, so nothing is ever switched off.
+// The dialog still shows the method in use, by the chain's head -- the
+// old bug C15's shape: the head is the test, not a number, because the
+// old FCmJPLWeb() was true for the server too.
 static void TestEphemerisListQt()
 {
-  flag fNetSav = us.fNoNetwork, fOldSav = us.fNoOldCalc;
-  QString str, strWin;
+  CONST char * CONST rgszSel[] = {"horizons", "server", "matrix"};
+  CONST int rgcmSel[] = {cmJPLWeb, cmEphSrv, cmMatrix};
+  char *rgszSav = us.szEphemSource;
+  QString str, strWin, strEdit;
+  int i;
 
   Group("Ephemeris list");
 
-  us.fNoNetwork = us.fNoOldCalc = fTrue;
   str = StrEphemListQt(&strWin);
   Check(!str.isEmpty(), "the ephemeris list was found at all (modal seen: \"%s\")",
     strWin.toLocal8Bit().constData());
-  Check(!str.contains("Web"),
-    "no web query offered when web queries are off: %s",
-    str.toLocal8Bit().constData());
-  Check(!str.contains("Matrix"),
-    "no Matrix offered when it is off: %s",
-    str.toLocal8Bit().constData());
-  Check(str.contains("Swiss"), "Swiss Ephemeris is still offered");
-
-  us.fNoNetwork = us.fNoOldCalc = fFalse;
-  str = StrEphemListQt(NULL);
-  Check(str.contains("Web"), "the web query is offered when allowed");
-  Check(str.contains("Matrix"), "Matrix is offered when allowed");
+  Check(str.contains("Web"), "the web query is offered");
+  Check(str.contains("Matrix"), "Matrix is offered");
+  Check(str.contains("Swiss"), "Swiss Ephemeris is offered");
   Check(!str.contains("Placalc"),
     "Placalc is never offered: the backend was removed on 2026-09-04");
 
-  // The dialog shows the method in use. Horizons is nSwissEph 3, and
-  // indexing szEphem[] by that number showed row 3 -- "Matrix Formulas"
-  // -- so OK switched a Horizons user to Matrix (EPHEMERIS_REVIEW.md C15).
-  {
-    flag fEphSav = us.fEphemFiles, fMatSav = us.fMatrixPla;
-    int nSwSav = us.nSwissEph;
-    QString strEdit;
-    us.fEphemFiles = fTrue;
-    us.nSwissEph = 3;
+  for (i = 0; i < (int)(sizeof(rgszSel) / sizeof(*rgszSel)); i++) {
+    FCloneSz(rgszSel[i], &us.szEphemSource);
     StrEphemListQt(NULL, &strEdit);
-    Check(strEdit == QString(szEphem[cmJPLWeb]), "a Horizons selection "
-      "shows as Horizons (\"%s\")", strEdit.toLocal8Bit().constData());
-    us.nSwissEph = 5;
-    StrEphemListQt(NULL, &strEdit);
-    Check(strEdit == QString(szEphem[cmEphSrv]), "the Ephemeris Server "
-      "shows as itself (\"%s\")", strEdit.toLocal8Bit().constData());
-    us.fEphemFiles = fFalse; us.fMatrixPla = fTrue;
-    StrEphemListQt(NULL, &strEdit);
-    Check(strEdit == QString(szEphem[cmMatrix]), "and Matrix as Matrix "
-      "(\"%s\")", strEdit.toLocal8Bit().constData());
-    us.fEphemFiles = fEphSav; us.fMatrixPla = fMatSav; us.nSwissEph = nSwSav;
+    Check(strEdit == QString(szEphem[rgcmSel[i]]),
+      "a %s selection shows as itself (\"%s\")", rgszSel[i],
+      strEdit.toLocal8Bit().constData());
   }
-
-  us.fNoNetwork = fNetSav; us.fNoOldCalc = fOldSav;
-  printf("  the ephemeris list omits what the user switched off\n");
+  FCloneSz(rgszSav != NULL ? rgszSav : SzEphSourceDefault(),
+    &us.szEphemSource);
+  printf("  the ephemeris list shows every source and the head in use\n");
 }
 
 
@@ -11866,8 +11868,6 @@ static void TestSettingsFieldsQt()
       // language: 4 is no backend, and no spelling writes it back. With
       // the Ephemeris Server selected (5) the ^=1 below poisons into it,
       // so poison toward Moshier instead, which -bs carries.
-      if (FEqSz(psf->szName, "us.nSwissEph") && *(int *)pb == 4)
-        *(int *)pb = 1;
       break;
     case 'l':           *(long *)pb ^= 1L;          break;
     case 'r':           *(real *)pb += 1.0;         break;
@@ -13086,8 +13086,9 @@ static void ConsoleShotCaptureQt(CONST char *szDir)
 static void ProbeQt()
 {
   printf("gi.nMode=%d (gWheel=%d gHouse=%d)\n", gi.nMode, gWheel, gHouse);
-  printf("us.nHouseSystem=%d (%s)  fEphemFiles=%d\n",
-    us.nHouseSystem, szSystem[us.nHouseSystem], us.fEphemFiles);
+  printf("us.nHouseSystem=%d (%s)  chain=%s\n",
+    us.nHouseSystem, szSystem[us.nHouseSystem],
+    SzSet(us.szEphemSource));
 }
 
 
@@ -13260,9 +13261,8 @@ static void TestNumericOracleQt()
   {
     // The same borrow list TestCastCookingQt's pinned-cusp check uses,
     // plus the backend, since this group is about which engine answers.
-    Borrow bEphem(us.fEphemFiles, fTrue), bSid(us.fSidereal, fFalse);
-    Borrow bMat(us.fMatrixPla, fFalse);
-    Borrow bSwiss(us.nSwissEph, 0), bNoOld(us.fNoOldCalc, fFalse);
+    EphSelBorrow bChain("swiss");
+    Borrow bSid(us.fSidereal, fFalse);
     Borrow b3D(us.fHouse3D, fFalse), bProg(us.fProgress, fFalse);
     Borrow bEqu(us.fEquator, fFalse), bEqu2(us.fEquator2, fFalse);
     Borrow bFlip(us.fFlip, fFalse), bGeo(us.fGeodetic, fFalse);
@@ -13310,6 +13310,77 @@ static void TestNumericOracleQt()
       }
     }
 
+    // ---- Leg 1b: Delta-T belongs to the ephemeris path that set it ----
+    // Leg 1 asks its question after a run's worth of casts have opened
+    // every file. Asked the way a fresh process asks it, it used to get a
+    // different answer. The library reads its tidal acceleration from the
+    // moon file's DE number, so with no file open it answers on
+    // SE_TIDAL_DEFAULT (DE431) rather than the file's own (DE441 in the
+    // bundled ephem/). Astrolog caches Delta-T in is.rDeltaT keyed on the
+    // DATE ALONE, so a value computed before the path was set outlived
+    // the path change and the bodies reused it, while swe_calc_ut()
+    // recomputed on DE441. The terms differ by 0.136, which is 0.037 s of
+    // Delta-T at 1900: every body out by its own motion over 0.037 s,
+    // 0.018" for the Moon and 0.00003" for Mercury. In the full suite it
+    // read as the whole 1900 epoch failing, and only in the group orders
+    // that left the library with its files closed.
+    //
+    // Two fixes, each sufficient for the bodies and neither redundant:
+    // SwissEnsurePath() drops the cached offset when it sets the path,
+    // and SwissHouse() -- the one Delta-T site of the four that did not
+    // ensure the path first -- now does. The second is what keeps the
+    // CUSPS right, which nothing above this line looks at. So each is
+    // pinned by its own assertion rather than both by the cast, which
+    // would pass with either one present.
+    {
+      flag fPathSav = is.fSwissPathSet;
+      real rAsc, rMC, rRA, rVtx, rEP, rOb, rOff, rNut;
+      real jdHou;
+
+      // The observable end of it: a cast that starts where a process
+      // starts -- no file open, no path set, nothing cached.
+      swe_close();
+      is.fSwissPathSet = fFalse;
+      is.jdDeltaT = rLarge;
+      OraclePinChartQt(1900);
+      CastChart(1);
+      jd = JulianDayFromTime(is.T);
+      for (i = 0; i < coracle; i++) {
+        if (swe_calc_ut(jd, rgoracle[i].se, SEFLG_SWIEPH | SEFLG_SPEED,
+          xx, serr) < 0)
+          continue;
+        rD = RAbs(planet[rgoracle[i].obj] - xx[0]);
+        if (rD > rDegHalf)
+          rD = rDegMax - rD;
+        Check(rD < rEpsSwiss, "%s on a path set mid-run matches "
+          "swe_calc_ut (%.6f\")", szObjName[rgoracle[i].obj], rD * 3600.0);
+      }
+
+      // Setting the path drops the offset cached against the old one.
+      // Without this the sentinel survives, which is the whole defect.
+      is.fSwissPathSet = fFalse;
+      is.jdDeltaT = jd;
+      is.rDeltaT = rLarge;
+      SwissEnsurePath();
+      Check(is.jdDeltaT != jd, "setting the ephemeris path drops the "
+        "Delta-T cached against the old one (%.6f)", is.jdDeltaT);
+
+      // And the houses ensure the path before they ask for Delta-T, so
+      // the cusps are computed on the ephemeris's own tidal term too.
+      // Asked of SwissHouse() directly: a cast reaches the bodies first
+      // and they would set the flag on their own way past.
+      swe_close();
+      is.fSwissPathSet = fFalse;
+      is.jdDeltaT = rLarge;
+      jdHou = jd;
+      SwissHouse(jdHou, 0.0, 45.0, hsPlacidus, &rAsc, &rMC, &rRA, &rVtx,
+        &rEP, &rOb, &rOff, &rNut);
+      Check(is.fSwissPathSet, "the houses set the ephemeris path before "
+        "asking the library for Delta-T");
+
+      is.fSwissPathSet = fPathSav;
+    }
+
     // ---- Leg 2: the sidereal offset is applied once, not twice ----
     // is.rSid is added in ProcessPlanet() and SEFLG_SIDEREAL subtracts the
     // ayanamsa inside the library, which reads like a double application
@@ -13339,11 +13410,11 @@ static void TestNumericOracleQt()
     // that fails loudly if a backend stops computing: an all-zero chart
     // puts every body up to 180 degrees from the truth.
     {
-      Borrow bEph2(us.fEphemFiles, fFalse), bMat2(us.fMatrixPla, fTrue);
+      EphSelBorrow bChain2("matrix");
       for (iy = 0; iy < 7; iy++) {
         OraclePinChartQt(rgyea[iy]);
         {
-          Borrow bEph3(us.fEphemFiles, fTrue), bMat3(us.fMatrixPla, fFalse);
+          EphSelBorrow bChain3("swiss");
           CastChart(1);
           jd = JulianDayFromTime(is.T);
           for (i = 0; i < coracle; i++)
@@ -13471,7 +13542,7 @@ static void TestNumericOracleQt()
       flag fExpectBad, fIsBad;
 
       for (iEngine = 0; iEngine <= 1; iEngine++) {
-        Borrow bEngine(us.fEphemFiles, iEngine ? fTrue : fFalse);
+        EphSelBorrow bEngine(iEngine ? "swiss" : "matrix");
         for (i = 0; i < cSystem; i++) {
           Borrow bHouseH(us.nHouseSystem, i);
           for (iLatH = 0; iLatH < 5; iLatH++)
@@ -14529,9 +14600,8 @@ static void TestProgressionsQt()
     rgfIgnoreSav[i] = ignore[i];
   {
     // The oracle's borrow list: one engine, no chart transformations.
-    Borrow bEphem(us.fEphemFiles, fTrue), bSid(us.fSidereal, fFalse);
-    Borrow bMat(us.fMatrixPla, fFalse);
-    Borrow bSwiss(us.nSwissEph, 0), bNoOld(us.fNoOldCalc, fFalse);
+    EphSelBorrow bChain("swiss");
+    Borrow bSid(us.fSidereal, fFalse);
     Borrow b3D(us.fHouse3D, fFalse), bProg(us.fProgress, fTrue);
     Borrow bEqu(us.fEquator, fFalse), bEqu2(us.fEquator2, fFalse);
     Borrow bFlip(us.fFlip, fFalse), bGeo(us.fGeodetic, fFalse);
@@ -16568,7 +16638,8 @@ static void TestCastCookingQt()
   // these dirty (found the hard way: the pin held alone and failed in
   // the full suite).
   {
-    Borrow bEphem(us.fEphemFiles, fFalse), bSid(us.fSidereal, fFalse);
+    EphSelBorrow bChain("matrix");
+    Borrow bSid(us.fSidereal, fFalse);
     Borrow b3D(us.fHouse3D, fFalse), bProg(us.fProgress, fFalse);
     Borrow bEqu(us.fEquator, fFalse), bEqu2(us.fEquator2, fFalse);
     Borrow bFlip(us.fFlip, fFalse), bGeo(us.fGeodetic, fFalse);
@@ -17781,23 +17852,26 @@ static flag FWaitDataQt(CONST QByteArray *pba, int msMax)
 // backend spelling, the address, and the =b line that settles
 // fEphemFiles last -- not the display toggles (-b0/-b1/-b2) or the
 // Matrix spellings a full-file replay would drag in.
+static flag FWantEphSrcQt(CONST char *sz)
+{
+  return FEqSzPrefixQt(sz, "-bE") || FEqSzPrefixQt(sz, "-bP");
+}
+
+
 static flag FWantEphSrvQt(CONST char *sz)
 {
-  return FEqSzPrefixQt(sz, "=bS") || FEqSzPrefixQt(sz, "_bS") ||
-    FEqSzPrefixQt(sz, "-bW") || FEqSzPrefixQt(sz, "-bT") ||
-    FEqSzPrefixQt(sz, "=b ");
+  return FEqSzPrefixQt(sz, "-bE") || FEqSzPrefixQt(sz, "-bP");
 }
 
 static void TestEphSrvQt()
 {
-  flag fEphemSav = us.fEphemFiles, fNoNetSav = us.fNoNetwork,
-    fNoEphFileSav = is.fNoEphFile, fPopSav = FNoPopupQt(),
-    fAddrSav = us.szEphSrv != NULL, fTokenSav = us.szEphSrvToken != NULL;
-  QByteArray baAddrSav(SzSet(us.szEphSrv));
-  QByteArray baTokenSav(SzSet(us.szEphSrvToken));
+  QByteArray baChainSav(SzSet(us.szEphemSource));
+  QByteArray baAddrSav(SzSet(us.rgszEphParam[epServerUrl]));
+  QByteArray baTokenSav(SzSet(us.rgszEphParam[epServerToken]));
+  flag fNoEphFileSav = is.fNoEphFile, fPopSav = FNoPopupQt();
   QByteArray baFileOutSav(SzSet(is.szFileOut));
   flag fFileOutSav = is.szFileOut != NULL;
-  int nSwissSav = us.nSwissEph, nWriteFormatSav = us.nWriteFormat;
+  int nWriteFormatSav = us.nWriteFormat;
   flag fNoWriteSav = us.fNoWrite;
   int cWarn, i;
   char sz[cchSzMax], szPath[cchSzMax];
@@ -17805,95 +17879,93 @@ static void TestEphSrvQt()
 
   Group("Ephemeris server");
   SetNoPopupQt(fTrue);   // The facade's warning below would otherwise pop.
-  us.fNoNetwork = fFalse;   // The maintainer's file runs "=0n"; the -0n
-                            // scenarios below set it back themselves.
 
-  // The backend slot: the -bs family reaches it like the other values.
+  // The backend slot: the -bs family reaches it like the other values,
+  // and the chain it leaves is the selection.
   FProcessCommandLine("=bs");
-  Check(us.nSwissEph == 1 && us.fEphemFiles, "\"=bs\" is Moshier");
+  Check(FEqSz(us.szEphemSource, "moshier"), "\"=bs\" is Moshier");
   FProcessCommandLine("=bj");
-  Check(us.nSwissEph == 2, "\"=bj\" is JPL");
+  Check(FEqSz(us.szEphemSource, "jpl"), "\"=bj\" is JPL");
   FProcessCommandLine("=bJ");
-  Check(us.nSwissEph == 3, "\"=bJ\" is Horizons");
+  Check(FEqSz(us.szEphemSource, "horizons,jpl"), "\"=bJ\" is Horizons");
   FProcessCommandLine("=bS");
-  Check(us.nSwissEph == 5 && us.fEphemFiles, "\"=bS\" is the Ephemeris Server");
+  Check(FEqSz(us.szEphemSource, "server,swiss"),
+    "\"=bS\" is the Ephemeris Server, with the Swiss files behind it for "
+    "the side calls");
   FProcessCommandLine("_bS");
-  Check(us.nSwissEph == 0, "\"_bS\" is off it");
-  // The plain toggle, from the state a settings file leaves: files already
-  // on. It used to toggle them OFF while selecting the server, so the
-  // backend sat selected and never connected.
-  us.fEphemFiles = fTrue;
+  Check(FEqSz(us.szEphemSource, "none"), "\"_bS\" is off it -- the "
+    "toggle-off falls through to the files toggle, as it always has");
+  // The plain toggle, from the state a settings file leaves: files
+  // already on. It used to toggle them OFF while selecting the server,
+  // so the backend sat selected and never connected. The shadow now
+  // carries that state, so the toggle does what it always meant.
+  FProcessCommandLine("=b");
   FProcessCommandLine("-bS");
-  Check(us.nSwissEph == 5 && us.fEphemFiles,
+  Check(FEqSz(us.szEphemSource, "server,swiss"),
     "\"-bS\" with ephemeris files on selects the server and keeps them on");
   FProcessCommandLine("-bS");
-  Check(us.nSwissEph == 0, "a second \"-bS\" turns the server off");
-  us.fEphemFiles = fFalse;
+  Check(FEqSz(us.szEphemSource, "none"),
+    "a second \"-bS\" turns the server off, files toggling with it as "
+    "they always did");
+  FProcessCommandLine("_b");
   FProcessCommandLine("-bS");
-  Check(us.nSwissEph == 5 && us.fEphemFiles,
+  Check(FEqSz(us.szEphemSource, "server,swiss"),
     "and \"-bS\" with files off turns them on");
   FProcessCommandLine("=bS");
   FProcessCommandLine("-bW example.com:1234");
-  Check(FEqSz(us.szEphSrv, "example.com:1234"), "-bW stores the address");
+  Check(FEqSz(us.rgszEphParam[epServerUrl], "example.com:1234"),
+    "-bW stores the address, as -bP server.url spells it");
   Check(!FProcessCommandLine("-bW"), "an address-less -bW is refused");
   FProcessCommandLine("-bT \"tok en-1\"");
-  Check(FEqSz(us.szEphSrvToken, "tok en-1"), "-bT stores the token");
+  Check(FEqSz(us.rgszEphParam[epServerToken], "tok en-1"),
+    "-bT stores the token, as -bP server.token spells it");
   Check(!FProcessCommandLine("-bT"), "a token-less -bT is refused");
 
-  // The settings writer carries both, and only the one backend spelling,
-  // and they replay.
+  // The settings writer carries the chain and the parameters, and they
+  // replay. -0n is inert now, so there is no lock leg: a chain that
+  // names the server is used if the server is reachable, and a failure
+  // is reported when it happens (section 2).
   SzScratchPathQt(S(szPath), "ephsrv", ".as");
   us.fNoWrite = fFalse;
   us.nWriteFormat = 'd';
   FCloneSz(szPath, &is.szFileOut);
-  us.fEphemFiles = fTrue;
+  EphSourceSet("server,swiss");
+  FEphParamSet(epServerUrl, "example.com:1234");
+  FEphParamSet(epServerToken, "tok en-1");
   Check(FOutputSettings(), "the settings writer wrote a file");
   {
     char szLine[cchSzLine];
-    flag fSawB = fFalse, fSawW = fFalse, fSawT = fFalse;
+    flag fSawE = fFalse, fSawP = fFalse, fSawT = fFalse;
     FILE *file = FileOpen(szPath, 1, NULL, 0);
     Check(file != NULL, "and it can be read back");
     while (file != NULL && FReadSzLineSkip(file, szLine, cchSzLine)) {
-      if (FEqSzPrefixQt(szLine, "=bS"))
-        fSawB = fTrue;
-      if (FEqSz(szLine, "-bW \"example.com:1234\""))
-        fSawW = fTrue;
-      if (FEqSz(szLine, "-bT \"tok en-1\""))
+      if (FEqSz(szLine, "-bE \"server,swiss\""))
+        fSawE = fTrue;
+      if (FEqSz(szLine, "-bP server.url \"example.com:1234\""))
+        fSawP = fTrue;
+      if (FEqSz(szLine, "-bP server.token \"tok en-1\""))
         fSawT = fTrue;
     }
     if (file != NULL)
       fclose(file);
-    Check(fSawB, "the file carries \"=bS\" for the server backend");
-    Check(fSawW, "and \"-bW\" with the quoted address");
-    Check(fSawT, "and \"-bT\" with the quoted token");
+    Check(fSawE, "the file carries the chain");
+    Check(fSawP, "and \"-bP server.url\" with the quoted address");
+    Check(fSawT, "and \"-bP server.token\" with the quoted token");
   }
-  us.nSwissEph = 0;
-  us.fEphemFiles = fFalse;
-  FCloneSz("other.host:9", &us.szEphSrv);
-  FCloneSz(NULL, &us.szEphSrvToken);
+  EphSourceSet("swiss");
+  FEphParamSet(epServerUrl, "other.host:9");
+  FEphParamSet(epServerToken, NULL);
   i = CReplaySettingsQt(szPath, FWantEphSrvQt);
   Check(i > 0, "the -b lines replay (%d)", i);
-  Check(us.nSwissEph == 5 && us.fEphemFiles,
-    "\"=bS\" replays to the server backend");
-  Check(FEqSz(us.szEphSrv, "example.com:1234"),
-    "\"-bW\" replays the address");
-  Check(FEqSz(us.szEphSrvToken, "tok en-1"), "\"-bT\" replays the token");
+  Check(FEqSz(us.szEphemSource, "server,swiss"),
+    "the chain replays to the server backend");
+  Check(FEqSz(us.rgszEphParam[epServerUrl], "example.com:1234"),
+    "\"-bP server.url\" replays the address");
+  Check(FEqSz(us.rgszEphParam[epServerToken], "tok en-1"),
+    "\"-bP server.token\" replays the token");
   FCloneSz(fFileOutSav ? baFileOutSav.constData() : NULL, &is.szFileOut);
   us.nWriteFormat = nWriteFormatSav;
   us.fNoWrite = fNoWriteSav;
-
-  // -0n refuses selecting the backend, changing nothing.
-  us.fNoNetwork = fTrue;
-  ClearPopupSuppressedTestQt();
-  Check(!FProcessCommandLine("=bS"), "\"=bS\" is refused under -0n");
-  Check(us.nSwissEph == 5, "and the backend is unchanged");
-  // -0n cannot be lifted by any switch, so "not allowed now" was a dead
-  // end: the refusal has to name the line and the remedy.
-  Check(strstr(SzPopupSuppressedTestQt(), "\"=0n\"") != NULL &&
-    strstr(SzPopupSuppressedTestQt(), "\"_0n\"") != NULL,
-    "and the refusal names \"=0n\" and how to allow it (\"%.70s\")",
-    SzPopupSuppressedTestQt());
-  us.fNoNetwork = fFalse;
 
   // The address setting: default, bare host, host:port, URL, refusal.
   Check(FUrlEphSrvTestQt(NULL, S(sz)) && FEqSz(sz, "ws://localhost:47190"),
@@ -18084,10 +18156,10 @@ static void TestEphSrvQt()
     WireEphLoopbackQt(&srv3, &bProto3, &dwCaps3, szVer3, &baReq3, &pconn3);
 
     // Select the backend, pointed at the first.
-    us.fEphemFiles = fTrue; us.nSwissEph = 5; us.fNoNetwork = fFalse;
+    EphSourceSet("server,swiss");
     EphSrvFinalizeQt();
     sprintf2(S(sz), "localhost:%d", (int)srv1.serverPort());
-    FCloneSz(sz, &us.szEphSrv);
+    FEphParamSet(epServerUrl, sz);
     EphSrvStartupQt();
     Check(NEphSrvStateTestQt() == 1, "the startup hook begins connecting");
     Check(FWaitEstQt(2, 10000),
@@ -18105,7 +18177,8 @@ static void TestEphSrvQt()
       "and the server's name with them");
     Check(FEqSz(pw->datasetId.c_str(), "loopback/test/0#00000000"),
       "and its datasetId, which every window cache key carries (3.7)");
-    Check(s_baHelloTokenQt == QByteArray(SzSet(us.szEphSrvToken)) &&
+    Check(s_baHelloTokenQt ==
+      QByteArray(SzSet(us.rgszEphParam[epServerToken])) &&
       !s_baHelloTokenQt.isEmpty(), "HELLO carried the -bT token (\"%s\")",
       s_baHelloTokenQt.constData());
     Check(NBackoffEphSrvTestQt() == 1000, "a session resets the ladder");
@@ -18158,7 +18231,7 @@ static void TestEphSrvQt()
     // server only stops its listening; the client socket is what drops.
     SetBackoffEphSrvTestQt(100);   // Hurry the ladder.
     sprintf2(S(sz), "localhost:%d", (int)srv2.serverPort());
-    FCloneSz(sz, &us.szEphSrv);
+    FEphParamSet(epServerUrl, sz);
     if (pconn1 != NULL)
       pconn1->close();
     else
@@ -18189,7 +18262,7 @@ static void TestEphSrvQt()
     // The third server tells the truth and carries the f32 caps bit; the
     // in-flight request is re-sent there verbatim.
     sprintf2(S(sz), "localhost:%d", (int)srv3.serverPort());
-    FCloneSz(sz, &us.szEphSrv);
+    FEphParamSet(epServerUrl, sz);
     Check(FWaitEstQt(2, 10000), "the client re-welcomes on the third server");
     pw = PwelcEphSrvTestQt();
     Check((pw->caps & eph::kCapF32) != 0, "the caps bit arrived");
@@ -18216,7 +18289,7 @@ static void TestEphSrvQt()
       WireEphLoopbackQt(&srv4, &bProto4, &dwCaps4, "too-new", &baReq4, &pconn4);
       EphSrvFinalizeQt();
       sprintf2(S(sz), "localhost:%d", (int)srv4.serverPort());
-      FCloneSz(sz, &us.szEphSrv);
+      FEphParamSet(epServerUrl, sz);
       EphSrvStartupQt();
       tim.start();
       while (!FTerminalEphSrvTestQt() && tim.elapsed() < 5000)
@@ -18255,17 +18328,17 @@ static void TestEphSrvQt()
   // C13: the Swiss calls Astrolog still makes locally under this backend
   // ask the Swiss files, as under the Swiss backend -- not a JPL file.
   {
+    // The C13 invariant: a local Swiss call under the server backend is
+    // the Swiss answer. The chain's first Swiss-family source names the
+    // bit (NSwissEphem), so the server tail is what the delegated calls
+    // ask through.
     real a1, a2, a3, a4, a5, a6, b1, b2, b3, b4, b5, b6;
-    int nSw = us.nSwissEph;
-    flag fE = us.fEphemFiles;
-    us.fEphemFiles = fTrue;
-    us.nSwissEph = 0;
+    EphSelBorrow bChainA("swiss");
     flag fA = FSwissPlanet(oMar, 2459010.5, fFalse, &a1, &a2, &a3, &a4, &a5,
       &a6);
-    us.nSwissEph = 5;
+    EphSelBorrow bChainB("server,swiss");
     flag fB = FSwissPlanet(oMar, 2459010.5, fFalse, &b1, &b2, &b3, &b4, &b5,
       &b6);
-    us.nSwissEph = nSw; us.fEphemFiles = fE;
     Check(fA && fB && a1 == b1 && a2 == b2 && a3 == b3 && a4 == b4,
       "a local Swiss call under the server backend is the Swiss answer "
       "(%a / %a)", a1, b1);
@@ -18289,10 +18362,10 @@ static void TestEphSrvQt()
         while ((pc = srvMute.nextPendingConnection()) != NULL)
           rgpconnMute.append(pc);
       });
-    us.nSwissEph = 5; us.fEphemFiles = fTrue; us.fNoNetwork = fFalse;
+    EphSourceSet("server,swiss");
     EphSrvFinalizeQt();
     sprintf2(S(sz), "localhost:%d", (int)srvMute.serverPort());
-    FCloneSz(sz, &us.szEphSrv);
+    FEphParamSet(epServerUrl, sz);
     SetHelloSrvTestQt(400);
     EphSrvStartupQt();
     Check(NEphSrvStateTestQt() == 1, "connecting to the mute server");
@@ -18325,7 +18398,7 @@ static void TestEphSrvQt()
         &pconnW);
       EphSrvFinalizeQt();
       sprintf2(S(sz), "localhost:%d", (int)srvWait.serverPort());
-      FCloneSz(sz, &us.szEphSrv);
+      FEphParamSet(epServerUrl, sz);
       EphSrvStartupQt();
       Check(FWaitEstQt(2, 5000), "welcomed by the silent server");
       SetWaitSrvTestQt(1500);
@@ -18389,7 +18462,7 @@ static void TestEphSrvQt()
       });
     EphSrvFinalizeQt();
     sprintf2(S(sz), "localhost:%d", (int)srvDrop.serverPort());
-    FCloneSz(sz, &us.szEphSrv);
+    FEphParamSet(epServerUrl, sz);
     EphSrvStartupQt();
     Check(FWaitEstQt(2, 5000), "welcomed by the dropping server");
     SetBackoffEphSrvTestQt(50);
@@ -18419,7 +18492,8 @@ static void TestEphSrvQt()
   // The synchronous facade, increment 1: fails soft, warns once per
   // cast, never latches. The backend is deselected so the connector the
   // facade prods stays out of the way of these assertions.
-  us.nSwissEph = 1;
+  EphSourceSet("swiss");
+  FEphParamSet(epServerUrl, NULL);
   cWarn = NCastWarnSrvTestQt();
   {
     real r1, r2, r3, r4, r5, r6;
@@ -18435,38 +18509,24 @@ static void TestEphSrvQt()
   }
   Check(is.fNoEphFile == fNoEphFileSav, "no fNoEphFile latch (lesson 3)");
 
-  // -0n fails fast, and the connector never runs. Through the prefetch,
-  // as a cast goes: the first form called the per-object read with no
-  // prefetch at all, so it warned "no request was made" whatever -0n said,
-  // and passed with the -0n guards removed (review T6).
-  us.nSwissEph = 5;
-  us.fNoNetwork = fTrue;
+  // The server deselected: the connector never runs -- not even when
+  // startup asks it to -- because a chart cast under another source is
+  // the local path's business entirely. (The old -0n lock that failed
+  // fast here is inert now; a selected source is used if it is
+  // reachable, and a failure is reported when it happens.)
+  EphSourceSet("swiss");
+  FEphParamSet(epServerUrl, NULL);
   EphSrvFinalizeQt();
-  cWarn = NCastWarnSrvTestQt();
-  {
-    real r1, r2, r3, r4, r5, r6;
-    int cReq0 = CReqSentEphSrvTestQt();
-    SrvPrefetchQt(0.9, oEar, oPlu);
-    Check(!FSrvPlanetQt(oSun, JulianDayFromTime(0.9), &r1, &r2, &r3, &r4,
-      &r5, &r6), "-0n fails the facade fast");
-    Check(NCastWarnSrvTestQt() == cWarn + 1 &&
-      strstr(SzWarnSrvTestQt(), "Internet features are disabled") != NULL &&
-      strstr(SzWarnSrvTestQt(), "\"_0n\"") != NULL,
-      "with the -0n warning, saying how to allow it (\"%.80s\")",
-      SzWarnSrvTestQt());
-    Check(CReqSentEphSrvTestQt() == cReq0, "and no request");
-  }
-  Check(NEphSrvStateTestQt() == 0 && NRetryEphSrvTestQt() < 0,
-    "and the connector never runs under -0n");
   EphSrvStartupQt();
-  Check(NEphSrvStateTestQt() == 0, "not even when startup asks it to");
+  Check(NEphSrvStateTestQt() == 0, "a deselected server never connects");
+  Check(NRetryEphSrvTestQt() < 0, "and no retry ladder is armed");
 
   EphSrvFinalizeQt();
-  us.fEphemFiles = fEphemSav;
-  us.nSwissEph = nSwissSav;
-  us.fNoNetwork = fNoNetSav;
-  FCloneSz(fAddrSav ? baAddrSav.constData() : NULL, &us.szEphSrv);
-  FCloneSz(fTokenSav ? baTokenSav.constData() : NULL, &us.szEphSrvToken);
+  EphSourceSet(baChainSav.constData());
+  FEphParamSet(epServerUrl, baAddrSav.isEmpty() ? NULL :
+    baAddrSav.constData());
+  FEphParamSet(epServerToken, baTokenSav.isEmpty() ? NULL :
+    baTokenSav.constData());
   is.fNoEphFile = fNoEphFileSav;
   SetNoPopupQt(fPopSav);
 }
@@ -18623,16 +18683,16 @@ static real RAnimRunSrvQt(int nAnim, int nDir, int nFrame, int *rgcReq,
     while (tim.elapsed() < 30)
       QApplication::processEvents(QEventLoop::AllEvents, 10);
     SetAnimTickBusyTestQt(fFalse);
-    us.nSwissEph = 5;
+    EphSourceSet("server,swiss");
     cReq = CReqSentEphSrvTestQt();
     AnimTickTestQt();
     rgcReq[iFrame] = CReqSentEphSrvTestQt() - cReq;
     SnapshotEphQt(&snSrv);
-    us.nSwissEph = 0;
+    EphSourceSet("swiss");
     ciCore = ciMain;
     CastChart(0);
     SnapshotEphQt(&snLocal);
-    us.nSwissEph = 5;
+    EphSourceSet("server,swiss");
     r = RMaxDiffEphQt(&snLocal, &snSrv, &iObj, &iField);
     if (r > rMax) {
       rMax = r;
@@ -18666,14 +18726,14 @@ static flag FWaitEphdQt(QProcess *pproc, QByteArray *pbaLog, int msMax)
 
 static void TestEphSrvLiveQt()
 {
-  flag fEphemSav = us.fEphemFiles, fNoNetSav = us.fNoNetwork,
-    fNoEphFileSav = is.fNoEphFile, fPopSav = FNoPopupQt(),
-    fAddrSav = us.szEphSrv != NULL, fSidSav = us.fSidereal,
+  flag fNoEphFileSav = is.fNoEphFile, fPopSav = FNoPopupQt(),
+    fSidSav = us.fSidereal,
     fTopoSav = us.fTopoPos, fTrueNodeSav = us.fTrueNode,
     fIgnoreSav = ignore[custLo], fSid2Sav = us.fSidereal2,
     fProgSav = us.fProgress;
-  QByteArray baAddrSav(SzSet(us.szEphSrv));
-  int nSwissSav = us.nSwissEph, objCenterSav = us.objCenter,
+  QByteArray baChainSav(SzSet(us.szEphemSource));
+  QByteArray baAddrSav(SzSet(us.rgszEphParam[epServerUrl]));
+  int objCenterSav = us.objCenter,
     nObjSav = rgObjSwiss[0], nTypSav = rgTypSwiss[0], nPntSav = rgPntSwiss[0],
     nFlgSav = rgFlgSwiss[0];
   CI ciSav = ciCore, ciMainSav = ciMain;
@@ -18686,7 +18746,6 @@ static void TestEphSrvLiveQt()
 
   Group("Ephemeris server, live parity");
   SetNoPopupQt(fTrue);
-  us.fNoNetwork = fFalse;
 
   strBin = QCoreApplication::applicationDirPath() + "/astrolog-ephd";
   if (!QFileInfo(strBin).isExecutable()) {
@@ -18766,12 +18825,11 @@ static void TestEphSrvLiveQt()
   EphSrvFinalizeQt();
   ClearWinSrvTestQt();
   sprintf2(S(sz), "localhost:%d", port);
-  FCloneSz(sz, &us.szEphSrv);
-  us.fEphemFiles = fTrue;
-  us.nSwissEph = 0;
+  FEphParamSet(epServerUrl, sz);
+  EphSourceSet("swiss");
   CastChart(0);
   SnapshotEphQt(&snLocal);
-  us.nSwissEph = 5;
+  EphSourceSet("server,swiss");
   EphSrvStartupQt();
   Check(NEphSrvStateTestQt() == 1, "the backend is connecting");
   cWarn = NCastWarnSrvTestQt();
@@ -18847,10 +18905,10 @@ static void TestEphSrvLiveQt()
       ciCore.lon = 122.3; ciCore.lat = 47.6;
       break;
     }
-    us.nSwissEph = 0;   // The local Swiss path: the oracle.
+    EphSourceSet("swiss");   // The local Swiss path: the oracle.
     CastChart(0);
     SnapshotEphQt(&snLocal);
-    us.nSwissEph = 5;   // The server.
+    EphSourceSet("server,swiss");   // The server.
     cWarn = NCastWarnSrvTestQt();
     CastChart(0);
     SnapshotEphQt(&snSrv);
@@ -18883,10 +18941,10 @@ static void TestEphSrvLiveQt()
   // (EPHEMERIS_REVIEW.md C1).
   OraclePinUtQt(1990, 7, 4, 3.0);
   ciCore.lon = 122.3; ciCore.lat = 47.6;
-  us.nSwissEph = 0;
+  EphSourceSet("swiss");
   CastChart(0);
   SnapshotEphQt(&snLocal);
-  us.nSwissEph = 5;
+  EphSourceSet("server,swiss");
   {
     static int cNested;
     cNested = 0;
@@ -18932,7 +18990,6 @@ static void TestEphSrvLiveQt()
   }
 
   // The window cache: the same cast again sends nothing.
-  us.nSwissEph = 5;
   CastChart(0);
   cReq = CReqSentEphSrvTestQt();
   cWarn = NCastWarnSrvTestQt();
@@ -18963,7 +19020,7 @@ static void TestEphSrvLiveQt()
     char szWorst[cchSzMax];
 
     us.nRel = rcNone; gi.nMode = gWheel;
-    us.nSwissEph = 5;
+    EphSourceSet("server,swiss");
     ClearWinSrvTestQt();
     SetRowsAnimSrvTestQt(20);
     // Seven rows a chunk: every 20-row window arrives in three, so the
@@ -19002,8 +19059,8 @@ static void TestEphSrvLiveQt()
     // A cast outside a tick, animation or not, is still asked exactly.
     {
       EPHSNAPSHOT snL, snS;
-      us.nSwissEph = 0; ciCore = ciMain; CastChart(0); SnapshotEphQt(&snL);
-      us.nSwissEph = 5; CastChart(0); SnapshotEphQt(&snS);
+      EphSourceSet("swiss"); ciCore = ciMain; CastChart(0); SnapshotEphQt(&snL);
+      EphSourceSet("server,swiss"); CastChart(0); SnapshotEphQt(&snS);
       cDiff = CDiffEphQt(&snL, &snS, 0.0, S(szDiff));
       Check(cDiff == 0, "animation: a cast outside a tick stays bit-identical "
         "(%d differ: %s)", cDiff, szDiff);
@@ -19016,8 +19073,8 @@ static void TestEphSrvLiveQt()
     // pass with no recast at all, which is how its first draft passed.
     {
       EPHSNAPSHOT snL, snS;
-      us.nSwissEph = 0; ciCore = ciMain; CastChart(0); SnapshotEphQt(&snL);
-      us.nSwissEph = 5;
+      EphSourceSet("swiss"); ciCore = ciMain; CastChart(0); SnapshotEphQt(&snL);
+      EphSourceSet("server,swiss");
       gs.nAnim = 2; gi.nDir = 5;
       SetAnimFrameSrvTestQt(fTrue);
       CastChart(0);
@@ -19028,8 +19085,8 @@ static void TestEphSrvLiveQt()
         "the approximate one before the stop (%d objects differ)", cDiff);
       SetAnimRunningTestQt(fFalse);
       SnapshotEphQt(&snS);
-      us.nSwissEph = 0; ciCore = ciMain; CastChart(0); SnapshotEphQt(&snL);
-      us.nSwissEph = 5;
+      EphSourceSet("swiss"); ciCore = ciMain; CastChart(0); SnapshotEphQt(&snL);
+      EphSourceSet("server,swiss");
       cDiff = CDiffEphQt(&snL, &snS, 0.0, S(szDiff));
       Check(cDiff == 0 && !FApproxSrvTestQt(), "animation: stopping leaves "
         "the bit-exact chart (%d differ: %s)", cDiff, szDiff);
@@ -19157,8 +19214,8 @@ static void TestEphSrvLiveQt()
       gs.nAnim = -2;          // What PrintWarningQt() does.
       AnimTickTestQt();
       SnapshotEphQt(&snS);
-      us.nSwissEph = 0; ciCore = ciMain; CastChart(0); SnapshotEphQt(&snL);
-      us.nSwissEph = 5;
+      EphSourceSet("swiss"); ciCore = ciMain; CastChart(0); SnapshotEphQt(&snL);
+      EphSourceSet("server,swiss");
       cDiff = CDiffEphQt(&snL, &snS, 0.0, S(szDiff));
       Check(cDiff == 0 && !FApproxSrvTestQt(), "animation stopped by a "
         "warning box: the next tick leaves the bit-exact chart (%d differ: "
@@ -19174,8 +19231,8 @@ static void TestEphSrvLiveQt()
     SetWindowCapSrvTestQt(1);
     {
       EPHSNAPSHOT snL, snS;
-      us.nSwissEph = 0; ciCore = ciMain; CastChart(0); SnapshotEphQt(&snL);
-      us.nSwissEph = 5; CastChart(0); SnapshotEphQt(&snS);
+      EphSourceSet("swiss"); ciCore = ciMain; CastChart(0); SnapshotEphQt(&snL);
+      EphSourceSet("server,swiss"); CastChart(0); SnapshotEphQt(&snS);
       cDiff = CDiffEphQt(&snL, &snS, 0.0, S(szDiff));
       Check(CWinSrvTestQt() >= 2 && cDiff == 0, "a cast split over more "
         "requests than the window cap holds all its windows (%d held, %d "
@@ -19227,10 +19284,10 @@ static void TestEphSrvLiveQt()
   }
   Check(CRecastSrvTestQt() == cReq + 1, "the WELCOME recast the chart that "
     "missed the server (%d recasts)", CRecastSrvTestQt() - cReq);
-  us.nSwissEph = 0;
+  EphSourceSet("swiss");
   CastChart(0);
   SnapshotEphQt(&snLocal);
-  us.nSwissEph = 5;
+  EphSourceSet("server,swiss");
   cWarn = NCastWarnSrvTestQt();
   CastChart(0);
   SnapshotEphQt(&snSrv);
@@ -19246,10 +19303,10 @@ static void TestEphSrvLiveQt()
   ClearWinSrvTestQt();
   OraclePinUtQt(1990, 6, 19, 12.0);
   ciCore.lon = 122.3; ciCore.lat = 47.6;
-  us.nSwissEph = 0;
+  EphSourceSet("swiss");
   CastChart(0);
   SnapshotEphQt(&snLocal);
-  us.nSwissEph = 5;
+  EphSourceSet("server,swiss");
   cWarn = NCastWarnSrvTestQt();
   CastChart(0);
   SnapshotEphQt(&snSrv);
@@ -19259,16 +19316,17 @@ static void TestEphSrvLiveQt()
     "differ: %s)", CWinSrvTestQt(), cDiff, szDiff);
   SetWelcMaxObjsSrvTestQt(eph::Welcome().maxObjs);
 
-  // -0n: fails fast, sends nothing.
-  us.fNoNetwork = fTrue;
+  // The server deselected: a cast raises nothing and sends nothing --
+  // the local path is the whole cast. (The old -0n lock failed fast
+  // here; it is inert now.)
+  EphSourceSet("swiss");
   OraclePinUtQt(1990, 6, 18, 12.0);
   ciCore.lon = 122.3; ciCore.lat = 47.6;
   cReq = CReqSentEphSrvTestQt();
   cWarn = NCastWarnSrvTestQt();
   CastChart(0);
-  Check(NCastWarnSrvTestQt() == cWarn + 1 && CReqSentEphSrvTestQt() == cReq,
-    "under -0n a cast fails fast with one warning and no request");
-  us.fNoNetwork = fFalse;
+  Check(NCastWarnSrvTestQt() == cWarn && CReqSentEphSrvTestQt() == cReq,
+    "a cast with the server deselected sends nothing and warns not");
 
   // Required-server mode (increment 4): no local ephemeris anywhere and
   // the server backend selected -- the startup dialog and its ladder.
@@ -19285,14 +19343,14 @@ static void TestEphSrvLiveQt()
     QWebSocket *pconnReq = NULL;
 
     is.fSwissPathSet = fTrue;
-    us.fEphemFiles = fTrue; us.nSwissEph = 5;
+    EphSourceSet("server,swiss");
     is.fNoEphFound = fTrue;
     Check(FEphSrvRequiredQt(), "required: the server backend with no "
       "local ephemeris");
-    us.nSwissEph = 0;
+    EphSourceSet("swiss");
     Check(!FEphSrvRequiredQt(), "not required: a local backend is "
       "selected");
-    us.nSwissEph = 5;
+    EphSourceSet("server,swiss");
     is.fNoEphFound = fFalse;
     Check(!FEphSrvRequiredQt(), "not required: a local ephemeris exists");
     is.fNoEphFound = fTrue;
@@ -19305,7 +19363,7 @@ static void TestEphSrvLiveQt()
     WireEphLoopbackQt(&srvReq, &bProtoReq, &dwCapsReq, szVerReq, &baReqReq,
       &pconnReq);
     sprintf2(S(sz), "localhost:%d", (int)srvReq.serverPort());
-    FCloneSz(sz, &us.szEphSrv);
+    FEphParamSet(epServerUrl, sz);
     EphSrvFinalizeQt();
     ResetRequiredSrvTestQt();
     SetRequiredEphSrvTestQt(1, 1, 30000);
@@ -19320,7 +19378,7 @@ static void TestEphSrvLiveQt()
     // the give-up returns instead of exiting (the suite's hook), and the
     // dialog stays latched shown.
     sprintf2(S(sz), "localhost:1");   // Nothing listens on port 1.
-    FCloneSz(sz, &us.szEphSrv);
+    FEphParamSet(epServerUrl, sz);
     ResetRequiredSrvTestQt();
     SetRequiredNoExitSrvTestQt(fTrue);
     SetRequiredEphSrvTestQt(1, 1, 40);
@@ -19330,7 +19388,7 @@ static void TestEphSrvLiveQt()
       CRequiredTriesSrvTestQt());
     EphSrvFinalizeQt();
     ResetRequiredSrvTestQt();
-    FCloneSz(NULL, &us.szEphSrv);
+    FEphParamSet(epServerUrl, NULL);
     is.fNoEphFound = fNoEphSav;
     is.fSwissPathSet = fPathSetSav;
   }
@@ -19401,8 +19459,7 @@ static void TestEphSrvLiveQt()
       OraclePinUtQt(1990, 6, 15, 12.0);
       ciCore.lon = 122.3; ciCore.lat = 47.6;
       us.fSidereal = fFalse; us.objCenter = oEar; us.fTopoPos = fFalse;
-      us.fEphemFiles = fTrue;
-      us.nSwissEph = 0;
+      EphSourceSet("swiss");
       CastChart(0);
       SnapshotEphQt(&snLocal);
 
@@ -19410,9 +19467,11 @@ static void TestEphSrvLiveQt()
       EphSrvFinalizeQt();
       ClearWinSrvTestQt();
       sprintf2(S(sz), "wss://localhost:%d", portTls);
-      FCloneSz(sz, &us.szEphSrv);
-      us.nSwissEph = 5;
-      EphSrvStartupQt();
+      FEphParamSet(epServerUrl, sz);
+      us.fSidereal = fFalse; us.objCenter = oEar; us.fTopoPos = fFalse;
+      EphSourceSet("swiss");
+      CastChart(0);
+      SnapshotEphQt(&snLocal);
       {
         QElapsedTimer tim;
         tim.start();
@@ -19457,9 +19516,9 @@ LRestore:
   }
   EphSrvFinalizeQt();
   ClearWinSrvTestQt();
-  us.fEphemFiles = fEphemSav;
-  us.nSwissEph = nSwissSav;
-  us.fNoNetwork = fNoNetSav;
+  EphSourceSet(baChainSav.constData());
+  FEphParamSet(epServerUrl, baAddrSav.isEmpty() ? NULL :
+    baAddrSav.constData());
   us.fSidereal = fSidSav; us.fSidereal2 = fSid2Sav;
   us.fProgress = fProgSav;
   us.objCenter = objCenterSav;
@@ -19468,7 +19527,8 @@ LRestore:
   AdjustRestrictions();
   rgTypSwiss[0] = nTypSav; rgObjSwiss[0] = nObjSav;
   rgPntSwiss[0] = nPntSav; rgFlgSwiss[0] = nFlgSav;
-  FCloneSz(fAddrSav ? baAddrSav.constData() : NULL, &us.szEphSrv);
+  FEphParamSet(epServerUrl, baAddrSav.isEmpty() ? NULL :
+    baAddrSav.constData());
   is.fNoEphFile = fNoEphFileSav;
   ciCore = ciSav;
   ciMain = ciMainSav;   // The scenarios move it too (review T11).
@@ -19516,11 +19576,9 @@ static void TestEphemRegistryQt()
 
   Group("Ephemeris source registry");
   {
-    // The selection: files on, the Swiss files source (nSwissEph 0), so
-    // FEphSubmit()'s derived chain holds exactly one source, swiss -- the
+    // The selection: the chain "swiss", one source long -- the
     // delegation this group is about.
-    Borrow bFiles(us.fEphemFiles, fTrue), bSwiss(us.nSwissEph, 0);
-    Borrow bMat(us.fMatrixPla, fFalse);
+    EphSelBorrow bChain("swiss");
     Borrow bSid(us.fSidereal, fFalse), bSid2(us.fSidereal2, fFalse);
     Borrow bTopo(us.fTopoPos, fFalse), bTrueN(us.fTrueNode, fFalse);
     Borrow bCtr(us.objCenter, (int)oEar), bMoon(us.fMoonMove, fFalse);
@@ -19536,8 +19594,8 @@ static void TestEphemRegistryQt()
       IEphSrcFromKey("moshier") == 2 && IEphSrcFromKey("matrix") == 3 &&
       IEphSrcFromKey("none") == 4 && IEphSrcFromKey("nonesuch") < 0,
       "every source resolves by its key, and a bad key resolves to none");
-    Check(IEphSrcPrimary() == IEphSrcFromKey("swiss"),
-      "today's selection derives the swiss source as the chain's head");
+    Check(FEqSz(us.szEphemSource, "swiss"),
+      "the selection derives the swiss source as the chain's head");
 
     for (iScen = 0; iScen < 9; iScen++) {
       us.fSidereal = fFalse; us.fSidereal2 = fFalse;
@@ -19636,7 +19694,6 @@ static void TestEphemRegistryQt()
     CastChart(0);
     jd = JulianDayFromTime(is.T);
     {
-      Borrow bFiles(us.fEphemFiles, fTrue), bSwiss(us.nSwissEph, 0);
       int rgisrc[2];
       EPHQUERY eq2;
 
@@ -19664,178 +19721,175 @@ static void TestEphemRegistryQt()
       Check(!FEphFallbackNotice(), "nothing served means no notice");
     }
 
-    // The selection maps over its whole domain, not just the default.
+    // The selection IS the chain now, and the predicates read it.
+    // Each of the seven chains the old fields could name, applied for
+    // real, says which rates are real, whether the legacy cast answers,
+    // and where the cast's Swiss-family bit comes from.
     {
-      struct { int nSwiss; CONST char *szKey; } const rgmap[] = {
-        {0, "swiss"}, {1, "moshier"}, {2, "jpl"}, {3, "jpl"},
-        {4, "jpl"}, {5, "swiss"}};
+      struct { CONST char *szChain, *szHead; flag fSpeeds, fLegacy;
+        int nSwiss; } const rgmap[] = {
+        {"swiss", "swiss", fTrue, fFalse, 0},
+        {"moshier", "moshier", fTrue, fFalse, 1},
+        {"jpl", "jpl", fTrue, fFalse, 2},
+        {"horizons,jpl", "horizons", fTrue, fFalse, 2},
+        {"server,swiss", "server", fTrue, fFalse, 0},
+        {"matrix", "matrix", fFalse, fTrue, 0},
+        {"none", "none", fFalse, fTrue, 0}};
       int im;
-      for (im = 0; im < 6; im++) {
-        Borrow bE(us.nSwissEph, rgmap[im].nSwiss);
-        Check(IEphSrcPrimary() == IEphSrcFromKey(rgmap[im].szKey),
-          "nSwissEph %d derives the %s source as the chain's head",
-          rgmap[im].nSwiss, rgmap[im].szKey);
+      for (im = 0; im < (int)(sizeof(rgmap) / sizeof(*rgmap)); im++) {
+        EphSelBorrow bChain(rgmap[im].szChain);
+        Check(FEqSz(us.szEphemSource, rgmap[im].szChain) &&
+          FSrcChainHead(rgmap[im].szHead),
+          "the chain \"%s\" reads back, head and all",
+          rgmap[im].szChain);
+        Check(FEphSpeeds() == rgmap[im].fSpeeds &&
+          FEphLegacyCast() == rgmap[im].fLegacy,
+          "and its predicates say rates %s, legacy cast %s",
+          rgmap[im].fSpeeds ? "yes" : "no", rgmap[im].fLegacy ? "yes" : "no");
+        Check(NSwissEphem() == rgmap[im].nSwiss,
+          "and its Swiss-family bit is %d", rgmap[im].nSwiss);
       }
+      // The side calls walk the user's order, ending at the Swiss files
+      // when the chain names nothing that serves them.
       {
-        Borrow bE(us.nSwissEph, 0), bF(us.fEphemFiles, fFalse),
-          bM(us.fMatrixPla, fTrue);
-        Check(IEphSrcPrimary() == IEphSrcFromKey("matrix"),
-          "files off with the Matrix on derives the matrix source");
-        us.fMatrixPla = fFalse;
-        Check(IEphSrcPrimary() == IEphSrcFromKey("none"),
-          "files off with the Matrix off derives the none source");
-      }
-      // The side calls keep the Swiss-family source nSwissEph names,
-      // whatever the files switch says.
-      {
-        Borrow bF(us.fEphemFiles, fFalse), bM(us.fMatrixPla, fTrue);
-        Check(IEphSrcSideCall() == IEphSrcFromKey("swiss"),
-          "a side call under a matrix selection still reaches the Swiss "
-          "files source, as it always has");
+        EPHQUERY eq2;
+        EphSelBorrow bChain("matrix");
+        EphQueryInit(&eq2, jd);
+        FEphQueryAdd(&eq2, oMoo, 0, oEar, NULL);
+        Check(FEphSubmitSide(&eq2),
+          "a side call under a matrix selection is answered, by the Swiss "
+          "files it has always ended at");
+        Check(eq2.rgisrc[0] == IEphSrcFromKey("swiss"),
+          "with the Swiss files source's own provenance");
       }
     }
 
-    // The selection's two representations say one thing. Every legacy
-    // spelling re-derives the chain from its shadow, and every -bE
-    // re-derives the shadow from the chain; over the selectable domain
-    // the two must land on the same source, and the chain strings are
-    // the ones the plan names. This is the net behind the phase 4b
-    // command line: the spellings below are applied through the real
-    // parser, not by writing the fields.
+    // The 4b command line, against the live selection: the legacy
+    // spellings toggle a parse-time shadow and re-derive the chain;
+    // consecutive spellings keep toggling each other's result.
     {
-      // The whole domain the old state could name, and the chain each
-      // selection is. nSwissEph 4 is the hole no spelling writes back
-      // (the settings sweep poisons around it), so it is not here.
-      struct { int nFiles, nSwiss, nMatrix; CONST char *szChain; } const
-        rgdomain[] = {
-        {1, 0, 0, "swiss"}, {1, 1, 0, "moshier"}, {1, 2, 0, "jpl"},
-        {1, 3, 0, "horizons,jpl"}, {1, 5, 0, "server,swiss"},
-        {0, 0, 1, "matrix"}, {0, 0, 0, "none"}};
-      // The spellings of section 5.2's table, and the state each one
-      // leaves the legacy shadow in from a Swiss-files default --
-      // exactly what the old code did, which the switch matrix pins
-      // against the baseline binary besides this.
-      struct { CONST char *szSw; int nFiles, nSwiss, nMatrix; } const
-        rglegacy[] = {
-        {"=b",  1, 0, 0}, {"_b",  0, 0, 0}, {"=bs", 1, 1, 0},
-        {"=bj", 1, 2, 0}, {"=bJ", 1, 3, 0}, {"=bS", 1, 5, 0},
-        {"=bm", 1, 0, 1}, {"_bm", 0, 0, 0}, {"=bU", 1, 0, 0}};
+      struct { CONST char *szSw, *szChain; } const rglegacy[] = {
+        {"=b", "swiss"}, {"_b", "none"}, {"=bs", "moshier"},
+        {"=bj", "jpl"}, {"=bJ", "horizons,jpl"}, {"=bS", "server,swiss"},
+        {"=bm", "swiss"}};
       int isw;
       char *rgsz[5];
-      flag fNoOldSav = us.fNoOldCalc, fNoNetSav = us.fNoNetwork,
-        fMatrixStarSav = us.fMatrixStar;
       flag fOk;
 
-      // "=0b" and "=0n" ride in astrolog.as and would refuse two of the
-      // spellings; the net asks what the spellings themselves do.
-      us.fNoOldCalc = us.fNoNetwork = fFalse;
       for (isw = 0; isw < (int)(sizeof(rglegacy) / sizeof(*rglegacy));
           isw++) {
-        // From the shipped default each time, files on and Swiss.
-        us.fEphemFiles = fTrue; us.nSwissEph = 0; us.fMatrixPla = fFalse;
-        FCloneSz("swiss", &us.szEphemSource);
+        EphSourceSet("swiss");
         rgsz[0] = (char *)szAppNameCore;
         rgsz[1] = (char *)rglegacy[isw].szSw;
         rgsz[2] = NULL;
         fOk = FProcessSwitches(2, rgsz, NULL);
         Check(fOk, "\"%s\" parses", rglegacy[isw].szSw);
-        if (fOk) {
-          Check(us.fEphemFiles == rglegacy[isw].nFiles &&
-            us.nSwissEph == rglegacy[isw].nSwiss &&
-            us.fMatrixPla == rglegacy[isw].nMatrix,
-            "\"%s\" leaves the fields the old code left",
-            rglegacy[isw].szSw);
-          Check(FEqSz(us.szEphemSource, rgdomain[
-            rglegacy[isw].nFiles ? (rglegacy[isw].nSwiss == 1 ? 1 :
-            rglegacy[isw].nSwiss == 2 ? 2 : rglegacy[isw].nSwiss == 3 ? 3 :
-            rglegacy[isw].nSwiss == 5 ? 4 : 0) :
-            (rglegacy[isw].nMatrix ? 5 : 6)].szChain),
-            "and \"%s\" derived the chain that selection is",
-            rglegacy[isw].szSw);
-        }
+        if (fOk)
+          Check(FEqSz(us.szEphemSource, rglegacy[isw].szChain),
+            "\"%s\" selects the chain that spelling always meant (%s)",
+            rglegacy[isw].szSw, us.szEphemSource);
       }
-      us.fNoOldCalc = fNoOldSav; us.fNoNetwork = fNoNetSav;
-      us.fMatrixStar = fMatrixStarSav;
+      // And consecutive toggles compose, as the live fields used to:
+      // the shadow re-syncs from the chain the previous spelling wrote.
+      EphSourceSet("server,swiss");
+      rgsz[0] = (char *)szAppNameCore;
+      rgsz[1] = (char *)"-bS"; rgsz[2] = NULL;
+      Check(FProcessSwitches(2, rgsz, NULL), "-bS from the server");
+      Check(FEqSz(us.szEphemSource, "none"),
+        "a plain -bS toggle from the server turns it off, files with it");
+      rgsz[1] = (char *)"-bS";
+      Check(FProcessSwitches(2, rgsz, NULL), "and again selects it");
+      Check(FEqSz(us.szEphemSource, "server,swiss"),
+        "the second -bS is the server again");
+      EphSourceSet("swiss");
+    }
 
-      // -bE itself: the chain is set, not toggled, and the shadow
-      // follows the chain's head; "" restores the default; a chain may
-      // name sources this build does not compile, which the walk will
-      // skip, while a key no source defines is refused. -bP writes one
-      // parameter, and "" restores its default. A parameter line maps
-      // to its own field and nothing else -- the legacy spelling of the
-      // server's address is not clobbered by one, which is what lets
-      // the settings sweep carry both representations of that setting
-      // in one file.
+    // -bE itself: the chain is set, not toggled, and the shadow follows
+    // the chain's head; "" restores the default; a chain may name
+    // sources this build does not compile, which the walk will skip,
+    // while a key no source defines is refused.
+    {
+      char *rgsz[5];
       rgsz[0] = (char *)szAppNameCore;
       rgsz[1] = (char *)"=bE"; rgsz[2] = (char *)"moshier"; rgsz[3] = NULL;
       Check(FProcessSwitches(3, rgsz, NULL), "-bE moshier parses");
-      Check(FEqSz(us.szEphemSource, "moshier") && us.fEphemFiles &&
-        us.nSwissEph == 1, "-bE moshier selects Moshier in both "
-        "representations");
+      Check(FEqSz(us.szEphemSource, "moshier"),
+        "-bE moshier selects Moshier");
       rgsz[2] = (char *)"server,swiss,moshier";
       Check(FProcessSwitches(3, rgsz, NULL), "the plan's own chain parses");
-      Check(FEqSz(us.szEphemSource, "server,swiss,moshier") &&
-        us.fEphemFiles && us.nSwissEph == 5,
-        "a server-headed chain reads as the server selection, and the "
-        "Swiss files ride behind it");
+      Check(FEqSz(us.szEphemSource, "server,swiss,moshier"),
+        "the fallback order is carried whole");
       rgsz[2] = (char *)"swiss";
       Check(FProcessSwitches(3, rgsz, NULL), "-bE swiss parses");
-      Check(FEqSz(us.szEphemSource, "swiss") && us.fEphemFiles &&
-        us.nSwissEph == 0, "-bE swiss is the default in both forms");
-      rgsz[2] = (char *)"moshier";
-      Check(FProcessSwitches(3, rgsz, NULL), "and again, for the reset");
+      Check(FEqSz(us.szEphemSource, SzEphSourceDefault()),
+        "-bE swiss is the default");
       rgsz[2] = (char *)"";
       Check(FProcessSwitches(3, rgsz, NULL), "-bE with an empty chain");
       Check(FEqSz(us.szEphemSource, SzEphSourceDefault()),
         "an empty -bE restores the default chain");
-      rgsz[2] = (char *)"swiss";
-      Check(FProcessSwitches(3, rgsz, NULL), "and back to the default");
 
       // A key no source defines is a typo, and refused: the chain's
       // head would fall through to the Swiss files, so an accepted
       // "mosheir" would cast from Swiss and be written back into the
       // settings file. A key this build does not COMPILE is a different
       // thing and loads, because the walk skips it. And the refusal is
-      // checked against the registry's own names plus the two future
-      // keys, so the two lists cannot drift apart.
+      // checked against the registry's own names plus the future keys,
+      // so the two lists cannot drift apart.
       rgsz[2] = (char *)"mosheir";
       Check(!FProcessSwitches(3, rgsz, NULL),
         "a source key no source defines is refused");
-      Check(FEqSz(us.szEphemSource, "swiss"),
+      Check(FEqSz(us.szEphemSource, SzEphSourceDefault()),
         "and a refused chain leaves the selection alone");
       rgsz[2] = (char *)"swiss,bogus,moshier";
       Check(!FProcessSwitches(3, rgsz, NULL),
         "a bad key anywhere in the chain is refused, not just its head");
-      Check(FEqSz(us.szEphemSource, "swiss"),
+      Check(FEqSz(us.szEphemSource, SzEphSourceDefault()),
         "and that refusal leaves the selection alone too");
       rgsz[2] = (char *)"prometheia,swiss";
       Check(FProcessSwitches(3, rgsz, NULL),
         "a source this build does not compile still names a chain");
-      Check(FEqSz(us.szEphemSource, "prometheia,swiss") && us.fEphemFiles,
+      Check(FEqSz(us.szEphemSource, "prometheia,swiss"),
         "and the walk, not the parser, is what skips it");
       rgsz[2] = (char *)"swiss";
       Check(FProcessSwitches(3, rgsz, NULL), "back to the default again");
       {
-        int isrc;
-        char sz[cchSzDef];
-        for (isrc = 0; isrc < CEphSrc(); isrc++) {
+        static CONST char *rgszFuture[] = {"server", "horizons",
+          "prometheia"};
+        int isrc, i;
+
+        for (isrc = 0; isrc < CEphSrc(); isrc++)
           Check(FEphSrcKeyKnown(PephsrcGet(isrc)->szKey),
             "every registry name is a key -bE accepts (%s)",
             PephsrcGet(isrc)->szKey);
-          SzEphChainHead(PephsrcGet(isrc)->szKey, S(sz));
-          Check(FEqSz(sz, PephsrcGet(isrc)->szKey),
-            "and a one-source chain's head is that name (%s)", sz);
+
+        // And the converse, for the only keys the registry does not
+        // supply: the three of section 4.2 whose plugins are later
+        // phases'. A typo among those three would make a typo'd chain
+        // ACCEPTABLE, which is the hole the validation exists to close,
+        // and no registry name would contradict it. Spelt out here so
+        // that removing one when its plugin lands is forced rather than
+        // remembered -- the count is asserted, so a key that becomes a
+        // real source and is left in the future list fails this.
+        for (i = 0; i < (int)(sizeof(rgszFuture)/sizeof(*rgszFuture)); i++) {
+          Check(FEphSrcKeyKnown(rgszFuture[i]),
+            "-bE still accepts the not-yet-compiled source %s",
+            rgszFuture[i]);
+          Check(IEphSrcFromKey(rgszFuture[i]) < 0, "%s is not registered "
+            "yet -- when its plugin lands the registry supplies the key, "
+            "so drop it from rgszEphSrcFuture[]", rgszFuture[i]);
         }
       }
-      FCloneSz("srv-legacy-sentinel", &us.szEphSrv);
+
+      // -bP writes one parameter, and "" restores its default. A
+      // parameter line maps to its own field and nothing else; the
+      // -bW/-bT spellings write the same two parameters.
+      rgsz[0] = (char *)szAppNameCore;
       rgsz[1] = (char *)"-bP";
       rgsz[2] = (char *)"server.url";
       rgsz[3] = (char *)"wss://probe.example:47190"; rgsz[4] = NULL;
       Check(FProcessSwitches(4, rgsz, NULL), "-bP server.url parses");
       Check(FEqSz(us.rgszEphParam[epServerUrl], "wss://probe.example:47190"),
         "the parameter carries its value");
-      Check(FEqSz(us.szEphSrv, "srv-legacy-sentinel"),
-        "and the legacy spelling of the same setting is left alone");
       rgsz[3] = (char *)"";
       Check(FProcessSwitches(4, rgsz, NULL), "-bP with an empty value");
       Check(!FSzSet(us.rgszEphParam[epServerUrl]),
@@ -19843,16 +19897,44 @@ static void TestEphemRegistryQt()
       rgsz[2] = (char *)"bogus.key"; rgsz[3] = (char *)"v";
       Check(!FProcessSwitches(4, rgsz, NULL),
         "an unknown source.param is refused, like an unknown switch");
-      // The legacy spelling mirrors INTO the parameter when written, so
-      // both representations agree in every state a real path made.
       rgsz[2] = (char *)"server.url";
       rgsz[3] = (char *)"wss://probe2.example";
       Check(FProcessSwitches(4, rgsz, NULL), "-bW's parameter form again");
-      FCloneSz("wss://probe2.example", &us.szEphSrv);
       Check(FEqSz(us.rgszEphParam[epServerUrl], "wss://probe2.example"),
-        "-bW writes the parameter as well as the legacy field");
-      FCloneSz(NULL, &us.rgszEphParam[epServerUrl]);
-      FCloneSz(NULL, &us.szEphSrv);
+        "-bW writes the parameter");
+      FEphParamSet(epServerUrl, NULL);
+    }
+
+    // The settings round trip: the chain and the parameters survive a
+    // save, a poison back to the defaults, and a replay -- by the file,
+    // not by the switch calls above.
+    {
+      QByteArray baFileOutSav(SzSet(is.szFileOut));
+      flag fFileOutSav = is.szFileOut != NULL, fNoWriteSav = us.fNoWrite;
+      int nWriteFormatSav = us.nWriteFormat, i;
+      char szPath[cchSzMax];
+
+      SzScratchPathQt(S(szPath), "ephsrc", ".as");
+      us.fNoWrite = fFalse;
+      us.nWriteFormat = 'd';
+      FCloneSz(szPath, &is.szFileOut);
+      EphSourceSet("moshier,jpl");
+      FEphParamSet(epJplFile, "de431.eph");
+      {
+        Check(FOutputSettings(), "the settings writer wrote the selection");
+        EphSourceSet("swiss");
+        FEphParamSet(epJplFile, NULL);
+        i = CReplaySettingsQt(szPath, FWantEphSrcQt);
+        Check(i > 0, "the selection lines replay (%d)", i);
+        Check(FEqSz(us.szEphemSource, "moshier,jpl"),
+          "the chain replays");
+        Check(FEqSz(us.rgszEphParam[epJplFile], "de431.eph"),
+          "and the jpl file parameter replays with it");
+      }
+      FCloneSz(fFileOutSav ? baFileOutSav.constData() : NULL, &is.szFileOut);
+      us.nWriteFormat = nWriteFormatSav;
+      us.fNoWrite = fNoWriteSav;
+      remove(szPath);
     }
 
     // The fallback with the sources' own bits: with the ephemeris
@@ -19882,7 +19964,6 @@ static void TestEphemRegistryQt()
                                    // not a popup for this run to eat.
       {
         int rgisrc2[2];
-        Borrow bSwiss(us.nSwissEph, 0);
         rgisrc2[0] = IEphSrcFromKey("swiss");
         rgisrc2[1] = IEphSrcFromKey("moshier");
         // Chiron: nothing behind the Swiss files covers it -- the
@@ -19924,14 +20005,14 @@ static void TestEphemRegistryQt()
         Check(FEphRead(&eq2, oSun, &h1, &h2, &h3, &h4, &h5, &h6),
           "the moshier source's row reads");
         {
-          Borrow bMos(us.nSwissEph, 1);
+          EphSelBorrow bChainMos("moshier");
           FSwissPlanet(oSun, jd, oEar, &r1, &r2, &r3, &r4, &r5, &r6);
           FSwissPlanet(oSun, jd, oEar, &r1, &r2, &r3, &r4, &r5, &r6);
         }
         Check(memcmp(&h1, &r1, sizeof(real)) == 0, "the moshier source's "
           "answer is the Moshier call's, bytes again");
         {
-          Borrow bSwi(us.nSwissEph, 0);
+          EphSelBorrow bChainSwi("swiss");
           FSwissPlanet(oSun, jd, oEar, &r1, &r2, &r3, &r4, &r5, &r6);
         }
         Check(memcmp(&h1, &r1, sizeof(real)) != 0, "and it is measurably "

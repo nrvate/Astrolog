@@ -734,8 +734,6 @@ void FinalizeProgram(flag fSkip)
   DeallocatePIf(us.szEphemSource);
   for (i = 0; i < cEphParam; i++)
     DeallocatePIf(us.rgszEphParam[i]);
-  DeallocatePIf(us.szEphSrv);
-  DeallocatePIf(us.szEphSrvToken);
   DeallocatePIf(us.szADB);
   DeallocatePIf(us.szStarsColor);
   DeallocatePIf(us.szAstColor);
