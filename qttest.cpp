@@ -105,6 +105,9 @@
 #include "astrolog.h"
 #include "extern.h"
 #include "qtdriver.h"
+// ephreq.h names both sides -- EPHQUERY and eph::Request -- so it follows
+// astrolog.h and extern.h rather than leading them.
+#include "ephreq.h"
 // The Prometheia source plugin (phase 7). The header is empty without
 // -DPROMETHEIA, so including it is free in the default build and the
 // group below says so rather than failing.
@@ -17823,6 +17826,115 @@ static void TestEphSrvQt()
 
   Group("Ephemeris server");
   SetNoPopupQt(fTrue);   // The facade's warning below would otherwise pop.
+
+  // ---- The host question as a REQUEST (ephreq.h, phase 6) -----------
+  // The one translation every transport shares. What matters is not that
+  // it produces A request but that it produces the request whose answer
+  // is comparable with the local one -- so each object is mapped BACK
+  // through the protocol's own ephswiss.h and required to be the Swiss
+  // call FSwissPlanetSpec() would have made. A translation that dropped
+  // a flag, bound the wrong centre or lost a node's method would encode
+  // and parse perfectly and fail here.
+  {
+    EPHQUERY eqR;
+    eph::Request reqR;
+    EPHREQMAP rgmapR[objMax];
+    std::vector<uint8_t> rgbR;
+    eph::Request reqBack;
+    std::string strWhyR;
+    int cR, iR;
+    CONST int rgobjR[] = {oSun, oMoo, oMer, oJup, oNod, oChi, custLo};
+    int cobjR = (int)(sizeof(rgobjR)/sizeof(*rgobjR));
+    // The last one is an ORBIT POINT with a method -- a custom slot set
+    // to Jupiter's node. Without it nothing in this list exercises
+    // nNodMethod, and a translation that dropped the method passed.
+    Borrow bTypR(rgTypSwiss[0], 2), bObjR(rgObjSwiss[0], (int)oJup);
+    Borrow bPntR(rgPntSwiss[0], 1), bFlgR(rgFlgSwiss[0], 0);
+
+    EphQueryInit(&eqR, 2451545.0);
+    for (iR = 0; iR < cobjR; iR++)
+      FEphQueryAdd(&eqR, rgobjR[iR], 0, oEar, NULL);
+    cR = CEphRequestFromQuery(&eqR, 69.184, &reqR, rgmapR);
+    // EVERY one of them, not merely some. The builder skips an object it
+    // cannot express, which is right -- the chain walk then offers it to
+    // the next source -- but it makes a translation BUG look exactly like
+    // "this source cannot do that object". These seven all have a version
+    // 4 form, so a count short of seven is the builder losing one, and
+    // that is the failure this leg exists for: sabotaging the node method
+    // does not corrupt the orbit point, it DROPS it, and every per-object
+    // check below then passes by never running.
+    Check(cR == cobjR,
+      "the request carries every object the query asked for (%d of %d)",
+      cR, cobjR);
+    Check(!reqR.profiles.empty() &&
+      reqR.profiles.size() <= reqR.objs.size(),
+      "with its profiles deduplicated (%d profiles, %d objects)",
+      (int)reqR.profiles.size(), (int)reqR.objs.size());
+
+    // The instant is TT and the Delta-T that got there is stated, so a
+    // server's own model cannot quietly become part of the answer.
+    Check(reqR.timeScale == eph::kTimeTT &&
+      RAbs(reqR.start.Sum() - (2451545.0 + 69.184/86400.0)) < 1.0e-9 &&
+      RAbs(reqR.deltaTSec - 69.184) < 1.0e-9,
+      "the instant is TT with the host's own Delta-T stated (%.6f)",
+      reqR.deltaTSec);
+
+    // It survives its own codec.
+    eph::EncodeRequest(&rgbR, reqR);
+    Check(eph::ParseRequest(rgbR.data(), rgbR.size(), &reqBack, &strWhyR)
+      == eph::kOk, "and encodes to a REQUEST that parses (%s)",
+      strWhyR.c_str());
+    Check(reqBack.objs.size() == reqR.objs.size() &&
+      reqBack.profiles.size() == reqR.profiles.size(),
+      "with its objects and profiles intact");
+
+    // And every object is the call Astrolog would have made itself.
+    for (iR = 0; iR < cR; iR++) {
+      SWISSSPEC ssR;
+      eph::swiss::SwissCall cCall;
+      int iq = rgmapR[iR].iObjQuery;
+      CONST eph::Object &objR = reqBack.objs[rgmapR[iR].iObjReq];
+
+      if (!FSwissPlanetSpec(eqR.rgobj[iq], eqR.rgcent[iq], &ssR))
+        continue;
+      {
+        uint16_t errMap = eph::swiss::MapObject(objR, 0,
+          reqBack.profiles[objR.profile], reqBack.timeScale,
+          reqBack.deltaTSec, SEFLG_SWIEPH, &cCall, &strWhyR);
+        Check(errMap == 0, "%s maps back to a Swiss call (%s)",
+          szObjName[eqR.rgobj[iq]], strWhyR.c_str());
+        if (errMap != 0)
+          continue;
+      }
+      Check(cCall.ipl == ssR.iobj,
+        "%s asks the server for the body Astrolog asks Swiss for "
+        "(%d, not %d)", szObjName[eqR.rgobj[iq]], (int)cCall.ipl,
+        (int)ssR.iobj);
+      Check(cCall.point == (ssR.nPnt > 0 ? ssR.nPnt - 1 : 0),
+        "%s keeps its orbit point (%d)", szObjName[eqR.rgobj[iq]],
+        cCall.point);
+      // Only where it means anything. FSwissPlanetSpec() fills
+      // nNodMethod for every object from the global setting, but it
+      // selects nothing unless the object IS an orbit point, and the
+      // wire carries it only for kind 1. Asserting it on a plain body
+      // asks the translation to carry a field the protocol has no place
+      // for -- which this check did on its first run, and six bodies
+      // failed a rule that was the test's invention.
+      if (ssR.nPnt > 0)
+        Check(cCall.nodMethod == ssR.nNodMethod,
+          "%s keeps the method its node is computed by (%d, not %d)",
+          szObjName[eqR.rgobj[iq]], (int)cCall.nodMethod,
+          (int)ssR.nNodMethod);
+      // The ephemeris bits are deliberately NOT carried -- which
+      // ephemeris answers is the server's business -- so compare what
+      // remains.
+      Check((cCall.iflag & ~(SEFLG_SWIEPH | SEFLG_JPLEPH | SEFLG_MOSEPH)) ==
+        (ssR.iflag & ~(SEFLG_SWIEPH | SEFLG_JPLEPH | SEFLG_MOSEPH)),
+        "%s keeps every flag but the ephemeris bits (%08x vs %08x)",
+        szObjName[eqR.rgobj[iq]], (unsigned)(cCall.iflag & ~(SEFLG_SWIEPH | SEFLG_JPLEPH | SEFLG_MOSEPH)),
+        (unsigned)(ssR.iflag & ~(SEFLG_SWIEPH | SEFLG_JPLEPH | SEFLG_MOSEPH)));
+    }
+  }
   EphSrvFinalizeQt();    // This group sets the adapter's state itself
   ClearWinSrvTestQt();   // rather than inheriting whatever ran before.
 

@@ -182,7 +182,15 @@ typedef struct _EphRow {
 // object it has already failed this cast.
 
 typedef struct _EphQuery {
-  real rJD;             // The instant, in TT, as JulianDayFromTime() makes it.
+  real rJD;             // The instant in UT1, as JulianDayFromTime() makes
+                        // it -- NOT TT. A source converts if it needs TT:
+                        // the Swiss family hands this straight to
+                        // FSwissPlanet(), which adds Delta-T itself, and
+                        // the Prometheia source declares kTimeUT1 with it.
+                        // This said "in TT" until 2026-09-18, which was
+                        // wrong and is the sort of wrong that a new
+                        // source implements faithfully -- ephprom.cpp got
+                        // it right by reading the callers instead.
   int cobj;             // Objects in the query.
   int rgobj[objMax];    // The Astrolog object index of each object.
   int rgcent[objMax];   // The orbit's centre: FSwissPlanet()'s indCent.

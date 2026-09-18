@@ -56,5 +56,22 @@ g++ -O -I. -o "$out/kind4-fixture" tools/kind4-fixture.cpp \
   "$out/kind4-fixture" "$out"
 } > "$out/FIXTURE.tsv"
 sha256sum "$out/FIXTURE.tsv" | awk '{print $1}' > "$out/FIXTURE.sha256"
+
+# The same element sets as COEFFICIENTS, not only as the Swiss-format file
+# this generator feeds itself. A cleanroom consumer needs the inputs and
+# must not need another engine's file format to get them.
+cat > "$out/ELEMENTS.md" <<'EOF'
+Angles in degrees, a in AU, coefficients of T^0..T^(n-1) with
+T = (t_TT - epoch)/36525. Equinox J2000 (A.16 value 0) throughout.
+
+case  origin  epoch (JD TT)  nTerms  M          a        e          w        node       i
+A     Sun     2415020.0      1       [10]       [41]     [0.02]     [20]     [30]       [1.5]
+B     Sun     2415020.0      2       [10, 0]    [41, 0]  [0.02, 0]  [20, 0]  [30, 1.0]  [1.5, 0]
+C     Sun     2415020.0      2       [10, 400]  [41, 0]  [0.02, 0]  [20, 0]  [30, 0]    [1.5, 0]
+D     Earth   2451545.0      1       [0]        [0.01]   [0.05]     [60]     [40]       [5]
+
+Evaluated at each case's epoch and at T = 1 (JD 2451545.0 for A-C,
+2488070.0 for D).
+EOF
 cat "$out/FIXTURE.tsv"
 echo "sha256: $(cat "$out/FIXTURE.sha256")"
