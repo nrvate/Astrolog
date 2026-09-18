@@ -17872,7 +17872,10 @@ static CONST HORIZONSCASE rghorizonsQt[] = {
 // The site the topocentric case is recorded for. Pinned here rather than
 // taken from whatever settings the suite is running under, or the manifest
 // would not reproduce.
-#define rHorLonQt (-71.0598)
+// Astrolog stores longitude WEST-positive, and the builder negates it to
+// give Horizons the east-positive value it wants. So this is +71 for a
+// site at 71 west, and the URL must come out with -71.
+#define rHorLonQt 71.0598
 #define rHorLatQt 42.3584
 #define rHorElvQt 10.0
 
@@ -17947,6 +17950,12 @@ static void TestHorizonsQt()
   Check(strstr(szUrl, "coord@399") != NULL &&
     strstr(szUrl, "SITE_COORD") != NULL,
     "the topocentric query names a site rather than the geocentre");
+  Check(strstr(szUrl, "SITE_COORD=%27-71.0598") != NULL,
+    "a site 71 degrees WEST is sent to Horizons as -71, since Astrolog "
+    "stores longitude west-positive and Horizons wants east-positive");
+  Check(strstr(szUrl, " ") == NULL,
+    "no raw space survives into the query string: the hand encoder expands "
+    "only ' and ;, so a space in the format string went out unencoded");
   for (i = 0; i < cCase; i++)
     if (rghorizonsQt[i].id >= nMillion)
       break;

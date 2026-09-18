@@ -4062,7 +4062,10 @@ void SzUrlJPLHorizons(int id, CONST CI *pciBase, flag fTopo, real lonSite,
 
   // Compose URL to download from internet.
   if (fTopo) {
-    sprintf2(S(szLine), "COORD_TYPE= 'GEODETIC'&"
+    // No space after the "=": it went out raw and unencoded, because the
+    // hand encoder below only expands ' and ;. A space is not legal in a
+    // query string, and the value Horizons then read began with one.
+    sprintf2(S(szLine), "COORD_TYPE='GEODETIC'&"
       "SITE_COORD='%lf,%lf,%lf'&",
       -lonSite, latSite, elvSite / 1000.0);
   } else
