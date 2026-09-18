@@ -2286,6 +2286,14 @@ the gates the phase touches.
      checked ZERO cases -- reported to them and fixed -- which is why the
      coverage line matters more than the verdict.
 
+   - **The server's own gates, re-run.** `make check` does not run them,
+     and this branch changed `eph_srv.cpp` (the no-ephemeris startup line
+     went from warn to error, because `--log-level error` filtered out
+     the one message explaining why a running server answers nothing).
+     golden 149 comparisons bit-exact against the fork, robust, limits
+     and ops all pass. **ops is the one that mattered here**, since it
+     reads the daemon's log.
+
    - **A delegated code review found six defects, all now fixed**, and
      the first of them is the reason phase 8 exists rather than being a
      formality:
