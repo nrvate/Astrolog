@@ -594,25 +594,6 @@ struct Capabilities {
       if (e.second == m && Bit(e.first, observer)) return true;
     return false;
   }
-  // The largest advertised mask for this observer that asks for no more
-  // than m. A client must send only advertised capabilities, and 3.5a
-  // makes an unlisted mask ERROR 11 -- so asking for a term this observer
-  // does not list is not merely unhelpful, it fails the whole request on a
-  // conformant server. Astrolog sent the full mask for a heliocentric cast
-  // and got away with it only because astrolog-ephd happened to be lenient
-  // about what it accepted; against prometheiad the same cast was refused.
-  // Narrowing here is right whatever a server chooses to accept.
-  uint8_t BestCorrectionMask(uint8_t observer, uint8_t m) const {
-    uint32_t best = 0;
-    bool found = false;
-    for (const auto &e : corrMasks)
-      if (Bit(e.first, observer) && (e.second & ~(uint32_t)m) == 0 &&
-          (!found || e.second > best)) {
-        best = e.second;
-        found = true;
-      }
-    return found ? (uint8_t)best : (uint8_t)0;
-  }
   bool Zodiac(const std::string &s) const {
     for (const std::string &z : zodiacs)
       if (z == s) return true;

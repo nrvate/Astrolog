@@ -24,6 +24,44 @@
 #include "ephsrv/ephproto.h"
 #include "ephsrv/ephswiss.h"
 
+// The largest correction mask this observer is ADVERTISED to honour that
+// asks for no more than m, or 0 when it lists none.
+//
+// A client must send only advertised capabilities, and 3.5a makes an
+// unlisted mask ERROR 11 -- the whole request, not one object -- so asking
+// for a term an observer does not list is not merely unhelpful, it fails
+// the cast on a conformant server. Astrolog sent the full mask for a
+// heliocentric cast and got away with it only because astrolog-ephd
+// happened to be lenient about what it accepted; against Prometheia's
+// server the same cast was refused outright.
+//
+// THIS LIVES HERE AND NOT ON eph::Capabilities, WHERE IT BELONGS BY
+// SHAPE. ephsrv/ephproto.h is one of the three locked artifacts: it is
+// byte-untouchable, and a change to it is a new named drop and never an
+// edit. That rule exists because the other project VENDORS the file and
+// compares it byte for byte -- which is exactly how this was caught, by
+// them asking whether a 19-line addition of mine meant a drop was coming.
+// It did not move a single wire byte, and it was still a violation: the
+// lock is on the bytes, not on the format. A free function over the
+// already-parsed capabilities does the same work outside the lock.
+inline uint8_t NBestCorrMaskEph(CONST eph::Capabilities &caps,
+  uint8_t observer, uint8_t m)
+{
+  uint32_t best = 0;
+  bool found = false;
+
+  for (size_t i = 0; i < caps.corrMasks.size(); i++) {
+    uint32_t obs = caps.corrMasks[i].first, mask = caps.corrMasks[i].second;
+    if (observer < 32 && ((obs >> observer) & 1u) != 0 &&
+      (mask & ~(uint32_t)m) == 0 && (!found || mask > best)) {
+      best = mask;
+      found = true;
+    }
+  }
+  return found ? (uint8_t)best : (uint8_t)0;
+}
+
+
 // One object of the query, as the request carries it. The host keeps the
 // mapping so a DATA row can be read back to the query's object order: the
 // request's objects are only those the translation could express, which

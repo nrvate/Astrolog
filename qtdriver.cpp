@@ -7705,7 +7705,7 @@ void ClampEphSrvReqQt(eph::Request *preq)
       eph::Profile &pf = preq->profiles[iP];
       if (!esrv.caps.CorrectionMask(pf.observer, pf.corrections))
         pf.corrections =
-          esrv.caps.BestCorrectionMask(pf.observer, pf.corrections);
+          NBestCorrMaskEph(esrv.caps, pf.observer, pf.corrections);
     }
   if (preq->objs.size() > (size_t)dwObjs)
     preq->objs.resize(dwObjs);  // The server would refuse the whole
