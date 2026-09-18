@@ -211,6 +211,30 @@ version 3, and this section is the design authority behind it.
   (use `atan2(|a x b|, a.b)`); and a subset check that reads only the
   mask-0 answer is vacuous against a server that echoes the request.
 
+- **A DROP IS DRAFTED AND AWAITS THE MAINTAINER: the distance of a MEAN
+  orbit point** (`/nvm/work/ephv4-drop-meanpoint/DROP.md`, drafted at
+  `f0f3488`). **Not sent to Prometheia as a proposal until it is
+  approved here.** It moves no artifact bytes -- it adds sentences to
+  §3.5a, like the kind-4 drop.
+
+  **What it is.** Two conforming servers put the Moon's MEAN node at the
+  same direction and a different distance: 368,130 km against our
+  384,407, which is the Moon's mean distance CONSTANT. §3.5a does not say
+  what the column means, so neither is wrong -- and Astrolog re-centres
+  with it (`calc.cpp:1221` adds Earth's position to a node built from the
+  row's distance), so a Mars-centred chart of the two servers differs by
+  4.18 arcsec. The drop defines a mean point's distance as the radius its
+  own elements give, covers the mean apsides as well as the nodes, and
+  says a client may re-centre with it.
+
+  **THE DECISION IS NOT TECHNICAL.** `astrolog-ephd` will NOT conform:
+  it is bit-exact with Swiss by design, and Swiss returns the constant.
+  So this publishes a rule our own server does not follow, joining the
+  three standing upstream-Swiss divergences. The draft argues that is
+  right -- a column whose meaning is undefined means whatever the nearest
+  implementation does -- but whether to publish such a rule is the
+  maintainer's to decide knowingly.
+
 - **A NAMED DROP IS CLOSED: correction masks per object KIND**
   (`/nvm/work/ephv4-drop-corrkind/DROP.md`, cut at `050a5a4`, implemented
   at `eed6429`, completed at `472b21a`). **Verdicted by Prometheia 99/99**,
