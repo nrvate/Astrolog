@@ -1068,7 +1068,7 @@ void ComputeEphem(real t)
   // the loop reads it per object below (EPHEMERIS_CLIENT_PLAN.md lesson
   // 1: the fetch must not be per object).
   if (fSrvPla)
-    SrvPrefetchQt(t, objCentCalc, imax);
+    SrvPrefetchQt(t, objCentCalc, imax, NULL);
 #endif
 #ifdef SWISS
   // The Swiss-family source of the registry asks the same way: one

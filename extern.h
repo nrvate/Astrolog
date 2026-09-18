@@ -1207,7 +1207,8 @@ extern void MousePosQt P((int *, int *));
 // ComputeEphem()'s loop asks the server for the whole cast; the per-object
 // read inside it, the server analogue of the GetJPLHorizons() call site,
 // answers six reals, the same ones FSwissPlanet() and GetJPLHorizons() fill.
-extern void SrvPrefetchQt P((real, int, int));
+extern void SrvPrefetchQt P((real, int, int, CONST EPHQUERY *));
+extern void EphSrvTransportBindQt P((void));
 extern flag FSrvPlanetQt P((int, real,
   real *, real *, real *, real *, real *, real *));
 extern void EphSrvStartupQt P((void));

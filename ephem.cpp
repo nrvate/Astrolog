@@ -382,16 +382,18 @@ flag FEphParamSet(int iep, CONST char *szVal)
   fMoved = !FEqSz(szOld, szVal != NULL ? szVal : "");
   FCloneSz(szVal != NULL && *szVal ? szVal : NULL,
     &us.rgszEphParam[iep]);
-  // A source holds files and connections open against the values it was
-  // given, so a parameter that actually MOVED drops what its owner has
-  // open and the next question reopens on the new one. Only on a real
-  // change: the settings sweeps rewrite every field, and dropping an
-  // open engine on every no-op write would reopen it hundreds of times.
-  if (fMoved) {
-    int isrc = IEphSrcFromKey(rgephparam[iep].szSrc);
-    if (isrc >= 0)
-      rgephsrc[isrc]->Stop();
-  }
+  // No notification to the owning source, deliberately. Telling it to
+  // Stop() here was the first shape and it was wrong twice over: a
+  // notification can be missed by any path that writes the value another
+  // way, and Stop() is far too blunt for a REMOTE source -- it tore down
+  // a live connection and its in-flight request merely because the user
+  // edited the address, discarding work the adapter is built to carry
+  // across a reconnect.
+  //
+  // A source that holds something open against a parameter compares what
+  // it opened with what the parameter says, at the point it uses it.
+  // That cannot be missed and cannot fire too hard.
+  (void)fMoved;
   return fTrue;
 }
 

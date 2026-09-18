@@ -210,18 +210,37 @@ flag FEphPromAvailable(char *szWhy, int cch)
   return fTrue;
 }
 
+// What the open engine was opened FROM, so a parameter that has moved
+// since is noticed here rather than announced from elsewhere. A
+// notification can be missed by any path that writes the value another
+// way; comparing at the point of use cannot.
+static char szEphPromOpenedFrom[3][256];
+
 flag FEphPromStart(char *szWhy, int cch)
 {
   char szWhy2[256];
   prometheia_error err;
+  int iep;
 
-  if (fEphPromOpen)
-    return fTrue;
+  if (fEphPromOpen) {
+    for (iep = 0; iep < cepPromParam; iep++)
+      if (!FEqSz(szEphPromOpenedFrom[iep], SzEphPromParam(iep))) {
+        // The engine is open on files the settings no longer name. Close
+        // and reopen: 0.x has no way to drop or swap a catalog, and
+        // close-and-reopen is the path the library's authors sanction.
+        EphPromStop();
+        break;
+      }
+    if (fEphPromOpen)
+      return fTrue;
+  }
   if (!FEphPromResolve(szWhy2, (int)sizeof(szWhy2))) {
     if (szWhy != NULL)
       sprintf2(szWhy, cch, "%s", szWhy2);
     return fFalse;
   }
+  for (iep = 0; iep < cepPromParam; iep++)
+    sprintf2(S(szEphPromOpenedFrom[iep]), "%s", SzEphPromParam(iep));
   if (prometheia_engine_open(szEphPromEphe, &pephProm, &err) !=
     PROMETHEIA_OK) {
     pephProm = NULL;

@@ -120,6 +120,7 @@
 
 #include "astrolog.h"
 #include "qtdriver.h"
+#include "ephreq.h"
 // The Swiss Ephemeris constants the Ephemeris Server backend speaks in
 // (SEFLG_*, SE_SIDM_*) and swe_deltat(), which the local path also calls
 // to make the instant it sends -- the vendored library, the one every
@@ -7807,7 +7808,12 @@ void SzEphSrvStatusQt(char *sz, int cch)
   sz[0] = chNull;
   if (!FSrcChainHead("server"))
     return;
-  if (SzSet(us.rgszEphParam[epServerUrl]))
+  // FSzSet, not SzSet: SzSet() hands back "" for a null, and "" is a
+  // perfectly true pointer -- so this test was always taken, the default
+  // below was unreachable, and the raw null went to "%s". The status line
+  // read "Ephemeris Server (null)" for every user who had not set an
+  // address, which is exactly the user the default exists for.
+  if (FSzSet(us.rgszEphParam[epServerUrl]))
     sprintf2(S(szAddr), "%s", us.rgszEphParam[epServerUrl]);
   else
     sprintf2(S(szAddr), "localhost:%d", eph::kDefaultPort);
@@ -7826,6 +7832,105 @@ void SzEphSrvStatusQt(char *sz, int cch)
 
 // Program exit: the socket and the timers go before the application does,
 // the way every other Qt object here is torn down in FinalizeQt().
+
+// ---------------------------------------------------------------------
+// The Qt transport (section 4.2, phase 6c).
+//
+// The registry's server source has no idea any of the above exists: it
+// asks whatever transport registered itself (ephem.h, EPHTRANS). This is
+// that table for the Qt build, and it is thin on purpose -- every one of
+// these delegates to the adapter the Ephemeris Server client already is,
+// so the chain reaches the SAME connection, window cache, retry ladder
+// and prefetch that the pre-registry path reached, rather than a second
+// client that would drift from it.
+
+static flag FAvailTransQt(char *szWhy, int cch)
+{
+  QUrl url;
+  QString strErr;
+
+  if (!FUrlEphSrv(SzSet(us.rgszEphParam[epServerUrl]), &url, &strErr)) {
+    if (szWhy != NULL)
+      sprintf2(szWhy, cch, "%s",
+        strErr.isEmpty() ? "the server address is not usable" :
+        strErr.toLocal8Bit().constData());
+    return fFalse;
+  }
+  return fTrue;
+}
+
+
+static int NStateTransQt(char *sz, int cch)
+{
+  if (sz != NULL)
+    SzEphSrvStatusQt(sz, cch);
+  return esrv.est == esWelcomed ? esReady :
+    esrv.est == esConnecting ? esConnecting : esFailed;
+}
+
+
+static void StartTransQt()
+{
+  EphSrvStartupQt();
+}
+
+
+static void StopTransQt()
+{
+  EphSrvFinalizeQt();
+}
+
+
+static flag FSubmitTransQt(CONST EPHQUERY *pq)
+{
+  if (pq == NULL || pq->cobj <= 0)
+    return fFalse;
+  // One submit for the whole query, which is what a remote source needs:
+  // a per-object fetch is a round trip per body (EPHEMERIS_CLIENT_PLAN.md
+  // lesson 1). The plan it leaves is read back per object below.
+  // JulianDayFromTime()'s inverse: the adapter speaks Astrolog's T and the
+  // query carries the JD it makes.
+  SrvPrefetchQt((pq->rJD - 2415020.0) / 36525.0, oEar, oNorm, pq);
+  return fTrue;
+}
+
+
+static flag FReadTransQt(CONST EPHQUERY *pq, int iObj, EPHROW *prow)
+{
+  real r1, r2, r3, r4, r5, r6;
+
+  if (pq == NULL || iObj < 0 || iObj >= pq->cobj)
+    return fFalse;
+  if (!FSrvPlanetQt(pq->rgobj[iObj], pq->rJD, &r1, &r2, &r3, &r4, &r5, &r6))
+    return fFalse;
+  // FSrvPlanetQt() answers in FSwissPlanet()'s argument order; EPHROW
+  // carries the protocol's. The one transposition is ephem.h's, and this
+  // is the same swap ephswiss.cpp makes for the local sources.
+  prow->rg[0] = r1;   // longitude
+  prow->rg[1] = r2;   // latitude
+  prow->rg[2] = r4;   // distance
+  prow->rg[3] = r3;   // longitude rate
+  prow->rg[4] = r5;   // latitude rate
+  prow->rg[5] = r6;   // distance rate
+  prow->nErr = ephErrNone;
+  prow->nNativeRes = ephNativeNone;
+  prow->fApprox = fFalse;
+  prow->szSrc = "server";
+  return fTrue;
+}
+
+
+static CONST EPHTRANS ephtransQt = {
+  "Qt WebSocket", FAvailTransQt, NStateTransQt, StartTransQt, StopTransQt,
+  FSubmitTransQt, FReadTransQt
+};
+
+
+void EphSrvTransportBindQt()
+{
+  EphSrvTransportSet(&ephtransQt);
+}
+
 
 void EphSrvFinalizeQt()
 {
@@ -8529,7 +8634,7 @@ static int CObjReqSrvQt()
   return dw < 1 ? 1 : (int)dw;
 }
 
-void SrvPrefetchQt(real t, int objCentCalc, int imax)
+void SrvPrefetchQt(real t, int objCentCalc, int imax, CONST EPHQUERY *pqSrv)
 {
   real jd = JulianDayFromTime(t), jde;
   std::vector<eph::Profile> rgprof;    // the cast's profiles, deduplicated
@@ -8598,6 +8703,24 @@ void SrvPrefetchQt(real t, int objCentCalc, int imax)
   // the object and profile that make the server make that same call), then
   // split into as few REQUESTs as WELCOME's limits allow.
   cObjMax = CObjReqSrvQt();
+  if (pqSrv != NULL) {
+    // Driven by the host's query (phase 6): the objects are the ones the
+    // registry asked for, and ephreq.h makes the same translation this
+    // loop makes -- one implementation, so a remote answer through the
+    // chain and one through the legacy path cannot ask different
+    // questions. The profiles come back deduplicated already.
+    eph::Request reqQ;
+    EPHREQMAP rgmapQ[objMax];
+    int cQ = CEphRequestFromQuery(pqSrv, (jde - jd) * 86400.0, &reqQ,
+      rgmapQ), iQ;
+
+    for (iQ = 0; iQ < (int)reqQ.profiles.size(); iQ++)
+      rgprof.push_back(reqQ.profiles[iQ]);
+    for (iQ = 0; iQ < cQ; iQ++) {
+      rgobjCast.push_back(reqQ.objs[rgmapQ[iQ].iObjReq]);
+      rgiobjCast.append(pqSrv->rgobj[rgmapQ[iQ].iObjQuery]);
+    }
+  } else
   for (i = oEar; i <= imax; i++) {
     if (FSkipEphem(i, objCentCalc, fFalse))
       continue;
@@ -9147,6 +9270,12 @@ void BeginQt()
 {
   static int s_argc = 1;
   static char *s_argv[] = { (char *)"astrolog", NULL };
+
+  // Before anything casts: the registry's server source asks whichever
+  // transport registered itself, and in this build that is the adapter
+  // below. Bound here rather than by a static initializer so the order is
+  // visible and so a build that never starts a GUI never binds one.
+  EphSrvTransportBindQt();
 
 #ifdef QTTEST
   s_pfnMsgPrevQt = qInstallMessageHandler(MessageFilterQt);

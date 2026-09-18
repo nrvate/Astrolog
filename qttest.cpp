@@ -18458,7 +18458,7 @@ static void TestEphSrvQt()
         QElapsedTimer tim;
         std::clock_t c0 = std::clock();
         tim.start();
-        SrvPrefetchQt(0.905, oEar, oPlu);
+        SrvPrefetchQt(0.905, oEar, oPlu, NULL);
         double sCpu = (double)(std::clock() - c0) / CLOCKS_PER_SEC,
           sWall = tim.elapsed() / 1000.0;
         Check(sWall >= 1.4 && sWall < 3.0, "the cast waited its bound "
@@ -21472,8 +21472,17 @@ static void TestEphemDialogQt()
       if (peChain != NULL && plStatus != NULL) {
         peChain->setText("server");
         FClickButtonQt(pw, "dbEp_ct");
-        Check(plStatus->text().contains("no transport in this build"),
-          "a registered source with no transport says so (\"%s\")",
+        // The Qt build BINDS a transport now (phase 6c), so the honest
+        // line is that the server is not reachable, not that this build
+        // cannot reach one. It must also not claim to be online, and it
+        // must name an address rather than printing a null for the user
+        // who never set one -- which it did until the default branch
+        // was reachable.
+        Check(plStatus->text().contains("Ephemeris Server") &&
+          !plStatus->text().contains("online") &&
+          !plStatus->text().contains("(null)"),
+          "a bound transport that cannot reach a server says so, with an "
+          "address (\"%s\")",
           plStatus->text().toLocal8Bit().constData());
         peChain->setText("nosuchsource");
         FClickButtonQt(pw, "dbEp_ct");
