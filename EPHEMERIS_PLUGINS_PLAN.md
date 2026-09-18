@@ -2387,6 +2387,78 @@ the gates the phase touches.
    did not exist before this corpus and is the reason 6h was called
    unverifiable.
 
+23. **The Prometheia project's review of `ephprom.cpp` (2026-09-18).**
+   A review from the OTHER side of the plugin boundary, run under the
+   cleanroom rule -- their agent read this plugin and their own headers,
+   and nothing Swiss. Eight findings plus a correction to advice they had
+   given earlier. All are resolved; one was refuted.
+
+   **The headline finding was wrong, and proving that was worth more than
+   fixing it would have been.** They reported that sidereal stars come
+   back about 24.7 degrees out, because star profiles are given the
+   `fagan-bradley` zodiac while the read deliberately does NOT subtract
+   `is.rSid` -- justified in a comment claiming the library's zodiac
+   option is "a label, not a transform". They had measured on their own
+   engine that it IS a transform. That is the exact shape of the server
+   source's P1, so it was settled by measurement rather than by argument:
+   built against the real library, Sirius at 1990-06-15 reads
+   **104.449916 tropical and 79.334059 under Fagan/Bradley from BOTH this
+   source and the swiss source, identical to 0.0000 arcsec.** The chart
+   is right.
+
+   **But the comment's REASON was wrong**, and a wrong reason sitting over
+   working code is worse than none: it invited exactly the "fix" that
+   breaks it. The real reason is the CONSUMER -- `ComputeEphem()` re-adds
+   `is.rSid` to a body row and the star callers do not, so each row is
+   pre-adjusted for whoever reads it. Corrected, with the measurement in
+   the comment.
+
+   **The seven real findings, all fixed:**
+
+   | # | what | reach |
+   |---|---|---|
+   | 1 | `FillRow()` wrote row 0 for EVERY row; the failure path already had the offset | latent -- casts ask one row |
+   | 3 | orbit points always took the TT entry point, so a UT1 cast computed nodes and apsides delta-T late -- **5.2278 arcsec** on the osculating lunar apogee | live |
+   | 4 | a row failing AFTER a row succeeded was not recorded at all; `iRowFailed` was never assigned; where several failed first, the LAST won | latent |
+   | 5 | an unrecognised `ARGUMENT` refusal DEFAULTED to "undefined point", classified from their message prose | live |
+   | 6 | every `star_find` refusal was "unknown body", never ambiguity | live |
+   | 7 | the delta-T COLUMN dropped the user's `-Yz0` override that the hook applies | live |
+   | 0 | **no ABI check at all**, and their own correction: it must be `==`, not `>=`, because 0.x APPENDS to `prometheia_options` and a newer library reads past the end of the older struct | latent under static linking |
+
+   **Five nets, each proven by sabotage.** Two are deliberately not netted
+   and say so: the ABI check needs a mismatched library, and finding 6's
+   branch is reached only when `star_lookup` finds nothing, which no name
+   available here does.
+
+   **Two of the nets were wrong before they were right, both silently** --
+   the same lesson as P1's withdrawn test, twice more. The straddling-rows
+   leg asked for a 400000-day step; `stepNs` is an int64 of NANOSECONDS,
+   it overflowed, and the leg "passed" having computed two rows well
+   inside coverage. Even at 100000 days the i64 product of row and step
+   overflows past about 292 years, and this ephemeris ends 660 years out,
+   so it uses the LIST form. And the delta-T leg first read a column the
+   profile had never requested, comparing 0.0 with 0.0. **A net that
+   cannot fail is the default outcome, not the unlucky one.**
+
+   And the star-parity net itself took two tries for the same reason: it
+   first ran inside the scope of an earlier leg that deliberately points
+   the ephemeris at a missing file, then passed with the bad subtraction
+   reinstated because it never re-cast inside the sidereal borrow, so
+   `is.rSid` was zero and it was blind to the one subtraction it exists
+   to watch.
+
+   **Their Q2 and Q3 are now answered by the compiler.** Three mappings
+   are straight copies of a protocol enumeration into a Prometheia one,
+   justified by a comment saying the lists agree. They do -- and three
+   `static_assert`s now say so, because a comment cannot notice a
+   reordering.
+
+   **One thing this turned up that is not theirs:** `FEphSubmitSide()`
+   (`ephem.cpp:650`) walks the user's chain and only APPENDS swiss, so
+   side calls -- the fixed stars among them -- are not the "unconditional
+   Swiss calls" the comment above it still claims. The plugin star paths
+   are live code.
+
 21. **Phase 8's third review: the fixes' own damage (2026-09-18).** A
    pass over phase 6's transport AS IT NOW STANDS, briefed to hunt what
    the earlier fixes broke rather than to re-find what they fixed. It
