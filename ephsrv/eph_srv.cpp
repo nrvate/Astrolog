@@ -2962,15 +2962,22 @@ static void BuildWelcome(const EphDiscovery &disc, const char *szSwe) {
   // returns light time alone for a body at those observers -- and an
   // orbit point that still honours more reports so there.
   {
-    const uint32_t obsFull  = 0x13;   // geocentric, topocentric, body
-    const uint32_t obsLight = 0x0C;   // heliocentric, barycentric
-    const uint32_t obsAll   = 0x1F;
+    const uint32_t obsDefl  = 0x03;   // geocentric, topocentric
+    const uint32_t obsAberr = 0x13;   // ... and the planet-centred one
+    const uint32_t obsAll   = 0x1F;   // ... and heliocentric, barycentric
+    // Deflection is advertised for the geocentric and topocentric
+    // observers ONLY. swe_calc_pctr() re-bases aberration on the centring
+    // body but not deflection -- swi_deflect_light() takes no observer and
+    // uses the Earth's -- so a planet-centred deflection is computed from
+    // no observer's geometry and is wrong by up to half an arcsecond
+    // (ephswiss.h's CorrectionsLive has the referee's numbers). Claiming
+    // it and delivering that is worse than not offering it.
     c.corrMasks = {
-      {obsAll,  0},
-      {obsAll,  eph::kCorrLightTime},
-      {obsFull, eph::kCorrLightTime | eph::kCorrDeflection},
-      {obsFull, eph::kCorrLightTime | eph::kCorrAberration},
-      {obsFull, eph::kCorrMask},
+      {obsAll,   0},
+      {obsAll,   eph::kCorrLightTime},
+      {obsAberr, eph::kCorrLightTime | eph::kCorrAberration},
+      {obsDefl,  eph::kCorrLightTime | eph::kCorrDeflection},
+      {obsDefl,  eph::kCorrMask},
     };
   }
   c.orbitPoints = 0xF;

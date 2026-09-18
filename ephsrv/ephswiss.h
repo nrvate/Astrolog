@@ -335,9 +335,28 @@ inline uint16_t MapObject(const Object &o, int32_t nNative, const Profile &pf,
 inline uint8_t CorrectionsLive(const SwissCall &c, uint8_t observer) {
   switch (c.kind) {
     case kCallPctr:
-      // Honours every term as asked, relative to the centring body
-      // (light time unless SEFLG_TRUEPOS; aberration and deflection after).
-      return kCorrMask;
+      // Light time and aberration, and NOT deflection.
+      //
+      // swe_calc_pctr() re-bases aberration on the centring body -- it
+      // passes xxctr to swi_aberr_light() -- but deflection is applied by
+      // swi_deflect_light(), which takes no observer at all and builds its
+      // geometry from pldat[SEI_EARTH]. So the bending is computed from a
+      // vector relative to JUPITER using the EARTH's Sun geometry, which
+      // is not the deflection seen by any observer.
+      //
+      // Refereed by the Prometheia project against USNO Circular 179's
+      // grav_vec, implemented from the formula rather than from either
+      // engine: 63 of 64 rows fail, worst Mars in 2075 bent 0.544" where
+      // the textbook gives 0.00066", and the Sun's own light bent 9-22
+      // mas from Jupiter -- which nothing can do. Reading the source then
+      // found the missing observer above.
+      //
+      // This is upstream Swiss and this project does not patch that fork,
+      // so the honest answer is to stop CLAIMING the term: what a server
+      // advertises it promises, and what META reports must be what ran.
+      // The advertisement in eph_srv.cpp drops deflection for this
+      // observer to match.
+      return kCorrLightTime | kCorrAberration;
     case kCallNodAps:
       // Light time is never applied: the underlying positions are always
       // true ones (iflg0 carries SEFLG_TRUEPOS) and only aberration and
