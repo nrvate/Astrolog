@@ -19112,6 +19112,34 @@ static flag FWaitEphdQt(QProcess *pproc, QByteArray *pbaLog, int msMax)
 
 // One plugin row at one instant, through the plugin's own question path:
 // the same code a cast would drive, at a question of one object.
+// The same question over SEVERAL rows, which is the shape no cast makes
+// and therefore the shape nothing here used to ask. Returns the whole
+// value block so a caller can look at each row's own slot.
+static flag FPromRowsQt(int nTs, double jd, double rStepDays, int cRow,
+  CONST eph::Profile *ppf, int kind, int naif, int point, int method,
+  double *rgVal, EPHPROMANSWER *pa)
+{
+  EPHPROMQ q;
+  eph::Object ob;
+
+  ob = eph::Object();
+  ob.kind = (uint8_t)kind;
+  ob.profile = 0;
+  ob.naif = naif;
+  ob.point = (uint8_t)point;
+  ob.method = (uint8_t)method;
+  pa->prgVal = rgVal;
+  q.nTs = nTs; q.fList = fFalse;
+  q.jd1 = jd; q.jd2 = 0.0;
+  q.stepNs = (int64_t)(rStepDays * 86400.0 * 1000000000.0);
+  q.cRow = cRow; q.prgJd = NULL;
+  q.rDeltaTSec = rInvalid;
+  q.cprof = 1; q.pargprof = ppf;
+  q.cobj = 1; q.pargobj = &ob;
+  return FEphPromCompute(&q, pa);
+}
+
+
 static flag FPromOneRowQt(int nTs, double jd, CONST eph::Profile *ppf,
   int kind, int naif, int point, int method, CONST char *szName,
   real *pLon, real *pLat, real *pAyan, real *pDeltaT)
@@ -20255,6 +20283,125 @@ static void TestPrometheiaQt()
             "(%.4f\"): one row shape for every source, and the consumer "
             "applies the zodiac exactly once",
             iZod ? "sidereal" : "tropical", rD);
+        }
+      }
+
+      // ---- The Prometheia review's findings, each with its net -------
+      // These are the shapes no CAST makes -- more than one row, a row
+      // that fails after one that did not, a scale-matched orbit point,
+      // an overridden delta-T -- which is exactly why nothing here asked
+      // about them before and why every one of them was wrong.
+      {
+        eph::Profile pfT;
+        double rgVal[4 * kEphPromStride];
+        EPHPROMANSWER aT;
+        real lonA, latA, ayanA, dtA, lonB, latB, ayanB, dtB;
+
+        pfT = eph::Profile();
+        // Ask for the delta-T column, or there is none to check: a
+        // profile requests its extra columns, and the first version of
+        // the delta-T leg below read a column that was never present and
+        // compared 0.0 against 0.0.
+        pfT.columns = eph::kColDeltaT;
+
+        // FINDING 1: every successful row was written to ROW 0. Two rows
+        // a day apart, against the same two instants asked one at a
+        // time: each row must land in its own slot and match.
+        if (FPromRowsQt(eph::kTimeUT1, jd, 1.0, 2, &pfT, eph::kObjBody,
+          301, 0, 0, rgVal, &aT) && aT.rowsOk == 2 &&
+          FPromOneRowQt(eph::kTimeUT1, jd, &pfT, eph::kObjBody, 301, 0, 0,
+            NULL, &lonA, &latA, &ayanA, &dtA) &&
+          FPromOneRowQt(eph::kTimeUT1, jd + 1.0, &pfT, eph::kObjBody, 301,
+            0, 0, NULL, &lonB, &latB, &ayanB, &dtB)) {
+          Check(RAbs(rgVal[0] - lonA) < 1.0e-9,
+            "a two-row question's row 0 is the FIRST instant (%.9f vs "
+            "%.9f)", rgVal[0], lonA);
+          Check(RAbs(rgVal[kEphPromStride] - lonB) < 1.0e-9,
+            "and its row 1 is the second, in its own slot (%.9f vs %.9f)",
+            rgVal[kEphPromStride], lonB);
+        } else
+          Check(fFalse, "the two-row Moon question computed");
+
+        // FINDING 3: an orbit point took the TT entry point whatever the
+        // question's scale, so a UT1 question was answered delta-T late.
+        // The osculating lunar apogee moves fast enough to see it.
+        if (FPromOneRowQt(eph::kTimeUT1, jd, &pfT, eph::kObjOrbitPoint,
+            301, eph::kPtApo, eph::kMethOsculating, NULL,
+            &lonA, &latA, &ayanA, &dtA) &&
+          FPromOneRowQt(eph::kTimeTT, jd, &pfT, eph::kObjOrbitPoint,
+            301, eph::kPtApo, eph::kMethOsculating, NULL,
+            &lonB, &latB, &ayanB, &dtB)) {
+          real rD = RAbs(lonA - lonB) * 3600.0;
+          printf("  osculating apogee, UT1 vs TT at the same number: "
+            "%.4f\"\n", rD);
+          Check(rD > 0.01, "an orbit point honours the question's time "
+            "scale, so UT1 and TT at the same NUMBER differ (%.4f\")", rD);
+        } else
+          Check(fFalse, "the osculating apogee computed in both scales");
+
+        // FINDING 4: a row that failed AFTER one that succeeded was not
+        // recorded at all -- no code, no firstFailedRow, just NaNs. Four
+        // rows walking off the end of the ephemeris. The step is 100000
+        // days and not one big jump, because stepNs is an int64 of
+        // NANOSECONDS and so cannot express much past 292 years -- the
+        // first version of this leg asked for 400000 days, silently
+        // overflowed, and "passed" by computing two rows in coverage.
+        // A LIST of instants, not a grid: 3.5's grid arithmetic forms
+        // the i64 product of row and step in NANOSECONDS, so a grid
+        // cannot span more than about 292 years however the step is
+        // chosen, and the end of this ephemeris is 660 years from here.
+        // The list form exists for exactly this.
+        {
+          EPHPROMQ qL;
+          eph::Object obL;
+          double rgJd[4];
+          int iJd;
+
+          for (iJd = 0; iJd < 4; iJd++)
+            rgJd[iJd] = jd + (double)iJd * 250000.0;
+          obL = eph::Object();
+          obL.kind = eph::kObjBody; obL.profile = 0; obL.naif = 301;
+          aT.prgVal = rgVal;
+          qL.nTs = eph::kTimeUT1; qL.fList = fTrue;
+          qL.jd1 = jd; qL.jd2 = 0.0; qL.stepNs = 0; qL.cRow = 4;
+          qL.prgJd = rgJd; qL.rDeltaTSec = rInvalid;
+          qL.cprof = 1; qL.pargprof = &pfT;
+          qL.cobj = 1; qL.pargobj = &obL;
+          if (FEphPromCompute(&qL, &aT)) {
+          Check(aT.rowsOk > 0 && aT.rowsOk < 4,
+            "some but not all rows of the straddling question computed "
+            "(%d of 4)", aT.rowsOk);
+          Check(aT.errCode != eph::kOErrNone,
+            "a row failing AFTER a row succeeded still reports its error "
+            "(%d)", (int)aT.errCode);
+          // FINDING 5: the classifier used to DEFAULT an unrecognised
+          // argument refusal to "undefined point", so a rewording on the
+          // library's side could turn any refusal into a claim about
+          // orbital geometry. A BODY's refusal must never say that -- it
+          // is coverage where the text says so, and otherwise the honest
+          // "unsupported".
+          Check(aT.errCode == eph::kOErrCoverage ||
+            aT.errCode == eph::kOErrUnsupported,
+            "a body's refusal is coverage or unsupported, never a claim "
+            "about orbital geometry (%d)", (int)aT.errCode);
+          Check(aT.iRowFailed == (uint32_t)aT.rowsOk,
+            "and names the FIRST row it failed on (%u, with %d ok)",
+            (unsigned)aT.iRowFailed, aT.rowsOk);
+          } else
+            Check(fFalse, "the straddling question returned an answer");
+        }
+
+        // FINDING 7: the delta-T COLUMN reported the model's value while
+        // the hook applied the user's -Yz0 override.
+        {
+          Borrow bDt(us.rDeltaT, (real)123.5);
+          if (FPromOneRowQt(eph::kTimeUT1, jd, &pfT, eph::kObjBody, 301,
+            0, 0, NULL, &lonA, &latA, &ayanA, &dtA))
+            Check(RAbs(dtA - 123.5) < 1.0e-6,
+              "the delta-T column reports the delta-T actually applied, "
+              "including the user's override (%.4f)", dtA);
+          else
+            Check(fFalse, "the overridden delta-T question computed");
         }
       }
 

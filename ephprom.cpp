@@ -247,6 +247,30 @@ flag FEphPromStart(char *szWhy, int cch)
   }
   for (iep = 0; iep < cepPromParam; iep++)
     FCloneSz(SzEphPromParam(iep), &rgszEphPromOpenedFrom[iep]);
+  // The ABI the library in front of us actually has, against the one
+  // these headers describe. EXACTLY equal, not "at least": under 0.x the
+  // library grows prometheia_options by APPENDING fields, and a plugin
+  // hands over its own struct -- so a NEWER library reads past the end
+  // of the older, smaller one this build allocates. A >= test would
+  // permit exactly that, and this had no test at all.
+  //
+  // It cannot bite today because the package is a static library, linked
+  // into the binary that compiled against these headers, so the two can
+  // never disagree. It would bite the day BUILD_SHARED_LIBS is set, and
+  // it would bite as a read of uninitialised stack rather than as
+  // anything that names itself. Refusing to bind is the whole fix, and
+  // the source then reports unavailable with the reason, like any other
+  // dependency that is not there.
+  if (prometheia_abi_version() != PROMETHEIA_ABI_VERSION) {
+    pephProm = NULL;
+    sprintf2(S(szEphPromState), "failed: ABI %d, built for %d",
+      prometheia_abi_version(), PROMETHEIA_ABI_VERSION);
+    if (szWhy != NULL)
+      sprintf2(szWhy, cch, "the Prometheia library reports ABI version %d "
+        "but this build was compiled for %d; refusing to bind",
+        prometheia_abi_version(), PROMETHEIA_ABI_VERSION);
+    return fFalse;
+  }
   if (prometheia_engine_open(szEphPromEphe, &pephProm, &err) !=
     PROMETHEIA_OK) {
     pephProm = NULL;
@@ -381,11 +405,18 @@ flag FEphPromStarResolve(CONST char *sz, int *pidx, uint16_t *pnErr,
     // star_lookup's exact matching does not know every form of 3.5a's
     // grammar star_find does (a Flamsteed number among them); when it
     // answers nothing, star_find's one-object answer is the lookup.
-    if (prometheia_star_find(sz, &istar, &err) == PROMETHEIA_OK) {
+    prometheia_status sFind = prometheia_star_find(sz, &istar, &err);
+    if (sFind == PROMETHEIA_OK) {
       *pidx = istar;
       return fTrue;
     }
-    *pnErr = eph::kOErrUnknownBody;
+    // Every failure here used to be "unknown body". star_find answers one
+    // object, so its ARGUMENT refusal is a name it could not narrow to
+    // one -- which is ambiguity (6), a different thing from a name
+    // nothing answers (1), and the one a caller can act on by asking
+    // LOOKUP. NOT_FOUND stays unknown body.
+    *pnErr = sFind == PROMETHEIA_ERROR_ARGUMENT ? eph::kOErrAmbiguous :
+      eph::kOErrUnknownBody;
     sprintf2(szErr, cch, "%s", err.message);
     return fFalse;
   }
@@ -425,27 +456,48 @@ static double RInstantRow(CONST EPHPROMQ *pq, int iRow)
     (double)((int64_t)iRow * pq->stepNs) / 86400000000000.0);
 }
 
-// Map the library's argument-refusal to the A.17 code it means under
-// 3.5a: "the Sun has no heliocentric orbit" is unsupported (2), an
-// observer standing on the object is unsupported (2), a time outside
-// the ephemeris is coverage (3), and an undefined point -- a node of an
-// orbit in the reference plane, an apsis of a circular orbit -- is 5.
-static uint16_t NObjErrFromArgument(CONST char *szMsg)
+// Map the library's argument-refusal to the A.17 code it means. The
+// status alone cannot say: PROMETHEIA_ERROR_ARGUMENT covers a time
+// outside coverage, an observer standing on the object, and an undefined
+// point alike.
+//
+// So the first question asked is OUR OWN: what did we ask for? The
+// header documents ARGUMENT for the orbit-point entry points as exactly
+// the undefined point -- a node of an orbit in the reference plane, an
+// apsis of a circular one -- and that is knowledge about our request
+// rather than about their prose.
+//
+// The message text is then a HINT and nothing more, because it is not
+// part of the contract: the Prometheia project reworded its own server
+// for this reason, having found that classifying on message text let
+// client input change the error codes. This used to DEFAULT to undefined
+// point, so a rewording on their side could silently turn any refusal
+// into a claim about orbital geometry. The default is now unsupported,
+// which is the honest "we cannot say more", and the text can only ever
+// sharpen that into coverage -- never invent a specific geometric claim.
+static uint16_t NObjErrFromArgument(CONST char *szMsg, flag fOrbitPoint)
 {
+  if (fOrbitPoint)
+    return eph::kOErrUndefinedPoint;
   if (strstr(szMsg, "outside") != NULL || strstr(szMsg, "coverage") != NULL)
     return eph::kOErrCoverage;
-  if (strstr(szMsg, "has no") != NULL || strstr(szMsg, "no orbit") != NULL ||
-    strstr(szMsg, "observer") != NULL || strstr(szMsg, "itself") != NULL)
-    return eph::kOErrUnsupported;
-  return eph::kOErrUndefinedPoint;
+  return eph::kOErrUnsupported;
 }
 
 // One row, laid out per 3.5's column order: the base six, then the
 // extra columns in A.10 bit order, zero-filled to the stride.
 static void FillRow(CONST eph::Profile *ppf, CONST prometheia_result *pr,
-  EPHPROMANSWER *pa, real rDeltaT)
+  EPHPROMANSWER *pa, real rDeltaT, int iRow)
 {
-  double *pv = pa->prgVal;
+  // The row's own slot. ephprom.h states the layout -- prgVal +
+  // ((i * cRow) + r) * kEphPromStride -- and this wrote prgVal, row 0,
+  // for every row. A multi-row question therefore landed every
+  // successful row on top of row 0, left rows 1..n-1 holding whatever
+  // was there before, and reported rowsOk = n with no error: wrong
+  // numbers, confidently. FSubmitProm asks for one row, so no cast could
+  // reach it; the failure path a few lines below already had the offset,
+  // which is what made the asymmetry visible.
+  double *pv = pa->prgVal + iRow * kEphPromStride;
   real rDist = pr->dist_au;
 
   // A star without a parallax answers with no distance (3.5): the
@@ -606,23 +658,46 @@ flag FEphPromCompute(CONST EPHPROMQ *pq, EPHPROMANSWER rga[])
       prometheia_status s;
       double *pv;
 
+      // Through the hook itself, so the column reports the value that
+      // was APPLIED. Computed separately, it repeated two of the hook's
+      // three branches and dropped the third -- the user's -Yz0
+      // us.rDeltaT override -- so an overridden cast reported the
+      // model's delta-T while being computed with the user's.
       if (pq->nTs == eph::kTimeUT1)
-        rDeltaT = (g_rDeltaTSec != rInvalid) ? (real)g_rDeltaTSec :
-          swe_deltat(jd - swe_deltat(jd) / 86400.0) * 86400.0;
-      if (po->kind == eph::kObjOrbitPoint)
-        s = prometheia_calc_orbit_point(pephProm, naif, po->point,
-          po->method == eph::kMethMean ? PROMETHEIA_ELEMENTS_MEAN :
-          PROMETHEIA_ELEMENTS_OSCULATING, jd, &opts, &r, &err);
-      else
+        rDeltaT = (real)FEnumDeltaTProm(NULL, jd);
+      if (po->kind == eph::kObjOrbitPoint) {
+        // The scale-matched entry point, as bodies and stars already
+        // take. This always called the TT one, so a UT1 question -- which
+        // every cast is -- computed its nodes and apsides about delta-T
+        // late, some 69 seconds today. Negligible for a mean node;
+        // arcseconds for the osculating lunar apogee, which moves fast.
+        // And the delta-T column still claimed UT1 had been applied.
+        int nElem = po->method == eph::kMethMean ? PROMETHEIA_ELEMENTS_MEAN :
+          PROMETHEIA_ELEMENTS_OSCULATING;
+        s = pq->nTs == eph::kTimeUT1 ?
+          prometheia_calc_orbit_point_ut(pephProm, naif, po->point, nElem,
+            jd, &opts, &r, &err) :
+          prometheia_calc_orbit_point(pephProm, naif, po->point, nElem,
+            jd, &opts, &r, &err);
+      } else
         s = CalcBodyRow(pephProm, naif, fStar, pq->nTs, jd, &opts, &r,
           &err);
       if (s != PROMETHEIA_OK) {
         pv = pa->prgVal + iRow * kEphPromStride;
         for (int i = 0; i < kEphPromStride; i++)
           pv[i] = NAN;
-        if (pa->rowsOk == 0) {
+        // The FIRST failed row, whether or not a row succeeded before
+        // it. This was guarded on rowsOk == 0, which got both halves
+        // wrong: a failure after any success was dropped entirely, so
+        // the answer carried errCode None and firstFailedRow none with
+        // NaNs sitting in the values; and where several rows failed
+        // before the first success, the LAST of them won rather than the
+        // first. iRowFailed was never assigned at all.
+        if (pa->iRowFailed == eph::kRowNone) {
+          pa->iRowFailed = (uint32_t)iRow;
           pa->errCode = s == PROMETHEIA_ERROR_ARGUMENT ?
-            NObjErrFromArgument(err.message) :
+            NObjErrFromArgument(err.message,
+              po->kind == eph::kObjOrbitPoint) :
             (s == PROMETHEIA_ERROR_NOT_FOUND ? eph::kOErrUnknownBody :
             (s == PROMETHEIA_ERROR_INTERNAL ? eph::kOErrInternal :
             eph::kOErrDataMissing));
@@ -630,7 +705,7 @@ flag FEphPromCompute(CONST EPHPROMQ *pq, EPHPROMANSWER rga[])
         }
         continue;
       }
-      FillRow(ppf, &r, pa, rDeltaT);
+      FillRow(ppf, &r, pa, rDeltaT, iRow);
       if (!fStar && pa->rowsOk == 0)
         pa->naif = naif;
       pa->rowsOk++;
