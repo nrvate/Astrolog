@@ -98,6 +98,27 @@ version 3, and this section is the design authority behind it.
   (use `atan2(|a x b|, a.b)`); and a subset check that reads only the
   mask-0 answer is vacuous against a server that echoes the request.
 
+- **A NAMED DROP IS OPEN: the kind-4 elements rule**
+  (`/nvm/work/ephv4-drop-elements/DROP.md`, cut 2026-09-18 at `176e333`).
+  §3.5a's "Elements (kind 4)" gains four normative sentences, approved by
+  the maintainer. It **moves no bytes** -- the three locked artifacts are
+  byte-identical to the corrApplied set and to `cf83dc9`, and kind 4's
+  encoding is unchanged -- so it is a drop rather than an edit because §3
+  is locked, not because the wire moved. Prometheia is building against
+  it. Still owed: the numeric fixture (four cases, named in the drop),
+  generated here and checked there. **§3.5a itself is not edited in this
+  document until the drop is verdicted**, which is the rule the approval
+  condition exists to enforce.
+
+  The substance, because it is the kind of thing that gets lost: kind 4's
+  mean anomaly was ambiguous in a way that put two conforming servers
+  DEGREES apart a century from epoch, with both reporting `corrApplied`
+  truthfully and nothing on the wire catching it. And §3.5a's "mu = GM of
+  the centre from the ephemeris's constants" was simply wrong -- it is
+  the Gaussian constant, which is also the right answer, because a kind-4
+  answer must be a function of the elements the client sent and not of
+  which ephemeris the server happens to have open.
+
 - **Scratch that must survive (do not delete):** `/nvm/work/ephv4*`
   (review.md, the mail file, the verdicts), `eph4sel`, `eph4base` (the
   baseline binary for matrices), `eph4verify`, `tidprobe*.c`, the
@@ -2145,6 +2166,42 @@ the gates the phase touches.
      bug into their own `corrapplied.py` and caught it by fault
      injection rather than by trusting the green. The symptom to grep
      for in any existing leg is a column of suspiciously exact zeros.
+
+16. **Phase 6a, and three things it found (2026-09-18).** `ephserver.cpp`
+   carries an ordinary `EPHSRCDEF` for the `server` key, over a TRANSPORT
+   a backend registers (`EPHTRANS`) rather than an `#ifdef` in the
+   plugin -- so the file compiles identically everywhere and a build with
+   no transport has the source listed and unavailable, which is the shape
+   an uncompiled plugin already has. No transport is bound yet; 6b-6c.
+
+   - **The Prometheia parameters were unreachable.** `-bP`, the settings
+     file and phase 5's dialog all wrote `us.rgszEphParam[]`; the plugin
+     read a private array nothing outside itself ever wrote. Every
+     configured path was dropped and the engine always opened on its
+     default search, with no catalog and no perturbers. Live since phase
+     5 shipped a dialog control that did nothing.
+
+   - **`EPHSRCDEF.rgParam`/`cParam` were read by nothing**, which is why
+     the copy the Prometheia source handed them had drifted in both label
+     and kind -- and the suite pinned the drifted copy, so a test held the
+     wrong value in place. **A field nothing reads cannot be kept
+     honest.** Deleted rather than audited; a source's parameters are
+     asked for by key now.
+
+   - **F11 was load-bearing after all.** Both builds named four parameter
+     indexes by hand beside a generated count of six, two from one source
+     and two from another, so the dialog showed a mixture no selection
+     could use and two parameters had no way in from any dialog. The rows
+     are the chain head's own now. Four rows were never the bug.
+
+   - Found on the way: the PROMETHEIA build had not compiled since the
+     phase 4 merge, invisible because `pkg-config` does not resolve the
+     library here so every run skips that group; and
+     `EphSrvFinalizeQt()` reset everything except the missed-cast flag,
+     so a cast that could not reach one server was replayed at the next
+     one to say WELCOME. The second was found by instrumenting a byte
+     comparison after three wrong guesses -- the measurement named it in
+     one run.
 
 13. **Phase 4c and the merge: the chain IS the selection (2026-09-18).**
    `us.szEphemSource` and `us.rgszEphParam[]` are the only representation
