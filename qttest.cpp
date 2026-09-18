@@ -20493,6 +20493,45 @@ static void TestEphSrvLiveQt()
     "a cast with the server deselected sends nothing and warns not");
 
 
+  // An object with no Astrolog object index is REFUSED, not written out
+  // of bounds (phase 6 review, D1). The adapter's plan is addressed by
+  // object index and is objMax long; a side call names an asteroid as
+  // SE_AST_OFFSET + n, over 10000, and a star by catalogue number. The
+  // read side had always range-checked and the write side had not,
+  // because until the transport took queries the only producer was a
+  // cast loop that cannot go out of range. Submitting one of these wrote
+  // an EPHWINDOW pointer roughly 160 KB past the array.
+  //
+  // Asserted as a REFUSAL because that is what is observable from in
+  // here: the corruption itself is only visible under a sanitizer, and a
+  // net that needs one does not run in the ordinary suite.
+  {
+    EPHQUERY eqOob;
+    int isrcSrv = IEphSrcFromKey("server");
+
+    EphSrvFinalizeQt();
+    EphSourceSet("server,swiss");
+    Check(isrcSrv >= 0, "the registry carries the server source");
+    if (isrcSrv >= 0) {
+      EphQueryInit(&eqOob, 2451545.0);
+      FEphQueryAdd(&eqOob, SE_AST_OFFSET + 1, 0, oEar, NULL);
+      Check(!PephsrcGet(isrcSrv)->FSubmit(&eqOob),
+        "an asteroid's side-call index is refused by the server source, "
+        "not addressed into its plan");
+      Check(eqOob.rgisrc[0] == ephSrcNone,
+        "and the object stays open for the source behind it");
+
+      // The ordinary case still goes through, so the refusal is about
+      // the index and not about queries.
+      EphQueryInit(&eqOob, 2451545.0);
+      FEphQueryAdd(&eqOob, oSun, 0, oEar, NULL);
+      Check(FBetween(eqOob.rgobj[0], 0, objMax-1),
+        "a normal object is inside the plan's addressing");
+    }
+    EphSrvFinalizeQt();
+    EphSourceSet("swiss");
+  }
+
   // Startup with the server selected and NOTHING listening (phase 6e).
   // This is what replaced required-server mode, so it is what has to be
   // pinned: startup must not block and must not exit. The old path did

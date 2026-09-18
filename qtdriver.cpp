@@ -7883,8 +7883,21 @@ static void StopTransQt()
 
 static flag FSubmitTransQt(CONST EPHQUERY *pq)
 {
+  int i;
+
   if (pq == NULL || pq->cobj <= 0)
     return fFalse;
+  // This adapter addresses its plan by Astrolog object index, so it can
+  // only answer objects that HAVE one. A side call does not always: an
+  // asteroid is SE_AST_OFFSET + n (over 10000) and a star is its
+  // catalogue number. Refusing the whole query -- rather than serving
+  // part of it -- is what the chain wants: false means "attempted
+  // nothing", every object stays open, and the Swiss files behind this
+  // source answer them, which is where those side calls were always
+  // served from.
+  for (i = 0; i < pq->cobj; i++)
+    if (!FBetween(pq->rgobj[i], 0, objMax-1))
+      return fFalse;
   // One submit for the whole query, which is what a remote source needs:
   // a per-object fetch is a round trip per body (EPHEMERIS_CLIENT_PLAN.md
   // lesson 1). The plan it leaves is read back per object below.
@@ -8885,6 +8898,16 @@ void SrvPrefetchQt(real t, int objCentCalc, int imax, CONST EPHQUERY *pqSrv)
     // this part was about to read (EPHEMERIS_REVIEW.md A1, C10).
     rgpwin[ig] = pwin;
     for (i = 0; i < rgpart[ig].rgobj.size(); i++) {
+      // The plan is addressed BY ASTROLOG OBJECT INDEX and is objMax
+      // long, so an object outside that cannot be recorded in it. The
+      // read side has always checked (FSrvPlanetQt); the write side had
+      // not, and did not need to while the only producer was the cast
+      // loop below, which runs oEar..imax. A QUERY can carry more: a
+      // side call names an asteroid as SE_AST_OFFSET + n, over 10000.
+      // FSubmitTransQt() refuses such a query outright, so this is the
+      // second line rather than the first.
+      if (!FBetween(rgpart[ig].rgobj[i], 0, objMax-1))
+        continue;
       s_plan.rgent[rgpart[ig].rgobj[i]].pwin = pwin;
       s_plan.rgent[rgpart[ig].rgobj[i]].iObj = i;
     }
@@ -8929,8 +8952,12 @@ void SrvPrefetchQt(real t, int objCentCalc, int imax, CONST EPHQUERY *pqSrv)
         pwin = PwinOpenQt(&req, fFalse);
       if (pwin == NULL)
         continue;
-      for (i = 0; i < rgpart[ig].rgobj.size(); i++)
+      for (i = 0; i < rgpart[ig].rgobj.size(); i++) {
+        // The same bound as the first write site, for the same reason.
+        if (!FBetween(rgpart[ig].rgobj[i], 0, objMax-1))
+          continue;
         s_plan.rgent[rgpart[ig].rgobj[i]].pwin = pwin;
+      }
       fAgain = fTrue;
     }
     if (fAgain)
