@@ -1875,8 +1875,23 @@ static const char *UnservedOf(const eph::Request &req) {
   if (req.timeScale != eph::kTimeUT1 && req.timeScale != eph::kTimeTT)
     return "time scale not served: UT1 and TT only";
   for (const eph::Profile &pf : req.profiles) {
-    if (!gCaps.CorrectionMask(pf.observer, pf.corrections))
-      return "this correction mask is not honoured for this observer";
+    // Unknown BITS are refused; a mask this observer merely narrows is
+    // not. WELCOME now advertises, per observer, the terms a body will
+    // actually see -- at the Sun's centre and the barycentre Swiss turns
+    // aberration and deflection off inside the call, so only light time
+    // varies there. Enforcing that as acceptance would refuse requests
+    // this server has always answered, including Astrolog's own
+    // heliocentric casts, which send the full mask whenever the user has
+    // not asked for true positions (ephreq.h). It also failed
+    // ephsrv-golden immediately, which is how this was caught.
+    //
+    // So the two are deliberately not the same question. WELCOME says
+    // what the server WILL DO; acceptance declines only what it cannot
+    // parse. A client that asks for more than the observer can show gets
+    // the answer it would have got anyway, and META's corrApplied names
+    // the terms that were really live for that object.
+    if ((pf.corrections & ~(uint8_t)eph::kCorrMask) != 0)
+      return "this correction mask has bits this server does not define";
     if (!pf.zodiac.empty() && !gCaps.Zodiac(pf.zodiac)) return "zodiac not served";
   }
   // Every kind in the registry gets an answer: orbital elements (kind 4),
@@ -2889,26 +2904,46 @@ static void BuildWelcome(const EphDiscovery &disc, const char *szSwe) {
   c.planes = 0x3;
   c.forms = 0x3;
   c.frames = 0xF;
-  // 3.5a: corrections are honoured as sent, and the masks are advertised per
-  // observer (A.3 0x0004). What Swiss does with them, measured rather than
-  // assumed (Appendix B has the same note): swe_calc() and swe_calc_pctr()
-  // pass every heliocentric, barycentric and planet-centred call through
-  // plaus_iflag(), which turns aberration and deflection OFF whatever was
-  // asked -- so for a BODY seen from those observers the masks 7, 3 and 5
-  // answer exactly as mask 1 does. swe_nod_aps() reads the bits itself,
-  // before any such normalisation, and does honour them: Jupiter's
-  // heliocentric ascending node moves 5.8e-3 degrees between mask 7 and
-  // mask 1. One pair of numbers cannot say both things, and the capability
-  // is per observer rather than per object kind, so every mask is
-  // advertised for every observer and the narrowing above is documented.
+  // 3.5a: corrections are honoured as sent, and the masks are advertised
+  // per observer (A.3 0x0004). What Swiss does with them, MEASURED against
+  // this server rather than inferred:
+  //
+  //   heliocentric and barycentric: a body answers masks 1, 3, 5 and 7
+  //     IDENTICALLY -- plaus_iflag() turns aberration and deflection off
+  //     inside the call whatever was asked. Only light time varies.
+  //   planet-centred: all three terms are live and distinct. The earlier
+  //     note here grouped this observer with the two above, and that was
+  //     wrong: Venus from Jupiter moves between masks 1, 3, 5 and 7.
+  //   swe_nod_aps() reads the bits itself, before any such normalisation,
+  //     so an ORBIT POINT from a heliocentric observer does honour them --
+  //     Jupiter's ascending node moves 5.8e-3 degrees between 7 and 1.
+  //
+  // That last line is why every mask used to be advertised for every
+  // observer, with the narrowing left to a comment. The Prometheia
+  // cross-test found what that costs: their client asked mask 7 from the
+  // barycentre because WELCOME said it was served, and got a body back
+  // with no deflection in it -- a 3.2 arcsec disagreement with their
+  // server that looked like an arithmetic defect on one side.
+  //
+  // ephem.h's rule decides it: ADVERTISED IS PROMISED. A capability keyed
+  // on the observer cannot say "live for orbit points, inert for bodies",
+  // and between over-promising and under-promising, the honest failure is
+  // the one that makes a client ask for less than it could have. So the
+  // heliocentric and barycentric observers advertise only the masks whose
+  // effect a body will actually see. META's corrApplied remains the
+  // per-object truth and already said this correctly -- CorrectionsLive()
+  // returns light time alone for a body at those observers -- and an
+  // orbit point that still honours more reports so there.
   {
-    const uint32_t obsAll = 0x1F;   // every observer of A.5
+    const uint32_t obsFull  = 0x13;   // geocentric, topocentric, body
+    const uint32_t obsLight = 0x0C;   // heliocentric, barycentric
+    const uint32_t obsAll   = 0x1F;
     c.corrMasks = {
-      {obsAll, eph::kCorrMask},
-      {obsAll, 0},
-      {obsAll, eph::kCorrLightTime | eph::kCorrDeflection},
-      {obsAll, eph::kCorrLightTime | eph::kCorrAberration},
-      {obsAll, eph::kCorrLightTime},
+      {obsAll,  0},
+      {obsAll,  eph::kCorrLightTime},
+      {obsFull, eph::kCorrLightTime | eph::kCorrDeflection},
+      {obsFull, eph::kCorrLightTime | eph::kCorrAberration},
+      {obsFull, eph::kCorrMask},
     };
   }
   c.orbitPoints = 0xF;
