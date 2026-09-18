@@ -359,6 +359,15 @@ version 3, and this section is the design authority behind it.
   baseline binary for matrices), `eph4verify`, `tidprobe*.c`, the
   `eph4-mx-*` artifacts.
 
+- **`EPHEMERIS_ACCURACY_REGISTRY.md` is where the fork's numbers are
+  judged**, new on 2026-09-18. Being bit-exact with Swiss is a MEANS, not
+  the goal: a differential can only say "unchanged", never "correct". The
+  registry records, with measurements, where this fork is deliberately
+  more correct than Swiss (two lunar node distances so far), where Swiss
+  is known wrong and this fork still follows it (three, all reaching the
+  desktop), and one divergence declined on purpose. **Read it before
+  "fixing" a number to agree with Swiss.**
+
 - **House rules that bind whoever picks this up:** locked artifacts
   (`ephsrv/ephproto.h`, `registries.json`, `conformance/`) are
   byte-untouchable -- a change is a new named drop, never an edit.
