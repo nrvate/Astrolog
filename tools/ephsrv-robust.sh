@@ -88,7 +88,24 @@ trap cleanup EXIT
 # Every client run is bounded, and every step says it started, so a
 # stall names its step instead of hanging the gate (its first draft did).
 CLI_BIN="$ROOT/eph_wsclient"
-CLI() { timeout "${STEP_TIMEOUT:-60}" "$CLI_BIN" "$@"; }
+# A timeout says so, on stderr, where the failing leg's message picks it up.
+# Without this a timed-out client exits 124 with EMPTY stderr, and every leg
+# here reports its failure as "$(head -1 ...err)" -- so the gate printed
+#
+#   ROBUST FAIL: C1: the cancelled window asked again:
+#
+# with nothing after the colon, on the legs that ask for a big window. Which
+# of them tripped varied between runs, because the hang depended on how the
+# socket happened to drain. A varying count of failures that say nothing is
+# the easiest thing in this project to read as flakiness, and it was read
+# that way for a long time: it was naming a PERMANENT server hang, every
+# single run, and the fix for that is the commit before this one.
+CLI() {
+  timeout "${STEP_TIMEOUT:-60}" "$CLI_BIN" "$@"
+  local rc=$?
+  [ "$rc" -eq 124 ] && echo "TIMED OUT after ${STEP_TIMEOUT:-60}s: the server stopped sending and did not resume -- look for the last evt=stall in the server log and compare its row= against the rows asked for" >&2
+  return "$rc"
+}
 CLI="CLI"
 step() { echo "== $*"; }
 fail() { echo "ROBUST FAIL: $*"; FAIL=1; }
