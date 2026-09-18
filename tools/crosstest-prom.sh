@@ -32,7 +32,7 @@ set -u
 PROMD="${1:-/shares/ephemeris-prometheia/build/prometheiad}"
 EPHE="${2:-/shares/ephemeris-prometheia/ephe/linux_p1550p2650.440}"
 CLIENT="./eph_wsclient"
-PORT="${CROSSTEST_PORT:-47291}"
+PORT=0            # chosen by the daemon and read back; never hardcoded
 JD=2451545.0
 WORK="${TMPDIR:-/nvm/work}/crosstest-prom.$$"
 SELFTEST=0
@@ -61,9 +61,30 @@ trap cleanup EXIT INT TERM
 # cancelling it means something, and the default budget of 10000 cells a
 # second refuses that with ERROR 6 rather than answering it. This is our
 # own loopback instance for the duration of one run.
-"$PROMD" --ephemeris "$EPHE" --bind 127.0.0.1 --port "$PORT" --threads 1 \
+"$PROMD" --ephemeris "$EPHE" --bind 127.0.0.1 --port 0 --threads 1 \
   --cells-per-sec 0 > "$WORK/daemon.log" 2>&1 &
 PID=$!
+
+# The port the daemon actually got. A FIXED port is how this harness told
+# itself a story for two runs: another agent on this machine had started
+# OUR astrolog-ephd on the number this script used to hardcode, so
+# prometheiad could not bind, the trial query below was answered by that
+# other server, and every probe compared astrolog-ephd's answers against
+# prometheiad's contract. Eleven confident false mismatches, twice.
+i=0
+while [ $i -lt 100 ]; do
+  PORT=$(sed -n 's/.*listening on port \([0-9]*\).*/\1/p' "$WORK/daemon.log" \
+    | head -1)
+  [ -n "$PORT" ] && break
+  kill -0 "$PID" 2>/dev/null || { echo "crosstest-prom: prometheiad exited:"
+    cat "$WORK/daemon.log"; exit 1; }
+  i=$((i+1)); sleep 0.2
+done
+if [ -z "$PORT" ]; then
+  echo "crosstest-prom: prometheiad never reported a port:"
+  cat "$WORK/daemon.log"
+  exit 1
+fi
 
 # Wait until the daemon ANSWERS, not until it says it is listening. Those
 # are different moments, and the difference is not cosmetic: the first run
@@ -86,6 +107,20 @@ done
 if [ $i -ge 100 ]; then
   echo "crosstest-prom: prometheiad never answered a trial query:"
   cat "$WORK/daemon.log"
+  exit 1
+fi
+
+# And ask WHO answered. A free port makes a collision unlikely; this makes
+# it impossible to go unnoticed, which is the difference between a harness
+# that is usually right and one that can be believed. WELCOME names the
+# engine, and this whole script is a comparison against Prometheia's
+# contract: run against anything else, every verdict is meaningless.
+WELC=$("$CLIENT" --host 127.0.0.1 --port "$PORT" --jd "$JD" --count 1 \
+  --objs 10 2>&1 | grep -i "welcome\|engine\|server" | head -3)
+if ! printf '%s' "$WELC" | grep -qi "prometheia"; then
+  echo "crosstest-prom: the server on port $PORT is not prometheiad."
+  echo "  This harness only means anything against Prometheia's contract."
+  printf '  WELCOME said: %s\n' "$(printf '%s' "$WELC" | head -1 | cut -c1-70)"
   exit 1
 fi
 
@@ -232,6 +267,55 @@ else
   echo "  a cancelled request answers ERROR 10   MISMATCH (no ERROR 10, no"
   echo "    refusal, no completion -- the request simply hung)"
   cFail=$((cFail+1))
+fi
+
+# ---- Leg 10: segments against sampled rows --------------------------------
+# Representation 1 answers with Chebyshev SEGMENTS instead of rows, and the
+# server states the residual it MEASURED against its own answers. The only
+# check worth making is the one the spec names: evaluate the polynomial and
+# compare it with the same instant asked for as ordinary rows. A segment
+# that parses proves nothing; a segment that reproduces the answer does.
+#
+# The evaluation runs inside eph_wsclient through Segment::Eval from
+# ephproto.h, not through arithmetic of the harness's own, so this compares
+# the server's fit against the server's samples rather than against a
+# second opinion about Chebyshev.
+echo ""
+echo "Leg 10: segments reproduce the rows they were fitted to."
+SEGJD=2451555.0
+PROF="form=rect,plane=equ,frame=icrf"
+segOut=$("$CLIENT" --host 127.0.0.1 --port "$PORT" --segments --seg-err 0.001 \
+  --jd 2451545.0 --step 86400 --count 32 --profile "$PROF" --objs 4 \
+  --seg-eval "$SEGJD" 2>&1)
+rowOut=$("$CLIENT" --host 127.0.0.1 --port "$PORT" --quiet --jd "$SEGJD" \
+  --count 1 --out /dev/stdout --profile "$PROF" --objs 4 2>/dev/null \
+  | grep -v "^META" | head -1)
+segLine=$(printf '%s' "$segOut" | grep -m1 "^SEGEVAL")
+if [ -z "$segLine" ]; then
+  echo "  the server answered with segments          MISMATCH"
+  printf '    %s\n' "$(printf '%s' "$segOut" | grep -m1 'wsclient:' | cut -c1-72)"
+  cFail=$((cFail+1))
+elif [ -z "$rowOut" ]; then
+  echo "  the same instant as rows                   MISMATCH (no row)"
+  cFail=$((cFail+1))
+else
+  rDev=$(python3 - "$segLine" "$rowOut" <<'PYEOF'
+import math, sys
+seg = [float.fromhex(x) for x in sys.argv[1].split()[1:4]]
+row = [float.fromhex(x) for x in sys.argv[2].split()[5:8]]
+d = math.sqrt(sum((a-b)**2 for a, b in zip(seg, row)))
+r = math.sqrt(sum(x*x for x in seg))
+print("%.6f" % (math.degrees(d / r) * 3600.0))
+PYEOF
+)
+  ok=$(python3 -c "print(1 if $rDev < 0.01 else 0)")
+  if [ "$ok" = "1" ]; then
+    echo "  the fit reproduces the row                 ok ($rDev arcsec,"
+    echo "    against the 0.001 arcsec target it was asked to meet)"
+  else
+    echo "  the fit reproduces the row                 MISMATCH ($rDev arcsec)"
+    cFail=$((cFail+1))
+  fi
 fi
 
 if [ "$SELFTEST" = 1 ]; then

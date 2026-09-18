@@ -451,6 +451,10 @@ int main(int argc, char **argv) {
   int64_t stepNs = 600LL * 1000000000LL;
   uint32_t count = 5, repeat = 1, expectRows = 0, chunkRows = 500;
   uint32_t sleepMs = 0, burst = 0, cycles = 0, nHello = 1, idleMs = 0, cancelAfterMs = 0;
+  bool fSegments = false;
+  float segErr = 0.0f;
+  double segEvalJd = 0.0;
+  std::vector<std::vector<Segment> > segsGot;
   int precision = 64, lookupFlags = 0, maxMatches = 8, deadlineMs = 0;
   Request req;
   req.profiles.push_back(Profile());
@@ -513,6 +517,12 @@ int main(int argc, char **argv) {
     else if (!strcmp(a, "--repeat") && next()) repeat = (uint32_t)strtoul(v, nullptr, 10);
     else if (!strcmp(a, "--latency") && next()) latencyFile = v;
     else if (!strcmp(a, "--meta")) fMeta = true;
+    // 3.4 representation 1: the answer is Chebyshev SEGMENTS over the
+    // span, not sampled rows. The codec has been in ephproto.h since
+    // phase 2; this is the consuming half, which was never written.
+    else if (!strcmp(a, "--segments")) fSegments = true;
+    else if (!strcmp(a, "--seg-err") && next()) segErr = (float)atof(v);
+    else if (!strcmp(a, "--seg-eval") && next()) segEvalJd = atof(v);
     else if (!strcmp(a, "--quiet")) quiet = true;
     else if (!strcmp(a, "--sleep-ms") && next()) sleepMs = (uint32_t)strtoul(v, nullptr, 10);
     else if (!strcmp(a, "--burst") && next()) burst = (uint32_t)strtoul(v, nullptr, 10);
@@ -544,6 +554,14 @@ int main(int argc, char **argv) {
     for (const Object &o : req.objs) fUsed = fUsed || o.profile == req.profiles.size() - 1;
     if (fUsed) break;
     req.profiles.pop_back();
+  }
+  if (fSegments) {
+    req.representation = 1;
+    // A segments request must name a positive target error (3.4): the
+    // server fits to it and reports the residual it MEASURED. A
+    // milliarcsecond is a default, not a recommendation -- --seg-err
+    // states it when the caller cares.
+    req.segTargetErrArcsec = segErr > 0.0f ? segErr : 0.001f;
   }
   req.precision = precision == 32 ? kPrecF32 : kPrecF64;
   req.chunkRows = chunkRows;
@@ -800,6 +818,22 @@ int main(int argc, char **argv) {
         exitCode = 2;
         break;
       }
+      if (fSegments && env.type == kMsgSegData) {
+        SegDataChunk sd;
+        std::string whySeg;
+        if (ParseSegData(pl, env.payloadLen, &sd, &whySeg) != kOk) {
+          fprintf(stderr, "wsclient: malformed SEGDATA: %s\n", whySeg.c_str());
+          exitCode = 2;
+          break;
+        }
+        if (segsGot.size() < sd.nObj) segsGot.resize(sd.nObj);
+        for (size_t k = 0; k < sd.segs.size(); k++)
+          if (sd.iObj + k < segsGot.size())
+            segsGot[sd.iObj + k] = sd.segs[k];
+        if (sd.flags & kChunkMeta) { meta = sd.meta; pp->metaSet = true; }
+        if (sd.flags & kChunkLast) { pp->done = true; nOpen--; }
+        continue;
+      }
       if (env.type != kMsgData) continue;
       if (pp == nullptr || pp->done || pp->refused || pp->cancelled) {
         fprintf(stderr, "wsclient: DATA for request %u, which is not awaiting rows%s\n", env.requestId,
@@ -866,6 +900,77 @@ int main(int argc, char **argv) {
         fprintf(stderr, "wsclient: the request was answered in full before the cancel (%u rows)\n",
                 pend[0].got);
         exitCode = 4;
+      }
+      continue;
+    }
+    // Segments answer no ROWS, so the row accounting below does not apply.
+    // What is checked instead is the shape 3.4 requires of them: a
+    // coefficient triple per degree, and segments that tile the span
+    // without a gap or an overlap, since a client picks the segment for an
+    // instant by containment and a gap is an instant nobody answers.
+    if (fSegments) {
+      if (exitCode == 0) {
+        size_t cSeg = 0;
+        for (size_t o = 0; o < segsGot.size(); o++) {
+          const std::vector<Segment> &v = segsGot[o];
+          cSeg += v.size();
+          for (size_t k = 0; k < v.size(); k++) {
+            if (v[k].coef.size() != (size_t)(v[k].degree + 1) * 3) {
+              fprintf(stderr, "wsclient: object %zu segment %zu has %zu "
+                      "coefficients, want 3 x (degree %u + 1)\n", o, k,
+                      v[k].coef.size(), v[k].degree);
+              exitCode = 2;
+            }
+            if (!(v[k].halfSpanDays > 0.0)) {
+              fprintf(stderr, "wsclient: object %zu segment %zu has a "
+                      "half-span of %g\n", o, k, v[k].halfSpanDays);
+              exitCode = 2;
+            }
+            if (k > 0) {
+              double endPrev = (v[k-1].mid.jd1 + v[k-1].mid.jd2) +
+                v[k-1].halfSpanDays;
+              double begThis = (v[k].mid.jd1 + v[k].mid.jd2) -
+                v[k].halfSpanDays;
+              if (fabs(endPrev - begThis) > 1e-6) {
+                fprintf(stderr, "wsclient: object %zu segments %zu and %zu "
+                        "do not meet: %.9f vs %.9f\n", o, k-1, k, endPrev,
+                        begThis);
+                exitCode = 2;
+              }
+            }
+          }
+        }
+        if (cSeg == 0) {
+          fprintf(stderr, "wsclient: the answer carried no segments\n");
+          exitCode = 2;
+        } else if (!quiet)
+          fprintf(stderr, "wsclient: %zu segments over %zu object(s)\n",
+                  cSeg, segsGot.size());
+      }
+      // --seg-eval prints the position the SEGMENTS give at one instant,
+      // through Segment::Eval (ephproto.h) rather than any arithmetic of
+      // this program's own -- so a caller can diff it against the same
+      // instant asked for as ordinary rows and see what the fit costs.
+      if (exitCode == 0 && segEvalJd != 0.0) {
+        bool fFound = false;
+        for (size_t o = 0; o < segsGot.size() && !fFound; o++)
+          for (size_t k = 0; k < segsGot[o].size(); k++) {
+            const Segment &g = segsGot[o][k];
+            double mid = g.mid.jd1 + g.mid.jd2;
+            if (segEvalJd < mid - g.halfSpanDays ||
+                segEvalJd > mid + g.halfSpanDays) continue;
+            double pos[3], vel[3];
+            Time t; t.jd1 = segEvalJd; t.jd2 = 0.0;
+            g.Eval(t, pos, vel);
+            printf("SEGEVAL %a %a %a\n", pos[0], pos[1], pos[2]);
+            fFound = true;
+            break;
+          }
+        if (!fFound) {
+          fprintf(stderr, "wsclient: no segment contains JD %.9f\n",
+                  segEvalJd);
+          exitCode = 2;
+        }
       }
       continue;
     }
