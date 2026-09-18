@@ -211,6 +211,31 @@ version 3, and this section is the design authority behind it.
   (use `atan2(|a x b|, a.b)`); and a subset check that reads only the
   mask-0 answer is vacuous against a server that echoes the request.
 
+- **A DROP IS DRAFTED AND AWAITS THE MAINTAINER: two §3.5a sentences**
+  (`/nvm/work/ephv4-drop-planes/DROP.md`, drafted at `781b602`). Moves no
+  artifact bytes. **The two parts are independent and can be approved
+  separately**, and they cost opposite things:
+
+  **Part A, the invariable plane's zero point.** §3.5a says the zero point
+  is "carried onto" the plane and does not say how; the two servers differ
+  by a constant 31.5 arcsec (30.4 under Lahiri) with the planes themselves
+  coinciding to 0.03 arcsec. Prometheia's argument is that a sidereal zero
+  point is a DIRECTION among the stars, so carrying that direction keeps
+  what 0 degrees points at whichever plane it is counted along. **Adopting
+  it moves every body in an Astrolog solar-system-plane chart by 31.5
+  arcsec** -- the first user-visible number in this effort changed without
+  a defect behind it, since both readings are defensible and one is being
+  chosen.
+
+  **Part B, what a frame changes about a node.** The text says a node lies
+  on the ecliptic of the profile's frame; this server computes it on the
+  ecliptic of DATE and rotates, which is up to 10 arcsec of latitude off in
+  a J2000 frame. The amendment says a frame changes the coordinates a point
+  is given in, not which point it is. **This costs us nothing and excuses
+  what we already do** -- Prometheia conform today and would change -- so
+  it is put forward on the argument alone, and if the maintainer would
+  rather conform to the text as written, that work is ours.
+
 - **A DROP WAS DRAFTED AND WITHDRAWN: the distance of a MEAN orbit point.**
   Worth keeping as a record of a wrong diagnosis, because it was wrong in
   an expensive direction.
