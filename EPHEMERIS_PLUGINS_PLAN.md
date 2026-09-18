@@ -37,7 +37,7 @@ version 3, and this section is the design authority behind it.
 
 Section 3 was settled with the Prometheia maintainers over many rounds
 (work log items 0, 0b, 0c), encoded as one drop (work log item 4, commit
-0fbc863), and **locked green on 2026-09-18**: their independent reader ran
+0fbc863), and **locked green on 2026-09-17 (the verdict letter was dated a day ahead; the commit timestamps are the authority)**: their independent reader ran
 that set at 91/91 with zero disagreements, the set-sha256 verified by a
 second implementation (`1c934c7da19965f21ded99a0a53e36eaa3c45434cfbfaeabdd
 afaf154ea454ec`). The verdict letter is `/nvm/work/ephv4-drop-verdicts.md`;
@@ -73,7 +73,7 @@ session migration onto the v4 header is queued on the maintainer's go.
    reader's verdicts on THAT set are the gate; their header
    leniency/strictness review rides in the same reply.
 
-**The maintainer has approved phases 3-7 (2026-09-18).** They were never
+**The maintainer has approved phases 3-7 (2026-09-17, late).** They were never
 approved as automatically next; §7 lists them and they were a separate
 decision. Two conditions ride the approval: the **locked artifacts stay
 byte-identical at cf83dc9** (`ephsrv/ephproto.h`, `ephsrv/registries.json`,
@@ -1953,7 +1953,7 @@ the gates the phase touches.
      server still speaking the old META layout reads exactly like a
      protocol bug; `make ephsrv` and everything passed.
 
-5. **The verdict is in: §3 is locked (2026-09-18).** Prometheia's reader ran
+5. **The verdict is in: §3 is locked (2026-09-17).** Prometheia's reader ran
    the drop set once after implementing three of the second-round agreements
    it had missed (`deadlineMs` in the delivery block, the batched LOOKUP,
    `u8 nQueries` leading LOOKUP_RESULT) plus the new byte: first run 67/91,
@@ -1989,7 +1989,7 @@ the gates the phase touches.
      fixtures; GOLDEN PASS 149 bit-exact; ROBUST PASS; make check all
      clear, suite 5772 passed, 0 failed. The locked set's digest is
      unchanged (`1c934c7d…`); nothing in this commit moves bytes.
-   - **Phases 3-7 are approved as next (2026-09-18), under the two
+   - **Phases 3-7 are approved as next (2026-09-17), under the two
      conditions in the Status section.** On the Prometheia side, vendoring
      is done and the session migration (prometheiad onto the v4 header) is
      queued on the maintainer's go.
