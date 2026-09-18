@@ -37,7 +37,9 @@ version 3, and this section is the design authority behind it.
   acceleration from the moon file's DE number, and with no file open
   `swi_get_tid_acc()` falls through to `SE_TIDAL_DEFAULT` (DE431, -25.80)
   instead of the bundled `ephem/`'s own (DE441, -25.936). The two differ
-  by 0.136, which is 0.037 s of Delta-T at 1900. Astrolog caches Delta-T
+  by 0.136 -- these are tidal accelerations in arcsec/cy^2, not seconds,
+  and their Delta-T consequence at 1900 is 0.037 s, through a correction
+  that goes as the square of the offset from 1955. Astrolog caches Delta-T
   in `is.rDeltaT` keyed on the DATE ALONE, so a value computed before the
   ephemeris path was set outlived the path change and the bodies reused
   it while `swe_calc_ut()` recomputed on DE441. Every body came out by
@@ -2168,7 +2170,8 @@ the gates the phase touches.
    - **What it actually was.** The library reads its tidal acceleration
      from the moon file's DE number; with no file open `swi_get_tid_acc()`
      falls through to `SE_TIDAL_DEFAULT` (DE431, -25.80) instead of the
-     bundled `ephem/`'s own (DE441, -25.936). The two differ by 0.136,
+     bundled `ephem/`'s own (DE441, -25.936). Those are tidal
+     accelerations in arcsec/cy^2, not seconds; they differ by 0.136,
      which is 0.037 s of Delta-T at 1900. Astrolog caches Delta-T in
      `is.rDeltaT` **keyed on the date alone**, so a value computed before
      the ephemeris path was set outlived the path change and the bodies

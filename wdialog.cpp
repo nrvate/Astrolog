@@ -2438,8 +2438,15 @@ flag API DlgCalc(HWND hdlg, uint message, WORD wParam, LONG lParam)
 // Browse is offered to the path kinds only, so a regenerated table changes
 // what the rows say without this file being touched.
 
-static CONST int rgiepEphemParam[4] =
-  { epJplFile, epServerUrl, epServerToken, epPrometheiaEphemeris };
+// The rows are CEphParamRows()' now -- the chain head's own parameters,
+// from the generated table -- so this file names no parameter either.
+#define cEphParamRowW 4
+
+// Which parameters the rows are showing, computed when the dialog opens
+// and read again when OK writes them back. Static because a Win32 dialog
+// procedure sees WM_INITDIALOG and WM_COMMAND as separate calls, and this
+// dialog is modal, so there is one at a time.
+static int rgiepParam[cEphParamRowW], cParamRow;
 
 
 // Compose the status line: the primary source's state and the once-per-cast
@@ -2557,14 +2564,24 @@ flag API DlgEphem(HWND hdlg, uint message, WORD wParam, LONG lParam)
       SetEdit(dsEp_ds, PephsrcGet(i)->szDesc);
     else
       SetEdit(dsEp_ds, "The primary source is not one this build compiles in.");
-    for (i = 0; i < 4; i++) {
-      pep = &rgephparam[rgiepEphemParam[i]];
+    cParamRow = CEphParamRows(rgiepParam, cEphParamRowW);
+    for (i = 0; i < cEphParamRowW; i++) {
+      // A source with fewer parameters than there are rows leaves the
+      // rest empty rather than showing another source's.
+      flag fLive = i < cParamRow;
+      ShowWindow(GetDlgItem(hdlg, dsEp_p1 + i), fLive ? SW_SHOW : SW_HIDE);
+      ShowWindow(GetDlgItem(hdlg, deEp_p1 + i), fLive ? SW_SHOW : SW_HIDE);
+      if (!fLive) {
+        ShowWindow(GetDlgItem(hdlg, dbEp_b1 + i), SW_HIDE);
+        continue;
+      }
+      pep = &rgephparam[rgiepParam[i]];
       // The table's labels are names ("JPL file"), not captions, so the
       // colon every other row label in this dialog carries is added here
       // rather than baked into the generated table.
       sprintf2(S(sz), "%s:", pep->ep.szLabel);
       SetEdit(dsEp_p1 + i, sz);
-      SetEdit(deEp_p1 + i, SzSet(us.rgszEphParam[rgiepEphemParam[i]]));
+      SetEdit(deEp_p1 + i, SzSet(us.rgszEphParam[rgiepParam[i]]));
       if (pep->ep.nKind == epkToken)
         SendDlgItemMessage(hdlg, deEp_p1 + i, EM_SETPASSWORDCHAR,
           (WPARAM)'*', 0);
@@ -2677,11 +2694,14 @@ flag API DlgEphem(HWND hdlg, uint message, WORD wParam, LONG lParam)
         if (*pch != ',')
           break;
       }
-      EphSourceSet(sz);
-      for (i = 0; i < 4; i++) {
-        GetEdit(deEp_p1 + i, sz);
-        FEphParamSet(rgiepEphemParam[i], sz);
+      // The rows the user edited are the head's as the dialog OPENED, so
+      // they are written before the new chain takes effect.
+      for (i = 0; i < cParamRow; i++) {
+        char szP[cchSzMax];
+        GetEdit(deEp_p1 + i, szP);
+        FEphParamSet(rgiepParam[i], szP);
       }
+      EphSourceSet(sz);
       wi.fCast = fTrue;
     }
     if (wParam == IDOK || wParam == IDCANCEL) {

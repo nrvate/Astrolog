@@ -5229,8 +5229,9 @@ void ShowCalcDialogQt()
 // path kinds only, so a regenerated table changes what the rows say
 // without this file being touched.
 
-static CONST int rgiepEphemParamQt[4] =
-  { epJplFile, epServerUrl, epServerToken, epPrometheiaEphemeris };
+// The rows are CEphParamRows()' now -- the chain head's own parameters,
+// from the generated table -- so this file names no parameter at all.
+#define cEphParamRowQt 4
 
 
 // Compose the status line: the primary source's state and the once-per-cast
@@ -5350,7 +5351,8 @@ void ShowEphemDialogQt()
 {
   QDialog dlg(gi.qwind);
   QVector<RCBUILT> rgbuilt;
-  QLineEdit *rgepeParam[4];
+  QLineEdit *rgepeParam[cEphParamRowQt];
+  int rgiepParam[cEphParamRowQt], cParamRow;
   char sz[cchSzMax], szChain[cchSzMax], szHead[cchSzDef], szT[cchSzMax];
   char szWhy[cchSzDef];
   int i, nTick = 0, nHold = 0;
@@ -5420,23 +5422,37 @@ void ShowEphemDialogQt()
   // (empty is the parameter's own default), a masked edit for a token, and
   // Browse only for the path kinds -- the buttons of the other rows stay
   // hidden, and a regenerated table re-decides which they are.
-  for (i = 0; i < 4; i++) {
-    CONST EPHPARAMROW *pep = &rgephparam[rgiepEphemParamQt[i]];
+  cParamRow = CEphParamRows(rgiepParam, cEphParamRowQt);
+  for (i = 0; i < cEphParamRowQt; i++) {
+    CONST EPHPARAMROW *pep;
     QLabel *plLabel = (QLabel *)PwRcFindIdxQt(rgbuilt, "dsEp_p", i+1);
     QLineEdit *peRow = (QLineEdit *)PwRcFindIdxQt(rgbuilt, "deEp_p", i+1);
     QPushButton *ppbBrowse = (QPushButton *)PwRcFindIdxQt(rgbuilt, "dbEp_b",
       i+1);
 
+    // A source with fewer parameters than there are rows leaves the rest
+    // empty rather than showing another source's: a row the current
+    // selection cannot use is a control that does nothing.
+    if (i >= cParamRow) {
+      rgepeParam[i] = NULL;
+      if (plLabel != NULL) plLabel->setVisible(fFalse);
+      if (peRow != NULL) peRow->setVisible(fFalse);
+      if (ppbBrowse != NULL) ppbBrowse->setVisible(fFalse);
+      continue;
+    }
+    pep = &rgephparam[rgiepParam[i]];
     rgepeParam[i] = peRow;
     if (plLabel != NULL) {
+      plLabel->setVisible(fTrue);
       // The table's labels are names ("JPL file"), not captions, so the
       // colon every other row label in this dialog carries is added here
       // rather than baked into the generated table.
       plLabel->setText(QString::fromUtf8(pep->ep.szLabel) + ":");
     }
     if (peRow != NULL) {
+      peRow->setVisible(fTrue);
       peRow->setText(QString::fromUtf8(
-        SzSet(us.rgszEphParam[rgiepEphemParamQt[i]])));
+        SzSet(us.rgszEphParam[rgiepParam[i]])));
       if (pep->ep.nKind == epkToken)
         peRow->setEchoMode(QLineEdit::PasswordEchoOnEdit);
     }
@@ -5547,15 +5563,19 @@ void ShowEphemDialogQt()
   if (dlg.exec() != QDialog::Accepted)
     return;
 
-  if (peChain != NULL) {
-    SzFieldQt(szChain, peChain->text());
-    EphSourceSet(szChain);
-  }
-  for (i = 0; i < 4; i++) {
+  // The parameter rows the user edited are the head's as the dialog
+  // OPENED, so they are written before a new chain takes effect --
+  // otherwise a run that changed both would write the old head's values
+  // against the new head's indexes.
+  for (i = 0; i < cEphParamRowQt; i++) {
     if (rgepeParam[i] == NULL)
       continue;
     SzFieldQt(szT, rgepeParam[i]->text());
-    FEphParamSet(rgiepEphemParamQt[i], szT);
+    FEphParamSet(rgiepParam[i], szT);
+  }
+  if (peChain != NULL) {
+    SzFieldQt(szChain, peChain->text());
+    EphSourceSet(szChain);
   }
   RecastAndRedrawQt();
 }

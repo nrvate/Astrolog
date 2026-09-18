@@ -7372,6 +7372,7 @@ static flag FWindowChunkQt(uint32_t dwReq, CONST byte *rgb, uint32_t cb);
 static void ResetWindowChunksQt(uint32_t dwReq);
 static void WindowFailedQt(uint32_t dwReq, CONST char *szErr);
 static void ClearWindowsSrvQt();
+static void ForgetMissedCastSrvQt();
 static void ClearSettledWindowsSrvQt();
 static void SrvWelcomedQt();
 
@@ -8058,6 +8059,7 @@ void SzEphSrvStatusQt(char *sz, int cch)
 void EphSrvFinalizeQt()
 {
   ClearWindowsSrvQt();
+  ForgetMissedCastSrvQt();
   esrv.fTerminal = fFalse;   // Starting again may meet a different server.
   esrv.bProto = 0;
   if (esrv.ptim != NULL) {
@@ -8706,6 +8708,18 @@ static flag FSrvWaitQt(CONST std::function<flag()> &fDone, int msMax)
 // at 0 Aries until the user happens to do something (EPHEMERIS_REVIEW.md
 // C3).
 static flag s_fSrvCastMissedQt = fFalse;
+
+// A cast that could not reach the server sets the flag above, and the
+// next WELCOME recasts it. Finalizing has to drop that intent with
+// everything else it drops: the connector that comes back may be a
+// DIFFERENT server, and replaying the old session's cast at it is both
+// a request nobody asked for and -- measured in the suite -- a request
+// the next conversation reads as its own, because it arrives first and
+// carries the earlier id.
+static void ForgetMissedCastSrvQt()
+{
+  s_fSrvCastMissedQt = fFalse;
+}
 
 static void SrvRecastMissedQt()
 {

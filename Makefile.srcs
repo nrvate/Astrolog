@@ -26,7 +26,8 @@
 # empty, so the default build never references the library.
 SRC_CORE = astrolog.cpp switch.cpp atlas.cpp calc.cpp charts0.cpp \
   charts1.cpp charts2.cpp charts3.cpp data.cpp ephem.cpp ephswiss.cpp \
-  ephprom.cpp express.cpp general.cpp intrpret.cpp io.cpp matrix.cpp
+  ephprom.cpp ephserver.cpp express.cpp general.cpp intrpret.cpp io.cpp \
+  matrix.cpp
 
 # The graphics half: chart drawing and the device backends it draws to.
 # cgif.cpp and cgif_raw.cpp are the vendored cgif library (MIT, see

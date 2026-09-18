@@ -4008,7 +4008,10 @@ void SwissHouse(real jd, real lon, real lat, int housesystem, real *asc,
   // library reads its tidal acceleration from the moon file's DE number,
   // and with no file open it falls through to SE_TIDAL_DEFAULT (DE431)
   // instead of the file's own (DE441 in the bundled ephem/). The two
-  // terms differ by 0.136, which is 0.037 s of Delta-T at 1900.
+  // terms are tidal accelerations in arcsec/cy^2 and differ by 0.136,
+  // whose Delta-T consequence at 1900 is 0.037 s -- the correction goes
+  // as the square of the offset from 1955, so the two figures are not
+  // seconds and do not subtract to give it.
   //
   // This was the one Delta-T site of the four that did not ensure the
   // path first. A whole cast does not expose it -- CastChart() reaches

@@ -13254,7 +13254,8 @@ static void TestNumericOracleQt()
     // bundled ephem/). Astrolog caches Delta-T in is.rDeltaT keyed on the
     // DATE ALONE, so a value computed before the path was set outlived
     // the path change and the bodies reused it, while swe_calc_ut()
-    // recomputed on DE441. The terms differ by 0.136, which is 0.037 s of
+    // recomputed on DE441. The terms are tidal accelerations in
+    // arcsec/cy^2, differing by 0.136, whose consequence at 1900 is 0.037 s of
     // Delta-T at 1900: every body out by its own motion over 0.037 s,
     // 0.018" for the Moon and 0.00003" for Mercury. In the full suite it
     // read as the whole 1900 epoch failing, and only in the group orders
@@ -17822,6 +17823,8 @@ static void TestEphSrvQt()
 
   Group("Ephemeris server");
   SetNoPopupQt(fTrue);   // The facade's warning below would otherwise pop.
+  EphSrvFinalizeQt();    // This group sets the adapter's state itself
+  ClearWinSrvTestQt();   // rather than inheriting whatever ran before.
 
   // The backend slot: the -bs family reaches it like the other values,
   // and the chain it leaves is the selection.
@@ -18723,7 +18726,7 @@ static real ROracleSepQt(CONST char *szLeg, real lon1, real lat1,
 // observer and corrections bindings, and then the engines. The engines
 // meet on DE440 when a JPL DE440 binary sits under the name the -bj
 // backend looks for (de431.eph) on the -Yi paths and the Swiss side is
-// pinned to us.nSwissEph = 2, which is how this session ran it; on the
+// pinned to the jpl source, which is how this session ran it; on the
 // .se1 files instead the differences measured are dataset plus engine,
 // and the tolerances carry them. The tiers are work log 0c's: an orbit
 // point's corrections are interoperable in full or not at all, and mean
@@ -18747,22 +18750,24 @@ static void TestPrometheiaOracleQt()
   int cOrb = (int)(sizeof(rgorb)/sizeof(*rgorb));
   int cIns = (int)(sizeof(rgins)/sizeof(*rgins));
   int iIns, iOrb, cSep = 0, cSkip = 0, nMode;
+  CONST char *szChainOracle = "swiss";
   real lonS, latS, lonP, latP, lonP2, latP2, dAyan, dAyan2, dT, dT2, d, sep,
     jd = 0.0, jdTT;
 
-  // Which Swiss backend answers: the -bj one (a JPL DE file under the
+  // Which Swiss backend answers: the jpl source (a JPL DE file under the
   // de431.eph name -- this session's DE440) when it opens, else the
-  // files the run ships. Either way one Borrow pins it for the oracle.
+  // files the run ships. Either way one borrow pins it for the oracle.
   {
-    Borrow bSwiss(us.nSwissEph, 2);
+    EphSelBorrow bSwiss("jpl");
     fS = FSwissPlanet(oSun, 2451544.5, oEar, &lonS, &latS, &d, &d, &d, &d);
   }
   nMode = fS ? 2 : 0;
+  szChainOracle = nMode == 2 ? "jpl" : "swiss";
   printf("  oracle Swiss backend: %s\n",
     nMode == 2 ? "JPL DE file (DE440 under the de431.eph name)" :
     "Swiss Ephemeris files");
   if (!fS) {
-    Borrow bSwiss(us.nSwissEph, 0);
+    EphSelBorrow bSwiss("swiss");
     fS = FSwissPlanet(oSun, 2451544.5, oEar, &lonS, &latS, &d, &d, &d, &d);
   }
   if (!fS) {
@@ -18784,7 +18789,7 @@ static void TestPrometheiaOracleQt()
   // Leg 1: the bodies, geocentric apparent, tropical, true ecliptic of
   // date -- both engines' defaults, the same question both ways.
   {
-    Borrow bSwiss(us.nSwissEph, nMode);
+    EphSelBorrow bSwiss(szChainOracle);
     for (iIns = 0; iIns < cIns; iIns++) {
       OraclePinUtQt(rgins[iIns].yea, rgins[iIns].mon, rgins[iIns].day,
         rgins[iIns].tim);
@@ -18820,7 +18825,7 @@ static void TestPrometheiaOracleQt()
   CastChart(1);
   jd = JulianDayFromTime(is.T);
   {
-    Borrow bSwiss(us.nSwissEph, nMode);
+    EphSelBorrow bSwiss(szChainOracle);
     Borrow bTopo(us.fTopoPos, fTrue);
     pfTopo = eph::Profile();
     pfTopo.observer = eph::kObsTopo;
@@ -18848,7 +18853,7 @@ static void TestPrometheiaOracleQt()
   // work log item 2), so the plugin answers under that same mask and
   // the tier is tight.
   {
-    Borrow bSwiss(us.nSwissEph, nMode);
+    EphSelBorrow bSwiss(szChainOracle);
     pfHelio = eph::Profile();
     pfHelio.observer = eph::kObsHelio;
     pfHelio.corrections = eph::kCorrLightTime;
@@ -18877,7 +18882,7 @@ static void TestPrometheiaOracleQt()
   // the observable: is.rSid is Swiss's (negated), the plugin's column
   // is Prometheia's.
   {
-    Borrow bSwiss(us.nSwissEph, nMode);
+    EphSelBorrow bSwiss(szChainOracle);
     Borrow bSid(us.fSidereal, fTrue);
     Borrow bSid2(us.fSidereal2, fFalse);
     Borrow bZoff(us.rZodiacOffset, 0.0), bZall(us.rZodiacOffsetAll, 0.0);
@@ -18930,7 +18935,7 @@ static void TestPrometheiaOracleQt()
   // 19" from its light-timed one (the documented convention gap, a
   // loose tier that is still binding: a wrong frame is degrees).
   {
-    Borrow bSwiss(us.nSwissEph, nMode);
+    EphSelBorrow bSwiss(szChainOracle);
     Borrow bTN(us.fTrueNode, fTrue);
     fS = FSwissPlanet(oNod, jd, oEar, &lonS, &latS, &d, &d, &d, &d);
     if (fS) {
@@ -18967,7 +18972,7 @@ static void TestPrometheiaOracleQt()
   // between these engines) -- and the loose tolerance still catches a
   // wrong frame, which would move the node degrees.
   {
-    Borrow bSwiss(us.nSwissEph, nMode);
+    EphSelBorrow bSwiss(szChainOracle);
     Borrow bTN(us.fTrueNode, fFalse);
     fS = FSwissPlanet(oNod, jd, oEar, &lonS, &latS, &d, &d, &d, &d);
     if (fS) {
@@ -18986,7 +18991,7 @@ static void TestPrometheiaOracleQt()
   // Leg 7: the Moon's osculating and mean apogee (oLil), the same two
   // tiers as the nodes.
   {
-    Borrow bSwiss(us.nSwissEph, nMode);
+    EphSelBorrow bSwiss(szChainOracle);
     {
       Borrow bTN(us.fTrueNode, fTrue);
       Borrow bNN(us.fNaturalNode, fFalse);
@@ -19043,7 +19048,7 @@ static void TestPrometheiaOracleQt()
   // against their engine at df0ae42; a leg tripping here again means
   // the engine moved, which is the tripwire doing its work.
   {
-    Borrow bSwiss(us.nSwissEph, nMode);
+    EphSelBorrow bSwiss(szChainOracle);
     Borrow bTyp(rgTypSwiss[oNorm - custLo], 2);
     Borrow bObj(rgObjSwiss[oNorm - custLo], (int)oJup);
     Borrow bPnt(rgPntSwiss[oNorm - custLo], 1);
@@ -19075,7 +19080,7 @@ static void TestPrometheiaOracleQt()
   // realizations of the same body, so the loosest of the body tiers,
   // and still a binding check.
   if (FSzSet(SzEphPromParam(epPromCatalog))) {
-    Borrow bSwiss(us.nSwissEph, nMode);
+    EphSelBorrow bSwiss(szChainOracle);
     fS = FSwissPlanet(oChi, jd, oEar, &lonS, &latS, &d, &d, &d, &d);
     fCast = FPromOneRowQt(eph::kTimeUT1, jd, &pfTrop, eph::kObjBody,
       20002060, 0, 0, NULL, &lonP, &latP, &dAyan, &dT);
@@ -19098,7 +19103,7 @@ static void TestPrometheiaOracleQt()
   {
     char serr[AS_MAXCH];
     double xx[6];
-    Borrow bSwiss(us.nSwissEph, nMode);
+    EphSelBorrow bSwiss(szChainOracle);
     pfStar = eph::Profile();
     pfStar.corrections = eph::kCorrDeflection | eph::kCorrAberration;
     // swe_fixstar2() WRITES the star's canonical name back into its
@@ -19232,22 +19237,52 @@ static void TestPrometheiaQt()
 
   Group("Prometheia");
 
-  // ---- The parameter table (4.2/4.3): keys, defaults, set and reset --
-  Check(cepPromParam == 3, "the source carries its three parameters (%d)",
-    cepPromParam);
-  Check(FEqSz(rgEphPromParam[0].szKey, "ephemeris") &&
-    FEqSz(rgEphPromParam[1].szKey, "catalog") &&
-    FEqSz(rgEphPromParam[2].szKey, "perturbers") &&
-    rgEphPromParam[0].nKind == epkFile,
-    "the parameter keys are the 4.2 table's, bare like jpl's file");
+  // ---- The parameters (4.2/4.3): declared once, and REACHABLE --------
+  // The declarations are rows of the generated table like every other
+  // source's, asked for by key. The source held its own copy until
+  // 2026-09-18, which nothing read and which had drifted from the
+  // generated one in both label and kind.
+  Check(CEphParamOfSrc("prometheia") == cepPromParam,
+    "the generated table declares this source's three parameters (%d)",
+    CEphParamOfSrc("prometheia"));
+  Check(IepOfSrc("prometheia", 0) == epPrometheiaEphemeris &&
+    IepOfSrc("prometheia", 1) == epPrometheiaCatalog &&
+    IepOfSrc("prometheia", 2) == epPrometheiaPerturbers &&
+    IepOfSrc("prometheia", 3) < 0,
+    "and hands them back in order, with nothing past the last");
+  Check(FEqSz(rgephparam[epPrometheiaEphemeris].ep.szKey, "ephemeris") &&
+    FEqSz(rgephparam[epPrometheiaCatalog].ep.szKey, "catalog") &&
+    FEqSz(rgephparam[epPrometheiaPerturbers].ep.szKey, "perturbers") &&
+    rgephparam[epPrometheiaEphemeris].ep.nKind == epkFile,
+    "the keys are the 4.2 table's, and all three are FILE parameters -- "
+    "they are paths resolved on the -Yi search paths");
   Check(*SzEphPromParam(epPromEphemeris) == chNull,
     "the ephemeris default is the source's own");
-  EphPromSetParam(epPromCatalog, "catalog-test.epm");
-  Check(FEqSz(SzEphPromParam(epPromCatalog), "catalog-test.epm"),
-    "a parameter set is readable back");
-  EphPromSetParam(epPromCatalog, "");
-  Check(*SzEphPromParam(epPromCatalog) == chNull,
-    "an empty value restores the default");
+
+  // THE VALUES ARE us.rgszEphParam[], which is what makes "-bP
+  // prometheia.catalog", the settings file's line and the Ephemeris
+  // Settings dialog reach this source at all. They did not until
+  // 2026-09-18: the source read a private array nothing outside itself
+  // ever wrote, so every configured path was silently dropped and the
+  // engine always opened on its default search. Asked from BOTH ends
+  // here -- set through the shared entry point, read through the
+  // source's own -- because either alone passes with the two stores
+  // disconnected again.
+  {
+    int iep = IepOfSrc("prometheia", epPromCatalog);
+
+    FEphParamSet(iep, "catalog-test.epm");
+    Check(FEqSz(SzEphPromParam(epPromCatalog), "catalog-test.epm"),
+      "a parameter set through the SHARED path is what the source reads "
+      "(\"%s\")", SzEphPromParam(epPromCatalog));
+    EphPromSetParam(epPromCatalog, "other.epm");
+    Check(FEqSz(SzSet(us.rgszEphParam[iep]), "other.epm"),
+      "and one set through the source lands in the shared store (\"%s\")",
+      SzSet(us.rgszEphParam[iep]));
+    FEphParamSet(iep, "");
+    Check(*SzEphPromParam(epPromCatalog) == chNull,
+      "an empty value restores the default");
+  }
   EphPromSetParam(-1, "x");              // out of range: ignored
   EphPromSetParam(cepPromParam, "x");
 
@@ -19548,7 +19583,7 @@ static void TestPrometheiaQt()
     // registry group's byte-equality reserved for the delegation it
     // exists to pin.
     {
-      Borrow bFiles(us.fEphemFiles, fTrue), bMat(us.fMatrixPla, fFalse);
+      EphSelBorrow bChainH("prometheia");
       Borrow bSid(us.fSidereal, fFalse), bSid2(us.fSidereal2, fFalse);
       Borrow bTopo(us.fTopoPos, fFalse), bTrue(us.fTruePos, fFalse);
       Borrow bBary(us.fBarycenter, fFalse), bNoNut(us.fNoNutation, fFalse);
@@ -20621,10 +20656,12 @@ static void TestEphemRegistryQt()
       "sources (%d)", cEphSrcBuiltIn, CEphSrc());
     Check(IEphSrcFromKey("swiss") == 0 && IEphSrcFromKey("jpl") == 1 &&
       IEphSrcFromKey("moshier") == 2 && IEphSrcFromKey("matrix") == 3 &&
-      IEphSrcFromKey("none") == 4 + cEphSrcPrometheia &&
+      IEphSrcFromKey("server") == 4 + cEphSrcPrometheia &&
+      IEphSrcFromKey("none") == 5 + cEphSrcPrometheia &&
       IEphSrcFromKey("nonesuch") < 0,
       "every source resolves by its key, and a bad key resolves to none "
-      "(the phase 7 source, compiled in, sits at index 4)");
+      "(the phase 7 source, when compiled in, sits at index 4, and the "
+      "phase 6 server after it)");
     Check(FEqSz(us.szEphemSource, "swiss"),
       "the selection IS the chain, and its head is the swiss source");
 
@@ -20884,8 +20921,12 @@ static void TestEphemRegistryQt()
       rgsz[2] = (char *)"swiss";
       Check(FProcessSwitches(3, rgsz, NULL), "back to the default again");
       {
-        static CONST char *rgszFuture[] = {"server", "horizons",
-          "prometheia"};
+        static CONST char *rgszFuture[] = {
+          "horizons",
+#ifndef PROMETHEIA
+          "prometheia",
+#endif
+        };
         int isrc, i;
 
         for (isrc = 0; isrc < CEphSrc(); isrc++)
@@ -21071,15 +21112,17 @@ static void TestEphemDialogQt()
 
   Group("Ephemeris settings dialog");
 
-  // The file-shaped and token parameters are each alone in the table, so
-  // their kinds find them without copying the dialog's own row list --
-  // which a regenerated table may re-decide.
-  for (iep = 0; iep < cEphParam; iep++) {
-    if (rgephparam[iep].ep.nKind == epkFile)
-      iepFile = iep;
-    if (rgephparam[iep].ep.nKind == epkToken)
-      iepTok = iep;
-  }
+  // A file parameter and a token one, found by asking their SOURCES
+  // rather than by scanning the table for a kind. The kind used to
+  // identify one row each, and stopped when the Prometheia parameters
+  // were corrected to the file kind they always were -- at which point
+  // "the last epkFile row" was a perturber kernel that no dialog showed.
+  for (iep = 0; iep < CEphParamOfSrc("jpl"); iep++)
+    if (rgephparam[IepOfSrc("jpl", iep)].ep.nKind == epkFile)
+      iepFile = IepOfSrc("jpl", iep);
+  for (iep = 0; iep < CEphParamOfSrc("server"); iep++)
+    if (rgephparam[IepOfSrc("server", iep)].ep.nKind == epkToken)
+      iepTok = IepOfSrc("server", iep);
   Check(iepFile >= 0 && iepTok >= 0,
     "the table carries a file parameter and a token one");
   sprintf2(S(szChainSav), "%s", SzSet(us.szEphemSource));
@@ -21134,12 +21177,30 @@ static void TestEphemDialogQt()
       Check(rgpl.size() == 4 && rgpe.size() == 4 && rgppb.size() == 4,
         "four parameter rows are built (%d labels, %d edits, %d buttons)",
         rgpl.size(), rgpe.size(), rgppb.size());
+      // The rows are the CHAIN HEAD'S OWN parameters, in the generated
+      // table's order, and a row past that source's count is hidden
+      // rather than showing another source's. Both builds used a
+      // hand-written list of four indexes across two sources until
+      // 2026-09-18, which is why a catalog and a perturber kernel had no
+      // way in from any dialog and a JPL file row sat beside a server
+      // token no selection could use together.
+      {
+        int rgiepExp[4], cExp = CEphParamRows(rgiepExp, 4);
+        Check(cExp == CEphParamOfSrc(szHead),
+          "the rows are exactly the head's parameters (%d of %d)", cExp,
+          CEphParamOfSrc(szHead));
+        for (i = cExp; i < rgpl.size() && i < rgpe.size(); i++)
+          Check(!rgpl[i]->isVisible() && !rgpe[i]->isVisible(),
+            "row %d is hidden: this source has no such parameter", i);
+      }
       for (i = 0; i < rgpl.size() && i < rgpe.size() && i < rgppb.size();
         i++) {
-        // Each row is identified by its label, not its position, so
+        // Each live row is identified by its label, not its position, so
         // which parameters the dialog shows stays the dialog's choice.
         QString strLabel = rgpl[i]->text();
         int iepRow = -1;
+        if (!rgpl[i]->isVisible())
+          continue;
         Check(strLabel.endsWith(':'),
           "row %d's label is a caption (\"%s\")", i,
           strLabel.toLocal8Bit().constData());
@@ -21150,6 +21211,9 @@ static void TestEphemDialogQt()
           strLabel.toLocal8Bit().constData());
         if (iepRow < 0)
           continue;
+        Check(FEqSz(rgephparam[iepRow].szSrc, szHead),
+          "row %d's parameter belongs to the head source (%s, not %s)", i,
+          rgephparam[iepRow].szSrc, szHead);
         Check(rgpe[i]->text() == QString::fromUtf8(
           SzSet(us.rgszEphParam[iepRow])),
           "row %d opens on its parameter's value", i);
@@ -21242,24 +21306,43 @@ static void TestEphemDialogQt()
     int nWriteFormatSav = us.nWriteFormat, cLine;
     flag fNoWriteSav = us.fNoWrite;
 
-    DriveModalQt(ShowEphemDialogQt, [&](QWidget *pw) {
-      QList<QLabel *> rgpl = pw->findChildren<QLabel *>("dsEp_p");
-      QList<QLineEdit *> rgpe = pw->findChildren<QLineEdit *>("deEp_p");
-      for (int i = 0; i < rgpl.size() && i < rgpe.size(); i++) {
-        QString strLabel = rgpl[i]->text();
-        if (strLabel == QString("%1:").arg(rgephparam[iepFile].ep.szLabel))
-          rgpe[i]->setText("eph5-file-value");
-        if (strLabel == QString("%1:").arg(rgephparam[iepTok].ep.szLabel))
-          rgpe[i]->setText("eph5-token-value");
+    // One source at a time: the rows are the chain head's own, so a file
+    // parameter and a token one belonging to different sources are two
+    // visits rather than one. Each types into the row its own label
+    // names, so neither depends on row order.
+    {
+      struct { CONST char *szChain; int iep; CONST char *szVal; } rgvis[] = {
+        {"jpl", iepFile, "eph5-file-value"},
+        {"server", iepTok, "eph5-token-value"}
+      };
+      int iVis;
+
+      for (iVis = 0; iVis < 2; iVis++) {
+        int iepWant = rgvis[iVis].iep;
+        CONST char *szValWant = rgvis[iVis].szVal;
+        EphSourceSet(rgvis[iVis].szChain);
+        DriveModalQt(ShowEphemDialogQt, [&](QWidget *pw) {
+          QList<QLabel *> rgpl = pw->findChildren<QLabel *>("dsEp_p");
+          QList<QLineEdit *> rgpe = pw->findChildren<QLineEdit *>("deEp_p");
+          for (int i = 0; i < rgpl.size() && i < rgpe.size(); i++)
+            if (rgpl[i]->isVisible() && rgpl[i]->text() ==
+              QString("%1:").arg(rgephparam[iepWant].ep.szLabel))
+              rgpe[i]->setText(QString::fromUtf8(szValWant));
+          if (!FClickButtonQt(pw, "IDOK"))
+            pw->close();
+        });
+        Check(FEqSz(SzSet(us.rgszEphParam[iepWant]), szValWant),
+          "the %s parameter typed in the dialog applies on OK (\"%s\")",
+          rgephparam[iepWant].szSrc, SzSet(us.rgszEphParam[iepWant]));
+        // OK recasts, and a recast with the server selected starts the
+        // legacy Qt adapter -- ComputeEphem() still reaches it through
+        // its own branch rather than through the registry until phase
+        // 6's transport lands. Put it back after every visit, or the
+        // connection outlives this group and the next one's loopback
+        // reads this group's HELLO before its own REQUEST.
+        EphSrvFinalizeQt();
       }
-      if (!FClickButtonQt(pw, "IDOK"))
-        pw->close();
-    });
-    Check(FEqSz(SzSet(us.rgszEphParam[iepFile]), "eph5-file-value"),
-      "a file parameter typed in the dialog applies on OK (\"%s\")",
-      SzSet(us.rgszEphParam[iepFile]));
-    Check(FEqSz(SzSet(us.rgszEphParam[iepTok]), "eph5-token-value"),
-      "and so does the masked token parameter");
+    }
 
     SzScratchPathQt(S(szPath), "eph5round", ".as");
     us.fNoWrite = fFalse;
@@ -21279,7 +21362,7 @@ static void TestEphemDialogQt()
     Check(cLine == 3, "the file carries one -bE and two -bP lines (%d)",
       cLine);
     SzEphChainHead(us.szEphemSource, S(szHead));
-    Check(FEqSz(szHead, "moshier"),
+    Check(FEqSz(szHead, "server"),
       "the chain a dialog OK set survives save and load (%s)", szHead);
     Check(FEqSz(SzSet(us.rgszEphParam[iepFile]), "eph5-file-value") &&
       FEqSz(SzSet(us.rgszEphParam[iepTok]), "eph5-token-value"),
@@ -21293,9 +21376,13 @@ static void TestEphemDialogQt()
 
   // Connect's honest degradation, read inside the click before the
   // refresh timer can take the line back: a key this build's registry
-  // does not resolve has no transport to try -- the remote sources are
-  // phase 6's -- and the line says so rather than pretending.
+  // does not resolve has no transport to try, and the line says so
+  // rather than pretending. The server source is REGISTERED now (phase
+  // 6) -- what it lacks in this build is a transport, which is a
+  // different sentence from "no such source" and has to read as one.
   {
+    char szHeadBefore[cchSzDef];
+    SzEphChainHead(us.szEphemSource, S(szHeadBefore));
     DriveModalQt(ShowEphemDialogQt, [&](QWidget *pw) {
       QLineEdit *peChain = pw->findChild<QLineEdit *>("deEp_chain");
       QLabel *plStatus = pw->findChild<QLabel *>("dsEp_st");
@@ -21303,7 +21390,7 @@ static void TestEphemDialogQt()
         peChain->setText("server");
         FClickButtonQt(pw, "dbEp_ct");
         Check(plStatus->text().contains("no transport in this build"),
-          "a known future key honestly reports no transport (\"%s\")",
+          "a registered source with no transport says so (\"%s\")",
           plStatus->text().toLocal8Bit().constData());
         peChain->setText("nosuchsource");
         FClickButtonQt(pw, "dbEp_ct");
@@ -21315,8 +21402,16 @@ static void TestEphemDialogQt()
         pw->close();
     });
     SzEphChainHead(us.szEphemSource, S(szHead));
-    Check(FEqSz(szHead, "moshier"), "Connect never touched the chain");
+    Check(FEqSz(szHead, szHeadBefore),
+      "Connect never touched the chain (%s, was %s)", szHead, szHeadBefore);
   }
+
+  // This group drove the dialog with the server selected, and OK casts --
+  // which starts the adapter. Put it back, or the next group inherits a
+  // connector it did not start and its own WELCOME limits are not the
+  // ones it set (measured: the request-bytes legs of the server group
+  // fail, and only when this group ran first).
+  EphSrvFinalizeQt();
 
   // Back where the suite was, through the same accessors the dialog used.
   EphSourceSet(szChainSav);

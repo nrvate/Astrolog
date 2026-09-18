@@ -30,33 +30,40 @@
 #include <string.h>
 
 // --------------------------------------------------------------------------
-// Parameters (4.2/4.3). The table is the registry's own EPHPARAM shape
-// (ephem.h); the values live here until phase 4 moves them into
-// us.rgszEphParam[], with the empty string meaning the source's own
-// default.
-CONST EPHPARAM rgEphPromParam[cepPromParam] = {
-  {"ephemeris", "Ephemeris File", epkFile, ""},
-  {"catalog", "Small-body Catalog", epkFile, ""},
-  {"perturbers", "Perturber Kernel", epkFile, ""},
+// Parameters (4.2/4.3). The DECLARATIONS are rows of the generated table
+// (ephparam.h) and the VALUES are us.rgszEphParam[], both shared with
+// every other source -- this file holds neither, and that is the fix:
+// holding its own copy of either is what made the command line, the
+// settings file and the dialog all miss this source entirely.
+
+static CONST int rgiepPromShared[cepPromParam] = {
+  epPrometheiaEphemeris, epPrometheiaCatalog, epPrometheiaPerturbers
 };
 
-static char rgszEphPromValue[cepPromParam][256];
+// This source's index 0..2 to the shared parameter space. The one place
+// the two numberings meet.
+static int IepPromShared(int iParam)
+{
+  return FBetween(iParam, 0, cepPromParam-1) ? rgiepPromShared[iParam] : -1;
+}
 
 void EphPromSetParam(int iParam, CONST char *szValue)
 {
-  if (!FBetween(iParam, 0, cepPromParam-1))
+  int iep = IepPromShared(iParam);
+
+  if (iep < 0)
     return;
-  if (szValue == NULL)
-    szValue = "";
-  if (!FEqSz(szValue, rgszEphPromValue[iParam])) {
-    sprintf2(S(rgszEphPromValue[iParam]), "%s", szValue);
-    EphPromStop();          // the next question reopens from the new value
-  }
+  // FEphParamSet() drops what the owning source has open when the value
+  // actually changes, so the reopen this used to do by hand is the
+  // shared path's business now and happens however the value was set.
+  FEphParamSet(iep, szValue);
 }
 
 CONST char *SzEphPromParam(int iParam)
 {
-  return FBetween(iParam, 0, cepPromParam-1) ? rgszEphPromValue[iParam] : "";
+  int iep = IepPromShared(iParam);
+
+  return iep < 0 ? "" : SzSet(us.rgszEphParam[iep]);
 }
 
 // --------------------------------------------------------------------------
@@ -920,7 +927,6 @@ static int NLookupProm(CONST char *sz, EPHMATCH *rgm, int cMax)
 EPHSRCDEF ephsrcPrometheia = {
   "prometheia", "Ephemeris Prometheia",
   "The cleanroom Prometheia engine over JPL DE and SBDB files.",
-  rgEphPromParam, cepPromParam,
   FAvailableProm, GetCapsProm, StateProm, StartProm, StopProm,
   FSubmitProm, FReadProm, HintProm, NLookupProm
 };

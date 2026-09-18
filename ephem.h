@@ -119,6 +119,11 @@ typedef struct _EphParamRow {
 
 extern CONST EPHPARAMROW rgephparam[cEphParam];
 
+// A source's parameters are reached by its key, with CEphParamOfSrc()
+// and IepOfSrc() -- declared in extern.h with every other function,
+// since the P(()) macro is not in scope here. That pair is the ONLY way
+// to ask, so this generated table is the only answer.
+
 // What a source advertises: the WELCOME capability model (section 3.4),
 // at the granularity the host casts at. Advertised is promised -- a bit
 // whose behaviour no test exercises stays dark (section 3.9a).
@@ -212,8 +217,16 @@ typedef struct _EphSrcDef {
   CONST char *szKey;   // "swiss" -- the CLI and settings key.
   CONST char *szName;  // "Swiss Ephemeris files" -- dialogs.
   CONST char *szDesc;  // One line for the dialog.
-  CONST EPHPARAM *rgParam;  // Declared settings (section 4.3).
-  int cParam;
+  // A source's PARAMETERS are not here. They are rows of the generated
+  // table (ephparam.h), owned by the source's key, and reached with
+  // CEphParamOfSrc()/IepOfSrc() below. This struct carried a
+  // CONST EPHPARAM *rgParam and a count until 2026-09-18, and nothing
+  // anywhere read either: -bP and both dialogs go to the generated
+  // table. So the copy the Prometheia source handed it was free to
+  // drift, and had -- different label AND different kind, which is what
+  // decides whether a dialog row offers a Browse button. A field that
+  // nothing reads cannot be kept honest, so it is gone rather than
+  // audited.
   flag (*FAvailable)(char *szWhy, int cch);  // Compiled, files, transport.
   void (*GetCaps)(EPHCAPS *pcaps);           // The capability model.
   int (*State)(char *sz, int cch);           // An es* value plus text.
@@ -235,7 +248,34 @@ extern EPHSRCDEF ephsrcSwiss;
 extern EPHSRCDEF ephsrcMoshier;
 extern EPHSRCDEF ephsrcJpl;
 extern EPHSRCDEF ephsrcMatrix;
+extern EPHSRCDEF ephsrcServer;
 extern EPHSRCDEF ephsrcNone;
+
+
+// A REMOTE SOURCE'S TRANSPORT (section 4.2, phase 6).
+//
+// The server source is one plugin in every build. What differs between
+// builds is only how bytes reach the server: a QWebSocket under Qt,
+// WinHTTP's WebSocket on Win32, the socket client of
+// ephsrv/eph_wsclient.cpp for the console. So a transport is a table a
+// backend REGISTERS, rather than an "#ifdef" inside the plugin --
+// ephserver.cpp then compiles identically everywhere and asks whatever
+// registered itself.
+//
+// With nothing registered the source is simply unavailable, carrying
+// that as its reason. That is the same shape an uncompiled plugin or a
+// missing data file already has, so no part of the registry, the chain
+// walk or the dialog has to know which builds have a transport.
+
+typedef struct _EphTrans {
+  CONST char *szName;   // "Qt WebSocket" -- the dialog's status line.
+  flag (*FAvail)(char *szWhy, int cch);
+  int  (*State)(char *sz, int cch);   // esReady / esConnecting / esFailed.
+  void (*Start)(void);  // Begin connecting; never blocks.
+  void (*Stop)(void);
+  flag (*FSubmit)(CONST EPHQUERY *pq);
+  flag (*FRead)(CONST EPHQUERY *pq, int iObj, EPHROW *prow);
+} EPHTRANS;
 
 // The Prometheia source (phase 7) is compiled in only when PROMETHEIA is
 // defined -- the makefiles' pkg-config detection -- and sits in the table
@@ -247,7 +287,12 @@ extern EPHSRCDEF ephsrcPrometheia;
 #define cEphSrcPrometheia 0
 #endif
 
-#define cEphSrcBuiltIn (5 + cEphSrcPrometheia)
+// The server source (phase 6) sits between the local sources and none.
+// Its place in the table is nearly cosmetic -- the default chain is
+// built from the documented quality order of the LOCAL sources, and a
+// remote one is only ever in a chain because the user named it -- but it
+// goes before none, because a chain that reaches none is over.
+#define cEphSrcBuiltIn (6 + cEphSrcPrometheia)
 
 // The registry order, the fallback chain's quality order (section 4.2:
 // swiss, jpl, moshier, matrix), none last: it serves nothing, and a chain

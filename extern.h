@@ -562,6 +562,11 @@ extern flag FSwissPlanet
 
 // The ephemeris source registry (ephem.h, ephem.cpp, ephswiss.cpp):
 // EPHEMERIS_PLUGINS_PLAN.md section 4.
+extern int CEphParamOfSrc P((CONST char *));
+extern int IepOfSrc P((CONST char *, int));
+extern int CEphParamRows P((int *, int));
+extern void EphSrvTransportSet P((CONST EPHTRANS *));
+extern CONST EPHTRANS *PephtransGet P((void));
 extern int CEphSrc P((void));
 extern EPHSRCDEF *PephsrcGet P((int));
 extern int IEphSrcFromKey P((CONST char *));

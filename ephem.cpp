@@ -48,7 +48,7 @@ EPHSRCDEF * CONST rgephsrc[cEphSrcBuiltIn] = {
 #ifdef PROMETHEIA
   &ephsrcPrometheia,
 #endif
-  &ephsrcNone
+  &ephsrcServer, &ephsrcNone
 };
 
 
@@ -125,8 +125,15 @@ static int IEphSrcFromKeyN(CONST char *pch, int cch)
 // Swiss and write itself back as "mosheir". When phase 6 registers the
 // remote pair and phase 7 the Prometheia plugin, this table is deleted.
 
-static CONST char * CONST rgszEphSrcFuture[] = {"server", "horizons",
-  "prometheia"};
+static CONST char * CONST rgszEphSrcFuture[] = {
+  "horizons",
+#ifndef PROMETHEIA
+  // Only while it is genuinely absent: with the plugin compiled in, the
+  // registry supplies this key and naming it here as well would be a
+  // second answer to the same question.
+  "prometheia",
+#endif
+};
 
 
 // The range form is what the -bE parser needs -- it validates the text
@@ -262,10 +269,76 @@ void EphSourceChanged()
 
 
 // The source parameters' shared index space (4.3), generated into
-// ephparam.h. This is the table's one definition; ephswiss.cpp hands a
-// slice of it to the jpl source's rgParam, and -bP looks keys up here.
+// ephparam.h. This is the table's one definition, and since 2026-09-18
+// its ONLY one: -bP looks keys up here, the dialogs build their rows
+// from here, and a source asks for its own with the two functions below.
+// A source used to hand a copy to its descriptor as well, which nothing
+// read and which had drifted.
 
 CONST EPHPARAMROW rgephparam[cEphParam] = EphParamRowsGenerated();
+
+
+// A source's parameters, by its key. The rows are grouped by source and
+// in the enum's order, but nothing depends on that here: both walk the
+// whole table, because a table whose grouping is load-bearing is one an
+// append can break silently.
+
+int CEphParamOfSrc(CONST char *szKey)
+{
+  int iep, c = 0;
+
+  if (szKey == NULL)
+    return 0;
+  for (iep = 0; iep < cEphParam; iep++)
+    if (FEqSz(rgephparam[iep].szSrc, szKey))
+      c++;
+  return c;
+}
+
+
+// The parameter rows a dialog shows: the parameters of the chain's HEAD
+// source, which is the one being configured -- its status, its Connect
+// button and its description are all already the dialog's subject. Fills
+// rgiep with their shared indexes and returns how many, never more than
+// cMax.
+//
+// Both builds used a hand-written list of four indexes instead, naming
+// four of the six parameters the table declares. Two of the four were a
+// source's and two another's, so the dialog showed a mixture no single
+// selection could use, and the two it left out -- a catalog and a
+// perturber kernel -- had no way in from any dialog at all. The count
+// four was not the bug; no source declares more than three parameters,
+// so four rows are enough. Naming the indexes by hand was.
+
+int CEphParamRows(int *rgiep, int cMax)
+{
+  char szHead[cchSzDef];
+  int c, i, cRow = 0;
+
+  if (rgiep == NULL || cMax <= 0)
+    return 0;
+  SzEphChainHead(us.szEphemSource, S(szHead));
+  c = CEphParamOfSrc(szHead);
+  for (i = 0; i < c && cRow < cMax; i++) {
+    int iep = IepOfSrc(szHead, i);
+    if (iep >= 0)
+      rgiep[cRow++] = iep;
+  }
+  return cRow;
+}
+
+
+int IepOfSrc(CONST char *szKey, int i)
+{
+  int iep, c = 0;
+
+  if (szKey == NULL || i < 0)
+    return -1;
+  for (iep = 0; iep < cEphParam; iep++)
+    if (FEqSz(rgephparam[iep].szSrc, szKey) && c++ == i)
+      return iep;
+  return -1;
+}
 
 
 // "server.url" -> epServerUrl, by way of the generated table. -1 when the
@@ -300,10 +373,25 @@ int IEphParamFromKey(CONST char *szKey)
 
 flag FEphParamSet(int iep, CONST char *szVal)
 {
+  CONST char *szOld;
+  flag fMoved;
+
   if (iep < 0 || iep >= cEphParam)
     return fFalse;
+  szOld = SzSet(us.rgszEphParam[iep]);
+  fMoved = !FEqSz(szOld, szVal != NULL ? szVal : "");
   FCloneSz(szVal != NULL && *szVal ? szVal : NULL,
     &us.rgszEphParam[iep]);
+  // A source holds files and connections open against the values it was
+  // given, so a parameter that actually MOVED drops what its owner has
+  // open and the next question reopens on the new one. Only on a real
+  // change: the settings sweeps rewrite every field, and dropping an
+  // open engine on every no-op write would reopen it hundreds of times.
+  if (fMoved) {
+    int isrc = IEphSrcFromKey(rgephparam[iep].szSrc);
+    if (isrc >= 0)
+      rgephsrc[isrc]->Stop();
+  }
   return fTrue;
 }
 
@@ -762,7 +850,6 @@ static int NLookupNone(CONST char *sz, EPHMATCH *rgm, int cMax)
 
 EPHSRCDEF ephsrcNone = {
   "none", "None", "No ephemeris source; the Matrix legacy cast only.",
-  NULL, 0,
   FAvailableNone, GetCapsNone, StateNone, StartNone, StopNone,
   FSubmitNone, FReadNone, HintNone, NLookupNone
 };

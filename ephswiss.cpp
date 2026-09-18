@@ -220,7 +220,6 @@ static flag FSubmitJpl(EPHQUERY *pq)
 EPHSRCDEF ephsrcSwiss = {
   "swiss", "Swiss Ephemeris files",
   "The Swiss Ephemeris over its own data files.",
-  NULL, 0,
   FAvailableSwissLocal, GetCapsSwissLocal, StateSwissLocal, StartSwissLocal,
   StopSwissLocal, FSubmitSwiss, FReadSwissLocal, HintSwissLocal,
   NLookupSwissLocal
@@ -229,7 +228,6 @@ EPHSRCDEF ephsrcSwiss = {
 EPHSRCDEF ephsrcMoshier = {
   "moshier", "Moshier ephemeris",
   "The Moshier analytic formulas; major planets and Moon.",
-  NULL, 0,
   FAvailableSwissLocal, GetCapsSwissLocal, StateSwissLocal, StartSwissLocal,
   StopSwissLocal, FSubmitMoshier, FReadSwissLocal, HintSwissLocal,
   NLookupSwissLocal
@@ -238,7 +236,6 @@ EPHSRCDEF ephsrcMoshier = {
 EPHSRCDEF ephsrcJpl = {
   "jpl", "JPL ephemeris file",
   "The Swiss Ephemeris over a JPL_DE file.",
-  &rgephparam[epJplFile].ep, 1,
   FAvailableSwissLocal, GetCapsSwissLocal, StateSwissLocal, StartSwissLocal,
   StopSwissLocal, FSubmitJpl, FReadSwissLocal, HintSwissLocal,
   NLookupSwissLocal
@@ -326,7 +323,6 @@ static int NLookupMatrix(CONST char *sz, EPHMATCH *rgm, int cMax)
 EPHSRCDEF ephsrcMatrix = {
   "matrix", "Matrix formula",
   "Astrolog's own Matrix formulas; the legacy cast hook.",
-  NULL, 0,
   FAvailableMatrix, GetCapsMatrix, StateMatrix, StartMatrix, StopMatrix,
   FSubmitMatrix, FReadMatrix, HintMatrix, NLookupMatrix
 };

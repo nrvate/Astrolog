@@ -40,9 +40,15 @@ OUT = "ephparam.h"
 # matrix and none declare none) have no rows here.
 PARAMS = [
     ("jpl", "file",        "JPL file",    "epkFile",  ""),
-    ("prometheia", "ephemeris",  "Ephemeris",  "epkText", ""),
-    ("prometheia", "catalog",    "Catalog",    "epkText", ""),
-    ("prometheia", "perturbers", "Perturbers", "epkText", ""),
+    # All three are FILE paths, resolved on the -Yi search paths by
+    # FEphPromFindFile() and handed to prometheia_engine_open(),
+    # _add_catalog() and _add_perturbers(). They were declared here as
+    # free text while a second, divergent copy of the same three lived
+    # inside ephprom.cpp saying epkFile -- and nothing read either one,
+    # so a dialog's Browse button depended on which table it asked.
+    ("prometheia", "ephemeris",  "Ephemeris File",     "epkFile", ""),
+    ("prometheia", "catalog",    "Small-body Catalog", "epkFile", ""),
+    ("prometheia", "perturbers", "Perturber Kernel",   "epkFile", ""),
     ("server", "url",   "Server Address", "epkUrl",   ""),
     ("server", "token", "Server Token",   "epkToken", ""),
 ]

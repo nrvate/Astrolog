@@ -33,9 +33,9 @@ enum {
 #define EphParamRowsGenerated() \
   { \
     {"jpl", {"file", "JPL file", epkFile, ""}}, \
-    {"prometheia", {"ephemeris", "Ephemeris", epkText, ""}}, \
-    {"prometheia", {"catalog", "Catalog", epkText, ""}}, \
-    {"prometheia", {"perturbers", "Perturbers", epkText, ""}}, \
+    {"prometheia", {"ephemeris", "Ephemeris File", epkFile, ""}}, \
+    {"prometheia", {"catalog", "Small-body Catalog", epkFile, ""}}, \
+    {"prometheia", {"perturbers", "Perturber Kernel", epkFile, ""}}, \
     {"server", {"url", "Server Address", epkUrl, ""}}, \
     {"server", {"token", "Server Token", epkToken, ""}} \
   }

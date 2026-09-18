@@ -26,15 +26,23 @@
 #include "ephsrv/ephproto.h"
 #include <prometheia/prometheia.h>
 
-// The three parameters of 4.2, in the shared EPHPARAM shape. Their
-// VALUES live here until phase 4 moves them into us.rgszEphParam[] --
-// the registry's own table is data only (ephem.h says so), and the
-// built-in local sources run on their defaults until then.
+// The three parameters of 4.2. Their declarations are rows of the
+// generated table (ephparam.h) like every other source's, and their
+// VALUES are us.rgszEphParam[] like every other source's -- which is
+// what makes "-bP prometheia.ephemeris", the settings file's line and
+// the Ephemeris Settings dialog reach this source at all.
+//
+// They did not, until 2026-09-18. The values lived in a private array
+// here whose only writer was EphPromSetParam(), which nothing outside
+// this file and the suite ever called, so every configured path was
+// dropped and the engine always opened on its default search. Phase 5's
+// dialog made it visible by shipping a control that did nothing.
+//
+// These indexes are this source's own, 0..2, for its internal use; the
+// map to the shared space is IepPromShared(), one place.
 enum {
   epPromEphemeris, epPromCatalog, epPromPerturbers, cepPromParam
 };
-
-extern CONST EPHPARAM rgEphPromParam[cepPromParam];
 
 // Set one parameter; an empty string restores the default. Any engine
 // the source has open is dropped, so the next question reopens from the
