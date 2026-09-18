@@ -20482,7 +20482,10 @@ static void TestEphSrvLiveQt()
   QByteArray baLog, strUrlEnv;
   EPHSNAPSHOT snLocal, snSrv;
   char sz[cchSzMax], szDiff[cchSzMax];
-  int port, iScen, cDiff, cWarn, cReq, iU;
+  // port is set only when this group starts its own daemon; with
+  // ASTROLOG_EPHSRV_URL it never is, and Qt6's optimiser noticed the
+  // uninitialised read in the sprintf below.
+  int port = 0, iScen, cDiff, cWarn, cReq, iU;
 
   Group("Ephemeris server, live parity");
   SetNoPopupQt(fTrue);

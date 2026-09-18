@@ -1099,7 +1099,12 @@ void ComputeEphem(real t)
       // The sources' own reasons are carried out, because "no ephemeris
       // source could answer" without a why is nearly as unhelpful as
       // silence.
-      if (eq.cobj > 0 && !FEphSubmit(&eq) && !is.fNoEphFile) {
+      // ... unless a source is still connecting, in which case the cast
+      // is about to be made again with an answer (the Qt backend recasts
+      // on WELCOME). Warning here would print an alarm and then draw the
+      // right chart a moment later, which is worse than silence.
+      if (eq.cobj > 0 && !FEphSubmit(&eq) && !is.fNoEphFile &&
+        !FEphChainConnecting()) {
         char szNo[cchSzMax];
         is.fNoEphFile = fTrue;
         sprintf2(S(szNo), "No ephemeris source could answer this chart%s%s. "

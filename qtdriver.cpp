@@ -7894,6 +7894,18 @@ static int NStateTransQt(char *sz, int cch)
 {
   if (sz != NULL)
     SzEphSrvStatusQt(sz, cch);
+  // Before the GUI exists there is no socket yet and no failure either:
+  // the startup chart is cast first, BeginQt() connects, and the WELCOME
+  // recasts it. Reporting "failed" there made the host announce that no
+  // source could answer a chart that was answered a moment later, so the
+  // honest state while a retry is pending is CONNECTING.
+  // Only the startup cast, which is the one case where a retry is
+  // CERTAIN: BeginQt() has not run, so no socket exists yet and the
+  // WELCOME will recast. Keyed on the pending-retry FLAG instead, this
+  // leaked -- when no server ever answers, nothing clears the flag and
+  // every later failure went unreported too, which the suite caught.
+  if (QCoreApplication::instance() == NULL)
+    return esConnecting;
   return esrv.est == esWelcomed ? esReady :
     esrv.est == esConnecting ? esConnecting : esFailed;
 }
@@ -9097,6 +9109,19 @@ static void SrvWarnOnceQt(real jd, CONST char *szWhy)
   static real rJd = rInvalid;    // The cast the once-per-cast warning was
   static int nGen = -1;          // raised for: its generation and instant.
   static QElapsedTimer timShown;
+
+  // The startup chart says nothing: it is cast before any QApplication
+  // exists, so no socket can be made, every object fails, and
+  // SrvWelcomedQt() recasts it once the WELCOME lands. Warning printed an
+  // alarm and then drew the right chart a moment later, which is worse
+  // than silence -- it is what the Prometheia project saw first when they
+  // pointed the application at their daemon.
+  //
+  // This tests the APPLICATION, not the pending-retry flag: that flag is
+  // only cleared by a WELCOME, so against a server that never answers it
+  // stayed set and silenced every later failure too.
+  if (QCoreApplication::instance() == NULL)
+    return;
 
   // Once per cast, and a cast is a generation of the prefetch, not an
   // instant: keyed on the instant alone, a chart cast again at the same

@@ -589,6 +589,7 @@ extern void EphQueryInit P((EPHQUERY *, real));
 extern flag FEphQueryAdd P((EPHQUERY *, int, int, int, char *));
 extern flag FEphFallbackNotice P((void));
 extern CONST char *SzEphNoSourceWhy P((void));
+extern flag FEphChainConnecting P((void));
 extern int NSwissEphem P((void));
 extern int SwissSetEphemCast P((int));
 extern void SwissRestoreEphemCast P((int));

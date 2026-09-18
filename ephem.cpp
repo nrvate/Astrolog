@@ -689,6 +689,26 @@ CONST char *SzEphNoSourceWhy()
 }
 
 
+// Is some source in the chain still CONNECTING? A remote source answers
+// nothing while its socket is coming up, and the host must not say "no
+// source could answer" about a cast that is about to be answered: the Qt
+// backend recasts when the WELCOME lands, so the first chart of a session
+// selecting the server would otherwise print an alarming warning and then
+// quietly draw the right chart a moment later.
+flag FEphChainConnecting()
+{
+  int rgisrc[cEphSrcBuiltIn], cisrc, isrc;
+  char szT[cchSzDef];
+
+  cisrc = CEphChainSrc(us.szEphemSource, rgisrc, cEphSrcBuiltIn);
+  for (isrc = 0; isrc < cisrc; isrc++)
+    if (rgisrc[isrc] >= 0 && rgisrc[isrc] < cEphSrcBuiltIn &&
+      PephsrcGet(rgisrc[isrc])->State(S(szT)) == esConnecting)
+      return fTrue;
+  return fFalse;
+}
+
+
 flag FEphFallbackNotice()
 {
   return fEphFallbackServed;
