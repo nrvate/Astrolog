@@ -42,6 +42,10 @@ extern "C" {
 #include <sweph.h>
 #include <swephlib.h>
 }
+// After those: it uses J2000, J2000_TO_J and the SSY_PLANE_* constants, which
+// live in sweph.h. EPHSID_FORK picks the context-taking swi_* forms.
+#define EPHSID_FORK
+#include "ephsidplane.h"
 
 #include <openssl/err.h>
 #include <openssl/pem.h>
@@ -1075,50 +1079,29 @@ static void PrepareObject(swe_ctx *ctx, const eph::Request &req, uint32_t iObj,
 // Measured difference in plane 2's origin: 30.75" for Lahiri at J2000, 31.34"
 // for Raman, 10.66" for Fagan/Bradley -- the same size as the effect being
 // fixed. Ephemeris Prometheia builds it from A0 and t0 as well.
-struct SidPlane {
-  bool fActive = false;    // plane 1 or 2 asked, and served here
-  int plane = 0;           // 1 = mean ecliptic of t0, 2 = invariable
-  double t0Et = 0.0;       // the anchor epoch, TT
-  double A0 = 0.0;         // the ayanamsa there
-  double lonOrigin = 0.0;  // plane 2: the zero point's longitude in the plane
-  uint16_t err = 0;        // nonzero: this object is refused
-};
-
-static void SidSph2Rect(double lon, double lat, double *x) {
-  const double l = lon * DEGTORAD, b = lat * DEGTORAD;
-  x[0] = cos(b) * cos(l); x[1] = cos(b) * sin(l); x[2] = sin(b);
-}
-
-// Ecliptic of J2000 -> the invariable plane's frame. Swiss's own constants,
-// and its node is stated ON THE ECLIPTIC OF 2000 (sweph.h), which is why every
-// direction here is carried to that frame first.
-static void SidToInvariable(double *x) {
-  const double om = SSY_PLANE_NODE_E2000, i = SSY_PLANE_INCL;
-  const double c0 = cos(om), s0 = sin(om), ci = cos(i), si = sin(i);
-  const double px = x[0] * c0 + x[1] * s0, py = -x[0] * s0 + x[1] * c0;
-  x[0] = px; x[1] = py * ci + x[2] * si; x[2] = -py * si + x[2] * ci;
-}
-
-// Ecliptic of J2000 -> the mean ecliptic and equinox of t0.
-static void SidToAnchor(swe_ctx *ctx, double t0Et, double *x) {
-  swi_coortrf(x, x, -swi_epsiln(ctx, J2000, 0));   // -> equatorial J2000
-  swi_precess(ctx, x, t0Et, 0, J2000_TO_J);        // -> equatorial of t0
-  swi_coortrf(x, x, swi_epsiln(ctx, t0Et, 0));     // -> ecliptic of t0
-}
 
 // Once per object: the anchor, the ayanamsa there, and plane 2's origin.
-static SidPlane PrepareSidPlane(swe_ctx *ctx, const eph::swiss::SwissCall &c) {
-  SidPlane sp;
+// The protocol-side wrapper: the shared EPHSIDPLANE plus the two bits that
+// are this server's policy rather than arithmetic -- whether a fixed plane
+// was asked for at all, and whether the zodiac's anchor could be built.
+struct SidPlaneReq {
+  bool fActive = false;
+  uint16_t err = 0;
+  EPHSIDPLANE p{};
+};
+
+static SidPlaneReq PrepareSidPlane(swe_ctx *ctx, const eph::swiss::SwissCall &c) {
+  SidPlaneReq sp;
   if (!c.fSidereal) return sp;
   const bool f2 = (c.sidMode & SE_SIDBIT_SSY_PLANE) != 0;
   const bool f1 = (c.sidMode & SE_SIDBIT_ECL_T0) != 0;
   if (!f1 && !f2) return sp;                       // plane 0 is Swiss's
   sp.fActive = true;
-  sp.plane = f2 ? 2 : 1;
+  sp.p.plane = f2 ? 2 : 1;
   const int32 mode = c.sidMode & 0xFF;
   if (mode == SE_SIDM_USER) {
-    sp.t0Et = c.sidT0;
-    sp.A0 = c.sidAyanT0;
+    sp.p.t0Et = c.sidT0;
+    sp.p.A0 = c.sidAyanT0;
   } else if (mode >= 0 && mode < SE_NSIDM_PREDEF) {
     char serrA[AS_MAXCH];
     double t0 = ayanamsa[mode].t0, daya = 0.0;
@@ -1148,60 +1131,15 @@ static SidPlane PrepareSidPlane(swe_ctx *ctx, const eph::swiss::SwissCall &c) {
       sp.err = eph::kOErrUnsupported;
       return sp;
     }
-    sp.t0Et = t0;
-    sp.A0 = daya;
+    sp.p.t0Et = t0;
+    sp.p.A0 = daya;
   } else {
     sp.err = eph::kOErrUnsupported;
     return sp;
   }
-  if (sp.plane == 2) {
-    double d[3];
-    SidSph2Rect(sp.A0, 0.0, d);                    // the zero point, ecl of t0
-    swi_coortrf(d, d, -swi_epsiln(ctx, sp.t0Et, 0));
-    swi_precess(ctx, d, sp.t0Et, 0, J_TO_J2000);
-    swi_coortrf(d, d, swi_epsiln(ctx, J2000, 0));  // -> ecliptic of J2000
-    SidToInvariable(d);
-    sp.lonOrigin = atan2(d[1], d[0]) * RADTODEG;
-  }
+  if (sp.p.plane == 2)
+    sp.p.lonOrigin = SidPlaneOrigin(ctx, sp.p.t0Et, sp.p.A0);
   return sp;
-}
-
-// Per row: a TROPICAL position in the ecliptic of J2000 -> sidereal on the
-// requested plane. Speeds ride the same rotation; the origin is a constant, so
-// it moves longitude and not its rate.
-static void ApplySidPlane(swe_ctx *ctx, const SidPlane &sp, bool fRect,
-                          double *xx) {
-  double v[6], pol[6];
-
-  if (fRect) {
-    memcpy(v, xx, sizeof(v));
-  } else {
-    memcpy(pol, xx, sizeof(pol));
-    pol[0] *= DEGTORAD; pol[1] *= DEGTORAD; pol[3] *= DEGTORAD; pol[4] *= DEGTORAD;
-    swi_polcart_sp(pol, v);
-  }
-  double origin;
-  if (sp.plane == 2) {
-    SidToInvariable(v); SidToInvariable(v + 3);
-    origin = sp.lonOrigin;
-  } else {
-    SidToAnchor(ctx, sp.t0Et, v); SidToAnchor(ctx, sp.t0Et, v + 3);
-    origin = sp.A0;
-  }
-  swi_cartpol_sp(v, pol);
-  pol[0] = pol[0] * RADTODEG - origin;
-  pol[0] = fmod(pol[0], 360.0); if (pol[0] < 0) pol[0] += 360.0;
-  pol[1] *= RADTODEG; pol[3] *= RADTODEG; pol[4] *= RADTODEG;
-  if (fRect) {
-    double w[6];
-    double p2[6];
-    memcpy(p2, pol, sizeof(p2));
-    p2[0] *= DEGTORAD; p2[1] *= DEGTORAD; p2[3] *= DEGTORAD; p2[4] *= DEGTORAD;
-    swi_polcart_sp(p2, w);
-    memcpy(xx, w, sizeof(w));
-  } else {
-    memcpy(xx, pol, sizeof(pol));
-  }
 }
 
 // A node's frame, per 3.5a as the 2026-09-18 drop amended it: a node lies on
@@ -1290,7 +1228,7 @@ static void ComputeObjectRows(swe_ctx *ctx, const eph::Request &req, uint32_t iO
   // The body is then asked TROPICALLY, in the ecliptic of J2000, and the
   // zodiac applied afterwards -- so Swiss never sees the plane bits and it no
   // longer matters that it declines them for 16 of the 47 ayanamsas.
-  const SidPlane sid = PrepareSidPlane(ctx, c);
+  const SidPlaneReq sid = PrepareSidPlane(ctx, c);
   if (sid.err != 0) {
     m.errCode = sid.err;
     m.firstFailedRow = 0;
@@ -1524,7 +1462,7 @@ static void ComputeObjectRows(swe_ctx *ctx, const eph::Request &req, uint32_t iO
     // 3.5a: a star whose catalogue entry has no parallax has no distance.
     // Swiss answers 1e9 AU for one (sweph.c's rdist), light time and
     // aberration moving it a little; anything past 1e8 AU is that placeholder.
-    if (sid.fActive) ApplySidPlane(ctx, sid, fRect, xx);
+    if (sid.fActive) ApplySidPlane(ctx, &sid.p, fRect, xx);
     if (c.kind == eph::swiss::kCallFixstar && !fRect && xx[2] > 1e8)
       m.flags |= eph::kMetaNoDistance;
     memcpy(dst, xx, sizeof(xx));
@@ -1532,7 +1470,7 @@ static void ComputeObjectRows(swe_ctx *ctx, const eph::Request &req, uint32_t iO
     if (e->columnsPresent & eph::kColAyanamsa) {
       double daya = 0.0;
       if (sid.fActive) {
-        daya = sid.A0;         // on a fixed plane the zodiac IS its anchor
+        daya = sid.p.A0;         // on a fixed plane the zodiac IS its anchor
       } else if (c.fSidereal) {
         char serrA[AS_MAXCH];
         if (swe_get_ayanamsa_ex_r(ctx, jdEt(), c.iflag, &daya, serrA) < 0) daya = NAN;
