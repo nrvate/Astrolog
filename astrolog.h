@@ -2233,7 +2233,6 @@ typedef struct _UserSettings {
   flag fGeodetic;    // -G
   flag fIndian;      // -J
   flag fNavamsa;     // -9
-  flag fEphemFiles;  // -b
   flag fWriteFile;   // -o
   flag fAnsiColor;   // -k
   flag fGraphics;    // -X
@@ -2244,37 +2243,6 @@ typedef struct _UserSettings {
   flag fSeconds;     // -b0
   flag fSecond1K;    // -b1
   flag fSecondHide;  // -b2
-  // The ephemeris backend is chosen by three fields together (these two,
-  // fEphemFiles above, and nSwissEph below), read through the FCm*()
-  // macros in extern.h -- use those, not the raw fields:
-  //   fEphemFiles nSwissEph = backend
-  //        0          -       Matrix formulas (fMatrixPla names this
-  //                           state for the GUI)
-  //        1          0       Swiss Ephemeris files
-  //        1          1       Moshier analytic (-bs)
-  //        1          2       JPL ephemeris file (-bj)
-  //        1          3       JPL Horizons web query (-bJ)
-  //        1          5       Ephemeris Server (-bS; its address is -bW)
-  // fMatrixStar computes fixed stars with Matrix even when Swiss is on.
-  // Trap: every backend suffix of -b (-bm -bs -bj -bJ -bU) falls through
-  // to also TOGGLE fEphemFiles (NSwb, switch.cpp), so a plain "-bm" with
-  // files already on turns files off. The settings writer emits forced
-  // =/_ prefixes and the dialogs assign the fields directly, so only a
-  // hand-typed plain -b* hits that fall-through.
-  //   That last sentence was aspirational when it was written: the
-  // settings writer emitted NONE of these fields, so a chart cast with
-  // Moshier, JPL or Matrix came back as Swiss next run. It writes them
-  // all now, ahead of the "=b" line so that line settles fEphemFiles
-  // last, and ahead of "=0b"/"=0n" so a saved file applies its backend
-  // before locking the old engine out. And a suffix its -0 guard refuses
-  // no longer falls through to the toggle: it is an error now, because
-  // reaching the toggle with nothing set left NO engine running and cast
-  // every body at 0Ari00'00" in silence.
-  //   The Placalc backend (-bp, with -ba for its asteroids) was removed
-  // on 2026-09-04: 698 lines nothing in the project executed, behind a
-  // switch the shipped astrolog.as locks out. Both spellings are still
-  // accepted so saved settings files load; see NSwb.
-  flag fMatrixPla;   // -bm
   flag fMatrixStar;  // -bU
   flag fEquator;     // -sr
   flag fEquator2;    // -sr0
@@ -2324,8 +2292,6 @@ typedef struct _UserSettings {
   flag fNoRead;        // -0i
   flag fNoQuit;        // -0q
   flag fNoGraphics;    // -0X
-  flag fNoOldCalc;     // -0b (once -0b also locked Placalc out)
-  flag fNoNetwork;     // -0n
   flag fNoExp;         // -0~
   flag fExpOff;        // -~0
 
@@ -2337,7 +2303,6 @@ typedef struct _UserSettings {
   int   nEphemFactor;  // -E0
   int   nArabicSort;   // -P
   int   nRel;          // What relationship chart is in effect, if any?
-  int   nSwissEph;     // -bs
   int   nHouseSystem;  // -c
   int   nHouse3D;      // -c3
   int   nAsp;          // -A
@@ -2363,11 +2328,6 @@ typedef struct _UserSettings {
   char *szStarsColor;  // -YkU
   char *szStarsList;   // -YRU
   char *szExoList;     // -YUx
-  char *szEphSrv;      // -bW, the Ephemeris Server's ws:// URL or
-                       // host:port; empty means localhost on the
-                       // protocol's default port (ephproto.h)
-  char *szEphSrvToken; // -bT, the token HELLO carries to a server that
-                       // requires one (protocol 3); empty sends none
 
   // Value subsettings
   int   nWheelRows;        // Number of rows per house to use for -w wheel.
@@ -2458,11 +2418,11 @@ typedef struct _UserSettings {
   //
   // These sit at the END of the struct on purpose: data.cpp's initializer
   // for the fields above is positional, so appending below it cannot
-  // shift any earlier slot. Until selection fully re-plumbs, the old
-  // spellings read and write BOTH representations: the three legacy
-  // fields above (fEphemFiles, nSwissEph, fMatrixPla, plus
-  // szEphSrv/szEphSrvToken) and this chain, kept in sync by ephem.cpp's
-  // Eph* functions.
+  // shift any earlier slot. This IS the selection now -- the seven fields
+  // it replaces (fEphemFiles, nSwissEph, fMatrixPla, szEphSrv,
+  // szEphSrvToken, fNoOldCalc, fNoNetwork) are gone; the legacy spellings
+  // toggle a parse-time shadow and re-derive the chain from it (NSwb,
+  // ephem.cpp).
   //
   // szEphemSource holds the chain as the user set it -- "swiss", or
   // "server,swiss,moshier" -- written with -bE and recomputed by every

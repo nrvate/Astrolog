@@ -7236,21 +7236,22 @@ static struct {
                               // dialog to show (increment 4).
 } esrv;
 
-// Whether the backend is selected and allowed to run. -0n (us.fNoNetwork)
-// disables it entirely; the connector below never runs and ComputeEphem
-// fails fast (plan §8).
+// Whether the backend is selected and allowed to run. (The old -0n
+// network lock is inert now; a selected source is used if it is
+// reachable, and a failure is reported when it happens -- section 2.)
 
 static flag FEphSrvOn()
 {
-  return FCmSrv() && !us.fNoNetwork;
+  return FSrcChainHead("server");
 }
 
 
-// Turn the setting into the URL to open. us.szEphSrv is a ws:// URL or
-// host:port; an empty setting is localhost on the protocol's default
-// port, read from ephproto.h, so the two ends agree with zero
-// configuration. The address is read per connect attempt, so changing it
-// takes effect on the next (re)connect.
+// Turn the setting into the URL to open. The address is the server
+// source's url parameter (-bP server.url, or -bW, the same setting): a
+// ws:// URL or host:port; an empty setting is localhost on the
+// protocol's default port, read from ephproto.h, so the two ends agree
+// with zero configuration. The address is read per connect attempt, so
+// changing it takes effect on the next (re)connect.
 
 static flag FUrlEphSrv(CONST char *szAddr, QUrl *purl, QString *pstrErr)
 {
@@ -7559,7 +7560,7 @@ static void EphSrvConnect()
 
   if (esrv.pws != NULL)
     return;      // Already Connecting or Welcomed.
-  if (!FUrlEphSrv(us.szEphSrv, &url, &strErr)) {
+  if (!FUrlEphSrv(us.rgszEphParam[epServerUrl], &url, &strErr)) {
     // A bad setting is a refusal like any other: keep its text and let
     // the ladder retry, so fixing the setting is enough.
     EphSrvDropped(strErr);
@@ -7612,7 +7613,7 @@ static void EphSrvConnect()
     hello.caps = eph::kCapF32 | eph::kCapCancel | eph::kCapInstantLists |
       eph::kCapPriority;
     hello.clientName = std::string(szAppName) + " " + szVersionCore;
-    hello.token = SzSet(us.szEphSrvToken);
+    hello.token = SzSet(us.rgszEphParam[epServerToken]);
     eph::EncodeHello(&pay, hello);
     eph::WriteEnvelope(&msg, eph::kMsgHello, 0, pay.size());
     msg.insert(msg.end(), pay.begin(), pay.end());
@@ -7787,7 +7788,7 @@ static int s_cEphSrvRequiredTriesQt = 0;
 
 flag FEphSrvRequiredQt()
 {
-  if (!FCmSrv())
+  if (!FSrcChainHead("server"))
     return fFalse;
   SwissEnsurePath();
   return is.fNoEphFound;
@@ -7830,8 +7831,8 @@ static flag FWaitRequiredSrvQt()
     fontBold.setBold(fTrue);
     plabel->setFont(fontBold);
   }
-  if (SzSet(us.szEphSrv))
-    sprintf2(S(szAddr), "%s", us.szEphSrv);
+  if (SzSet(us.rgszEphParam[epServerUrl]))
+    sprintf2(S(szAddr), "%s", us.rgszEphParam[epServerUrl]);
   else
     sprintf2(S(szAddr), "localhost:%d (the default)", eph::kDefaultPort);
   plabelAddr = new QLabel(QString("Server address: %1").arg(szAddr));
@@ -7920,9 +7921,9 @@ static flag FWaitRequiredSrvQt()
     fWaiting = fFalse;
     // The address is re-read by EphSrvConnect() per attempt, so a fixed
     // setting file takes effect on the next try (plan §4).
-    if (SzSet(us.szEphSrv))
+    if (SzSet(us.rgszEphParam[epServerUrl]))
       plabelAddr->setText(QString("Server address: %1")
-        .arg(QString::fromUtf8(us.szEphSrv)));
+        .arg(QString::fromUtf8(us.rgszEphParam[epServerUrl])));
     esrv.strErr.clear();
     EphSrvConnect();
     // Bounded past the HELLO timeout: a silent server is a refusal, and
@@ -8032,10 +8033,10 @@ void SzEphSrvStatusQt(char *sz, int cch)
   char szAddr[cchSzMax];
 
   sz[0] = chNull;
-  if (!FCmSrv())
+  if (!FSrcChainHead("server"))
     return;
-  if (SzSet(us.szEphSrv))
-    sprintf2(S(szAddr), "%s", us.szEphSrv);
+  if (SzSet(us.rgszEphParam[epServerUrl]))
+    sprintf2(S(szAddr), "%s", us.rgszEphParam[epServerUrl]);
   else
     sprintf2(S(szAddr), "localhost:%d", eph::kDefaultPort);
   if (esrv.est == esWelcomed && esrv.fWelc)
@@ -8712,7 +8713,7 @@ static void SrvRecastMissedQt()
     QTimer::singleShot(200, []() { SrvRecastMissedQt(); });
     return;
   }
-  if (FCmSrv() && gi.qwind != NULL) {
+  if (FSrcChainHead("server") && gi.qwind != NULL) {
     s_cSrvRecastQt++;
     RecastAndRedrawQt();
   }
@@ -8773,15 +8774,6 @@ void SrvPrefetchQt(real t, int objCentCalc, int imax)
   s_plan.jde = rInvalid;
   s_plan.fPrefetched = fTrue;
   s_plan.baErr = QByteArray();
-  if (us.fNoNetwork) {
-    // Says how to undo it: -0n is a one-way lock (NSwZero() ignores
-    // "_0n"), so the setting that selected this backend and the one that
-    // locks it out can both be in one saved file, and nothing short of
-    // editing that file lets the chart cast (switch.cpp, the -bS branch).
-    s_plan.baErr = "Internet features are disabled by \"=0n\"; change it "
-      "to \"_0n\" in astrolog.as to use the Ephemeris Server";
-    return;
-  }
   if (QCoreApplication::instance() == NULL) {
     // The startup chart, cast before the window exists: no socket can be
     // made yet (Qt needs its application first). BeginQt() connects, and

@@ -72,29 +72,18 @@ US us = {
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 
   // Main flags
-  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-#ifdef EPHEM
-  1,
-#else
-  0,
-#endif
-  0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 
-  // Main subflags: fLoopInit, fSabian, fSeconds, fSecond1K, fSecondHide,
-  // then fMatrixPla (on only when no ephemeris is compiled in), then
-  // fMatrixStar through fListAuto, fProgConverse among them. Two entries fewer than before
-  // when fPlacalcAst and fPlacalcPla sat between them.
-  0, 0, 0, 0, 0,
-#ifdef EPHEM
-  0,
-#else
-  1,
-#endif
-  0, 0, 0, 0, 0, 0, 0, 0, 0,
+  // Main subflags: fLoopInit through fSecondHide, then fMatrixStar
+  // through fListAuto, fProgConverse among them. fMatrixPla sat here
+  // (on only when no ephemeris was compiled in) until the selection
+  // re-plumbed; three entries fewer than before fPlacalcAst and
+  // fPlacalcPla, and four fewer than upstream.
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 
   // Obscure flags
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0,
-  1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 
   // Value settings
   ddDecanR,
@@ -104,7 +93,6 @@ US us = {
   1,
   0,
   rcNone,
-  0,
   DEFAULT_SYSTEM,
   hmPrime,
   DEFAULT_ASPECTS,
@@ -130,8 +118,6 @@ US us = {
   NULL,
   NULL,
   NULL,
-  NULL,
-  NULL,   // szEphSrvToken
 
   // Value subsettings
   0, 5, 200, cPart, 22, 0.0, 0.0, rDayInYear, 1.0, 0.5, ccNone, ccNone,

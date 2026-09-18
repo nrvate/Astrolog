@@ -1524,7 +1524,7 @@ void ChartHorizon(void)
       rMag = rStarBright[i-oNorm];
       rPhase = 1.0;
 #ifdef SWISS
-    } else if (FCmSwissAny() && us.objCenter == oEar &&
+    } else if (FEphSpeeds() && us.objCenter == oEar &&
       FSwissPlanetData(is.T, i, &rPhase, &rDiam, &rMag)) {
       // Swiss Ephemeris can calculate all three of these at once.
       if (i == oEar)
@@ -1657,7 +1657,7 @@ void ChartOrbit(void)
   for (j = 0; j <= is.nObj; j++) {
     i = rgobjList[j];
     if (ignore[i] || (!FThing(i) ||
-      ((i == oMoo || i == oNod || i == oSou) && !us.fEphemFiles)))
+      ((i == oMoo || i == oNod || i == oSou) && !FEphSpeeds())))
       continue;
     AnsiColor(kObjA[i]);
     sprintf2(S(sz), "%-4.4s:  ", szObjDisp[i]); PrintSz(sz);

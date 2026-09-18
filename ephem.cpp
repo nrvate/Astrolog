@@ -79,6 +79,40 @@ int IEphSrcFromKey(CONST char *szKey)
 }
 
 
+// Whether one range of the chain text equals one key: the same length
+// and the same characters. The range is not terminated -- it is the
+// text between two commas -- so NCompareSz() would run past it; this
+// stops at the length.
+
+static flag FEqSzRange(CONST char *pch, int cch, CONST char *sz)
+{
+  int ich;
+
+  if (CchSz(sz) != cch)
+    return fFalse;
+  for (ich = 0; ich < cch; ich++)
+    if (pch[ich] != sz[ich])
+      return fFalse;
+  return fTrue;
+}
+
+
+// The range form, for walking the chain's text: the token between two
+// commas is not terminated, so the comparison stops at its length.
+
+static int IEphSrcFromKeyN(CONST char *pch, int cch)
+{
+  int isrc;
+
+  if (pch == NULL)
+    return -1;
+  for (isrc = 0; isrc < cEphSrcBuiltIn; isrc++)
+    if (FEqSzRange(pch, cch, rgephsrc[isrc]->szKey))
+      return isrc;
+  return -1;
+}
+
+
 // Whether a chain token names a source at all. The compiled sources'
 // own names are the registry's -- read from rgephsrc[], so the two
 // lists cannot drift apart -- plus the three keys of section 4.2 whose
@@ -99,24 +133,6 @@ static CONST char * CONST rgszEphSrcFuture[] = {"server", "horizons",
 // between the commas without copying it, so no chain token is ever
 // truncated into a different key. FEphSrcKeyKnown() is the whole-string
 // form, which the test suite's cross-pin uses.
-
-// Whether one range of the chain text equals one key: the same length
-// and the same characters. The range is not terminated -- it is the
-// text between two commas -- so NCompareSz() would run past it; this
-// stops at the length.
-
-static flag FEqSzRange(CONST char *pch, int cch, CONST char *sz)
-{
-  int ich;
-
-  if (CchSz(sz) != cch)
-    return fFalse;
-  for (ich = 0; ich < cch; ich++)
-    if (pch[ich] != sz[ich])
-      return fFalse;
-  return fTrue;
-}
-
 
 flag FEphSrcKeyKnownN(CONST char *pch, int cch)
 {
@@ -141,33 +157,6 @@ flag FEphSrcKeyKnown(CONST char *szKey)
 }
 
 
-// The source today's selection fields pick, as the chain's head. Phase 4
-// replaces this with us.szEphemSource, the user's own ordered chain; the
-// mapping here is exactly today's behavior (the nSwissEph values and the
-// GetSwissFlags() comment in calc.cpp): the Ephemeris Server backend,
-// nSwissEph 5, is the Swiss files on another machine, and the calls this
-// build still makes locally under it ask the local Swiss files too. The
-// JPL Horizons selections, nSwissEph 3 and 4, keep their own branch in
-// ComputeEphem() this phase; what still reaches the shared Swiss path
-// under them reaches it with the JPL ephemeris bit, which is the jpl
-// source.
-
-int IEphSrcPrimary()
-{
-  int isrc;
-
-  if (!us.fEphemFiles)
-    isrc = IEphSrcFromKey(us.fMatrixPla ? "matrix" : "none");
-  else if (us.nSwissEph == 1)
-    isrc = IEphSrcFromKey("moshier");
-  else if (us.nSwissEph == 0 || us.nSwissEph == 5)
-    isrc = IEphSrcFromKey("swiss");
-  else
-    isrc = IEphSrcFromKey("jpl");
-  return isrc;
-}
-
-
 /*
 ******************************************************************************
 ** The Selection State.
@@ -175,15 +164,28 @@ int IEphSrcPrimary()
 */
 
 // The chain us.szEphemSource holds, and the parameter values beside it,
-// are the selection (EPHEMERIS_PLUGINS_PLAN.md 5.1). While the old
-// spellings live -- -b and its suffixes, -bW, -bT, the dialogs' combo --
-// the selection has two representations, and every way in writes BOTH:
-// a legacy spelling re-derives the chain from its shadow (below), and
-// -bE/-bP set the chain and re-derive the shadow. Nothing reads the two
-// against each other, so a file written by either half loads whole.
+// are the selection (EPHEMERIS_PLUGINS_PLAN.md 5.1). It is the one
+// representation now: the legacy spellings (-b and its suffixes, -bW,
+// -bT) update a parse-time shadow of the three old fields the way they
+// always did, and re-derive the chain from that shadow after each one
+// (EphSourceSetShadow); the dialogs and -bE/-bP set the chain directly.
+// A generation counter tells the shadow when the chain changed beneath
+// it, so its toggles always start from what is actually selected.
+
+static int nEphSourceGen = 0;
+
+
+// How many times the chain has been set. NSwb's shadow invalidates on
+// any change but its own.
+
+int NEphSourceGen()
+{
+  return nEphSourceGen;
+}
+
 
 // The default chain: the Swiss Ephemeris under EPHEM, the Matrix legacy
-// cast without it -- the same default fEphemFiles carries.
+// cast without it.
 CONST char *SzEphSourceDefault()
 {
 #ifdef EPHEM
@@ -199,8 +201,7 @@ CONST char *SzEphSourceDefault()
 // (FEphSubmitChain) skips any of them it cannot resolve -- a source this
 // build predates, named by a settings file from a newer one, rides along
 // and is skipped, which is the same rule an unavailable compiled source
-// follows. That is also why an unknown key here is not an error: it is
-// indistinguishable from a source the walk will skip.
+// follows.
 
 void SzEphChainHead(CONST char *szChain, char *sz, int cch)
 {
@@ -213,17 +214,49 @@ void SzEphChainHead(CONST char *szChain, char *sz, int cch)
 }
 
 
-// Changing the source: the new source's paths, files and caches are not
-// the old one's. is.fSwissPathSet is the Swiss library's path latch, and
-// is.fNoEphFile the one warning latch a failed file shares; both belong
-// to the source that raised them. The server's window cache needs
-// nothing here: it is keyed on the server's own datasetId and dropped
-// when the address changes (qtdriver.cpp), which is the adapter's own
-// definition of "the source changed".
+// Whether the chain's head is one named source -- what ComputeEphem()
+// needs to know to hand the cast to the Ephemeris Server or the JPL
+// Horizons branches instead of the host walk, and what the legacy-cast
+// gate needs to tell Matrix from None.
+
+flag FSrcChainHead(CONST char *szKey)
+{
+  char sz[cchSzDef];
+
+  SzEphChainHead(us.szEphemSource, S(sz));
+  return FEqSz(sz, szKey);
+}
+
+
+// The two predicates that replaced the FCm* family (section 4.1). Rates
+// are available whenever the primary is not one of the two legacy-cast
+// sources; the legacy cast -- ComputePlanets and ComputeLunar inside
+// CastChart, the Matrix dates and houses -- is theirs. The head's text
+// is the test because the head may be a source this build predates
+// ("server"), whose capabilities the registry does not carry yet: the
+// old predicates read the selection, not the engine's availability.
+
+flag FEphLegacyCast()
+{
+  return FSrcChainHead("matrix") || FSrcChainHead("none");
+}
+
+
+flag FEphSpeeds()
+{
+  return !FEphLegacyCast();
+}
+
+
+// Changing the source: the new source's warning latch is not the old
+// one's. The Swiss path latch is FSwissPlanet()'s (see below), and the
+// server's window cache needs nothing here: it is keyed on the server's
+// own datasetId and dropped when the address changes (qtdriver.cpp),
+// which is the adapter's own definition of "the source changed".
 
 void EphSourceChanged()
 {
-  is.fSwissPathSet = fFalse;
+  is.fSwissPathSet = fFalse;   // The 4c3 shape, for the bisection.
   is.fNoEphFile = fFalse;
 }
 
@@ -288,71 +321,65 @@ flag FEphParamDefaulted(int iep)
 
 
 // Re-derive the legacy shadow from the chain: the head source names the
-// fields the old spellings read, the same mapping IEphSrcPrimary() walks
-// -- with the two sources that have no registry row yet spelled out,
-// because the legacy fields cannot say "server" or "horizons" without
-// also saying what used to be selected beside them. A head this mapping
-// does not know (a future source, or the settings sweep's marker) leaves
-// the shadow alone: the chain is the new representation, and nothing
-// below reads it yet.
+// three fields the old spellings toggled, by the same mapping the old
+// selection used. This is the NSwb shadow's lazy re-sync (the generation
+// counter above decides when) and nothing else -- nothing else reads
+// the triple any more.
 
-void EphLegacyFromChain()
+void EphShadowFromChain(flag *pfFiles, int *pnSwiss, flag *pfMatrix)
 {
   char sz[cchSzDef];
 
   SzEphChainHead(us.szEphemSource, S(sz));
   if (FEqSz(sz, "moshier")) {
-    us.fEphemFiles = fTrue;  us.nSwissEph = 1;  us.fMatrixPla = fFalse;
+    *pfFiles = fTrue;  *pnSwiss = 1;  *pfMatrix = fFalse;
   } else if (FEqSz(sz, "jpl")) {
-    us.fEphemFiles = fTrue;  us.nSwissEph = 2;  us.fMatrixPla = fFalse;
+    *pfFiles = fTrue;  *pnSwiss = 2;  *pfMatrix = fFalse;
   } else if (FEqSz(sz, "horizons")) {
-    us.fEphemFiles = fTrue;  us.nSwissEph = 3;  us.fMatrixPla = fFalse;
+    *pfFiles = fTrue;  *pnSwiss = 3;  *pfMatrix = fFalse;
   } else if (FEqSz(sz, "server")) {
-    us.fEphemFiles = fTrue;  us.nSwissEph = 5;  us.fMatrixPla = fFalse;
+    *pfFiles = fTrue;  *pnSwiss = 5;  *pfMatrix = fFalse;
   } else if (FEqSz(sz, "matrix")) {
-    us.fEphemFiles = fFalse; us.fMatrixPla = fTrue;
+    *pfFiles = fFalse; *pfMatrix = fTrue;
   } else if (FEqSz(sz, "none")) {
-    us.fEphemFiles = fFalse; us.fMatrixPla = fFalse;
-  } else if (!FEqSz(sz, "")) {
-    // "swiss", and every key the shadow cannot name: the Swiss files
-    // selection is what the old fields say for it.
-    us.fEphemFiles = fTrue;  us.nSwissEph = 0;  us.fMatrixPla = fFalse;
+    *pfFiles = fFalse; *pfMatrix = fFalse;
+  } else {
+    // "swiss", and every head the triple cannot name: the Swiss files
+    // selection is what the old fields said for it.
+    *pfFiles = fTrue;  *pnSwiss = 0;  *pfMatrix = fFalse;
   }
 }
 
 
-// The whole of -bE: set the chain, and keep the two representations in
-// step. Resetting the latches happens only when the chain really
-// changed -- a second -bE of the same chain is idempotent, not a reset.
+// The whole of -bE: set the chain. Resetting the latches happens only
+// when the chain really changed -- a second -bE of the same chain is
+// idempotent, not a reset.
 
 void EphSourceSet(CONST char *szChain)
 {
-  flag fChanged;
-
   if (!FSzSet(szChain))
     szChain = SzEphSourceDefault();
-  fChanged = !FEqSz(SzSet(us.szEphemSource), szChain);
-  if (fChanged) {
+  if (!FEqSz(SzSet(us.szEphemSource), szChain)) {
     FCloneSz(szChain, &us.szEphemSource);
     EphSourceChanged();
   }
-  EphLegacyFromChain();
+  nEphSourceGen++;
 }
 
 
 // The other direction, which every legacy spelling ends with: re-derive
-// the chain from the fields the old code wrote, and reset the latches
-// when that changed the source. Returns whether it did.
+// the chain from the shadow of the three old fields, exactly as the old
+// selection mapped them -- including the two selections whose chain
+// needs a second entry, for the branches the old fields cannot name.
 
-flag FEphChainFromLegacy()
+void EphSourceSetShadow(flag fFiles, int nSwiss, flag fMatrix)
 {
-  char sz[cchSzDef];
-  flag fChanged;
+  char sz[cchSzMax];
 
-  if (!us.fEphemFiles)
-    sprintf2(S(sz), "%s", us.fMatrixPla ? "matrix" : "none");
+  if (!fFiles)
+    sprintf2(S(sz), "%s", fMatrix ? "matrix" : "none");
   else
-    switch (us.nSwissEph) {
+    switch (nSwiss) {
     case 1:
       sprintf2(S(sz), "%s", "moshier"); break;
     case 2:
@@ -360,7 +387,7 @@ flag FEphChainFromLegacy()
     case 3:
       // The Horizons selection: its own branch answers the objects it
       // covers, and what is left reaches the JPL-file source, which is
-      // where IEphSrcPrimary() has always sent the residue.
+      // where the old IEphSrcPrimary() always sent the residue.
       sprintf2(S(sz), "%s", "horizons,jpl"); break;
     case 5:
       // The Ephemeris Server selection: the cast's questions go to the
@@ -371,12 +398,7 @@ flag FEphChainFromLegacy()
     default:
       sprintf2(S(sz), "%s", "swiss"); break;
     }
-  fChanged = !FEqSz(SzSet(us.szEphemSource), sz);
-  if (fChanged) {
-    FCloneSz(sz, &us.szEphemSource);
-    EphSourceChanged();
-  }
-  return fChanged;
+  EphSourceSet(sz);
 }
 
 
@@ -430,25 +452,118 @@ flag FEphQueryAdd(EPHQUERY *pq, int obj, int nNative, int cent,
 // makes the call it has always made while the cast keeps its own
 // selection. Phase 4's chain re-plumb walks the user's order instead.
 
-int IEphSrcSideCall()
+// The chain us.szEphemSource names, as registry indexes: each token in
+// order, with a key this build cannot resolve -- a source a newer build
+// names -- skipped, because that is exactly how the walk treats it.
+// Returns the count, at most cisrcMax.
+
+int CEphChainSrc(CONST char *szChain, int rgisrc[], int cisrcMax)
 {
-  if (us.nSwissEph == 1)
-    return IEphSrcFromKey("moshier");
-  if (us.nSwissEph == 0 || us.nSwissEph == 5)
-    return IEphSrcFromKey("swiss");
-  return IEphSrcFromKey("jpl");
+  CONST char *pch, *pchTok;
+  int cisrc = 0, isrc;
+
+  szChain = SzSet(szChain);
+  for (pchTok = szChain; *pchTok; pchTok = *pch ? pch + 1 : pch) {
+    for (pch = pchTok; *pch && *pch != ','; pch++)
+      ;
+    isrc = IEphSrcFromKeyN(pchTok, (int)(pch - pchTok));
+    if (isrc >= 0 && cisrc < cisrcMax)
+      rgisrc[cisrc++] = isrc;
+    if (!*pch)
+      break;
+  }
+  return cisrc;
+}
+
+
+// The Swiss Ephemeris bit the current Swiss-family work runs under:
+// 0 files, 1 Moshier, 2 JPL. Outside a borrow it is the chain's own
+// first Swiss-family source's; the delegated calls of a chain's SECOND
+// source borrow their own around the loop (ephswiss.cpp), which is what
+// makes a multi-source chain two genuinely different engines. The
+// borrow is a plain save/set/restore on this static, because the
+// delegated calls are synchronous.
+
+static int nSwissEphemBorrow = -1;
+
+
+int NSwissEphem()
+{
+  CONST char *pch, *pchTok;
+  flag fFiles = fFalse, fMosh = fFalse, fJpl = fFalse;
+
+  if (nSwissEphemBorrow >= 0)
+    return nSwissEphemBorrow;
+  for (pchTok = SzSet(us.szEphemSource); *pchTok;
+      pchTok = *pch ? pch + 1 : pch) {
+    for (pch = pchTok; *pch && *pch != ','; pch++)
+      ;
+    // First match wins: the chain's Swiss-family order is the bit's.
+    if (!fFiles && FEqSzRange(pchTok, (int)(pch - pchTok), "swiss"))
+      fFiles = fTrue;
+    else if (!fMosh && FEqSzRange(pchTok, (int)(pch - pchTok), "moshier"))
+      fMosh = fTrue;
+    else if (!fJpl && FEqSzRange(pchTok, (int)(pch - pchTok), "jpl"))
+      fJpl = fTrue;
+    if (!*pch)
+      break;
+  }
+  // No Swiss-family source in the chain: the files, which is the
+  // default GetSwissFlags() has always carried.
+  return fFiles ? 0 : (fMosh ? 1 : (fJpl ? 2 : 0));
+}
+
+
+// Set the borrowed bit, and answer with what was borrowed before (-1
+// for none). The restore takes that answer back, so a submit inside a
+// borrow unwinds to the borrow, and one outside unwinds to the chain.
+// Returning the previous value instead of making the caller read
+// NSwissEphem() first is the point: NSwissEphem() answers the DERIVED
+// bit when nothing is borrowed, and a restore of that would pin the
+// static to a chain's answer forever.
+
+int SwissSetEphemCast(int n)
+{
+  int nSav = nSwissEphemBorrow;
+
+  nSwissEphemBorrow = n;
+  return nSav;
+}
+
+
+void SwissRestoreEphemCast(int n)
+{
+  nSwissEphemBorrow = n;
 }
 
 
 // Submit a side-call query: one query per instant (the side calls take
-// their instants one at a time this phase), down the side-call source.
+// their instants one at a time this phase), down the user's own chain
+// order. The side calls keep their one assumption from before the
+// registry existed (section 1, item 7): when the chain names nothing
+// that serves them -- a Matrix or None primary -- they end at the Swiss
+// files source, which is what they have always asked. A chain whose
+// Swiss-family source is its own (swiss, moshier, jpl, or one named
+// beside another) is walked as it stands, so a Moshier selection's side
+// calls fail exactly as they always did rather than falling back to
+// something the user did not select.
 
 flag FEphSubmitSide(EPHQUERY *pq)
 {
-  int rgisrc[1];
+  int rgisrc[cEphSrcBuiltIn + 1];
+  int cisrc, isrc, isrcSwiss;
+  flag fSwiss = fFalse;
 
-  rgisrc[0] = IEphSrcSideCall();
-  return FEphSubmitChain(pq, rgisrc, 1);
+  cisrc = CEphChainSrc(us.szEphemSource, rgisrc, cEphSrcBuiltIn);
+  isrcSwiss = IEphSrcFromKey("swiss");
+  for (isrc = 0; isrc < cisrc; isrc++)
+    if (rgisrc[isrc] == isrcSwiss ||
+      rgisrc[isrc] == IEphSrcFromKey("moshier") ||
+      rgisrc[isrc] == IEphSrcFromKey("jpl"))
+      fSwiss = fTrue;
+  if (!fSwiss && cisrc <= cEphSrcBuiltIn)
+    rgisrc[cisrc++] = isrcSwiss;
+  return FEphSubmitChain(pq, rgisrc, cisrc);
 }
 
 
@@ -517,10 +632,10 @@ flag FEphSubmitChain(EPHQUERY *pq, CONST int *rgisrcChain, int cisrc)
 
 flag FEphSubmit(EPHQUERY *pq)
 {
-  int rgisrc[1];
+  int rgisrc[cEphSrcBuiltIn];
 
-  rgisrc[0] = IEphSrcPrimary();
-  return FEphSubmitChain(pq, rgisrc, 1);
+  return FEphSubmitChain(pq, rgisrc,
+    CEphChainSrc(us.szEphemSource, rgisrc, cEphSrcBuiltIn));
 }
 
 
