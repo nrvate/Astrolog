@@ -75,6 +75,68 @@ int IEphSrcFromKey(CONST char *szKey)
 }
 
 
+// Whether a chain token names a source at all. The compiled sources'
+// own names are the registry's -- read from rgephsrc[], so the two
+// lists cannot drift apart -- plus the three keys of section 4.2 whose
+// plugins are later phases': a settings file from a build that has them
+// must still open here, and the walk (FEphSubmitChain) skips a key it
+// cannot resolve, which is the same rule an unavailable source follows.
+// A key from NO source at all is a typo, and refusing it is what keeps
+// the typo out of the settings file: the chain's head would otherwise
+// fall through to the Swiss files, so "-bE mosheir" would cast from
+// Swiss and write itself back as "mosheir". When phase 6 registers the
+// remote pair and phase 7 the Prometheia plugin, this table is deleted.
+
+static CONST char * CONST rgszEphSrcFuture[] = {"server", "horizons",
+  "prometheia"};
+
+
+// The range form is what the -bE parser needs -- it validates the text
+// between the commas without copying it, so no chain token is ever
+// truncated into a different key. FEphSrcKeyKnown() is the whole-string
+// form, which the test suite's cross-pin uses.
+
+// Whether one range of the chain text equals one key: the same length
+// and the same characters. The range is not terminated -- it is the
+// text between two commas -- so NCompareSz() would run past it; this
+// stops at the length.
+
+static flag FEqSzRange(CONST char *pch, int cch, CONST char *sz)
+{
+  int ich;
+
+  if (CchSz(sz) != cch)
+    return fFalse;
+  for (ich = 0; ich < cch; ich++)
+    if (pch[ich] != sz[ich])
+      return fFalse;
+  return fTrue;
+}
+
+
+flag FEphSrcKeyKnownN(CONST char *pch, int cch)
+{
+  int isrc;
+
+  if (pch == NULL || cch < 0)
+    return fFalse;
+  for (isrc = 0; isrc < cEphSrcBuiltIn; isrc++)
+    if (FEqSzRange(pch, cch, rgephsrc[isrc]->szKey))
+      return fTrue;
+  for (isrc = 0; isrc < (int)(sizeof(rgszEphSrcFuture) /
+    sizeof(*rgszEphSrcFuture)); isrc++)
+    if (FEqSzRange(pch, cch, rgszEphSrcFuture[isrc]))
+      return fTrue;
+  return fFalse;
+}
+
+
+flag FEphSrcKeyKnown(CONST char *szKey)
+{
+  return FEphSrcKeyKnownN(szKey, szKey == NULL ? -1 : CchSz(szKey));
+}
+
+
 // The source today's selection fields pick, as the chain's head. Phase 4
 // replaces this with us.szEphemSource, the user's own ordered chain; the
 // mapping here is exactly today's behavior (the nSwissEph values and the

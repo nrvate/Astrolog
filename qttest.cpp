@@ -11702,6 +11702,14 @@ static CONST SETFIELDSKIP rgsetnopoison[] = {
   {"us.fLoopInit",   "-Q0, the same"},
   {"us.fNoSwitches", "whether a command line was given at all"},
   {"us.fSzPersist",  "an allocation discipline, not a setting"},
+  {"us.szEphemSource",
+                     "its value is a chain of source keys, and -bE refuses "
+                     "a key no source defines -- an accepted typo would "
+                     "cast from Swiss while writing itself back into the "
+                     "settings -- so no marker can be a valid value. Its "
+                     "round trip is pinned over the real domain instead, "
+                     "by the -bE assertions of the ephemeris-registry "
+                     "group"},
   {"gs.ft",          "which file a render would be written to, chosen per "
                      "invocation; and every \"-Xb\"/\":Xp\" line in the "
                      "file writes it, so a poisoned value is overwritten "
@@ -19685,6 +19693,166 @@ static void TestEphemRegistryQt()
           "a side call under a matrix selection still reaches the Swiss "
           "files source, as it always has");
       }
+    }
+
+    // The selection's two representations say one thing. Every legacy
+    // spelling re-derives the chain from its shadow, and every -bE
+    // re-derives the shadow from the chain; over the selectable domain
+    // the two must land on the same source, and the chain strings are
+    // the ones the plan names. This is the net behind the phase 4b
+    // command line: the spellings below are applied through the real
+    // parser, not by writing the fields.
+    {
+      // The whole domain the old state could name, and the chain each
+      // selection is. nSwissEph 4 is the hole no spelling writes back
+      // (the settings sweep poisons around it), so it is not here.
+      struct { int nFiles, nSwiss, nMatrix; CONST char *szChain; } const
+        rgdomain[] = {
+        {1, 0, 0, "swiss"}, {1, 1, 0, "moshier"}, {1, 2, 0, "jpl"},
+        {1, 3, 0, "horizons,jpl"}, {1, 5, 0, "server,swiss"},
+        {0, 0, 1, "matrix"}, {0, 0, 0, "none"}};
+      // The spellings of section 5.2's table, and the state each one
+      // leaves the legacy shadow in from a Swiss-files default --
+      // exactly what the old code did, which the switch matrix pins
+      // against the baseline binary besides this.
+      struct { CONST char *szSw; int nFiles, nSwiss, nMatrix; } const
+        rglegacy[] = {
+        {"=b",  1, 0, 0}, {"_b",  0, 0, 0}, {"=bs", 1, 1, 0},
+        {"=bj", 1, 2, 0}, {"=bJ", 1, 3, 0}, {"=bS", 1, 5, 0},
+        {"=bm", 1, 0, 1}, {"_bm", 0, 0, 0}, {"=bU", 1, 0, 0}};
+      int isw;
+      char *rgsz[5];
+      flag fNoOldSav = us.fNoOldCalc, fNoNetSav = us.fNoNetwork,
+        fMatrixStarSav = us.fMatrixStar;
+      flag fOk;
+
+      // "=0b" and "=0n" ride in astrolog.as and would refuse two of the
+      // spellings; the net asks what the spellings themselves do.
+      us.fNoOldCalc = us.fNoNetwork = fFalse;
+      for (isw = 0; isw < (int)(sizeof(rglegacy) / sizeof(*rglegacy));
+          isw++) {
+        // From the shipped default each time, files on and Swiss.
+        us.fEphemFiles = fTrue; us.nSwissEph = 0; us.fMatrixPla = fFalse;
+        FCloneSz("swiss", &us.szEphemSource);
+        rgsz[0] = (char *)szAppNameCore;
+        rgsz[1] = (char *)rglegacy[isw].szSw;
+        rgsz[2] = NULL;
+        fOk = FProcessSwitches(2, rgsz, NULL);
+        Check(fOk, "\"%s\" parses", rglegacy[isw].szSw);
+        if (fOk) {
+          Check(us.fEphemFiles == rglegacy[isw].nFiles &&
+            us.nSwissEph == rglegacy[isw].nSwiss &&
+            us.fMatrixPla == rglegacy[isw].nMatrix,
+            "\"%s\" leaves the fields the old code left",
+            rglegacy[isw].szSw);
+          Check(FEqSz(us.szEphemSource, rgdomain[
+            rglegacy[isw].nFiles ? (rglegacy[isw].nSwiss == 1 ? 1 :
+            rglegacy[isw].nSwiss == 2 ? 2 : rglegacy[isw].nSwiss == 3 ? 3 :
+            rglegacy[isw].nSwiss == 5 ? 4 : 0) :
+            (rglegacy[isw].nMatrix ? 5 : 6)].szChain),
+            "and \"%s\" derived the chain that selection is",
+            rglegacy[isw].szSw);
+        }
+      }
+      us.fNoOldCalc = fNoOldSav; us.fNoNetwork = fNoNetSav;
+      us.fMatrixStar = fMatrixStarSav;
+
+      // -bE itself: the chain is set, not toggled, and the shadow
+      // follows the chain's head; "" restores the default; a chain may
+      // name sources this build does not compile, which the walk will
+      // skip, while a key no source defines is refused. -bP writes one
+      // parameter, and "" restores its default. A parameter line maps
+      // to its own field and nothing else -- the legacy spelling of the
+      // server's address is not clobbered by one, which is what lets
+      // the settings sweep carry both representations of that setting
+      // in one file.
+      rgsz[0] = (char *)szAppNameCore;
+      rgsz[1] = (char *)"=bE"; rgsz[2] = (char *)"moshier"; rgsz[3] = NULL;
+      Check(FProcessSwitches(3, rgsz, NULL), "-bE moshier parses");
+      Check(FEqSz(us.szEphemSource, "moshier") && us.fEphemFiles &&
+        us.nSwissEph == 1, "-bE moshier selects Moshier in both "
+        "representations");
+      rgsz[2] = (char *)"server,swiss,moshier";
+      Check(FProcessSwitches(3, rgsz, NULL), "the plan's own chain parses");
+      Check(FEqSz(us.szEphemSource, "server,swiss,moshier") &&
+        us.fEphemFiles && us.nSwissEph == 5,
+        "a server-headed chain reads as the server selection, and the "
+        "Swiss files ride behind it");
+      rgsz[2] = (char *)"swiss";
+      Check(FProcessSwitches(3, rgsz, NULL), "-bE swiss parses");
+      Check(FEqSz(us.szEphemSource, "swiss") && us.fEphemFiles &&
+        us.nSwissEph == 0, "-bE swiss is the default in both forms");
+      rgsz[2] = (char *)"moshier";
+      Check(FProcessSwitches(3, rgsz, NULL), "and again, for the reset");
+      rgsz[2] = (char *)"";
+      Check(FProcessSwitches(3, rgsz, NULL), "-bE with an empty chain");
+      Check(FEqSz(us.szEphemSource, SzEphSourceDefault()),
+        "an empty -bE restores the default chain");
+      rgsz[2] = (char *)"swiss";
+      Check(FProcessSwitches(3, rgsz, NULL), "and back to the default");
+
+      // A key no source defines is a typo, and refused: the chain's
+      // head would fall through to the Swiss files, so an accepted
+      // "mosheir" would cast from Swiss and be written back into the
+      // settings file. A key this build does not COMPILE is a different
+      // thing and loads, because the walk skips it. And the refusal is
+      // checked against the registry's own names plus the two future
+      // keys, so the two lists cannot drift apart.
+      rgsz[2] = (char *)"mosheir";
+      Check(!FProcessSwitches(3, rgsz, NULL),
+        "a source key no source defines is refused");
+      Check(FEqSz(us.szEphemSource, "swiss"),
+        "and a refused chain leaves the selection alone");
+      rgsz[2] = (char *)"swiss,bogus,moshier";
+      Check(!FProcessSwitches(3, rgsz, NULL),
+        "a bad key anywhere in the chain is refused, not just its head");
+      Check(FEqSz(us.szEphemSource, "swiss"),
+        "and that refusal leaves the selection alone too");
+      rgsz[2] = (char *)"prometheia,swiss";
+      Check(FProcessSwitches(3, rgsz, NULL),
+        "a source this build does not compile still names a chain");
+      Check(FEqSz(us.szEphemSource, "prometheia,swiss") && us.fEphemFiles,
+        "and the walk, not the parser, is what skips it");
+      rgsz[2] = (char *)"swiss";
+      Check(FProcessSwitches(3, rgsz, NULL), "back to the default again");
+      {
+        int isrc;
+        char sz[cchSzDef];
+        for (isrc = 0; isrc < CEphSrc(); isrc++) {
+          Check(FEphSrcKeyKnown(PephsrcGet(isrc)->szKey),
+            "every registry name is a key -bE accepts (%s)",
+            PephsrcGet(isrc)->szKey);
+          SzEphChainHead(PephsrcGet(isrc)->szKey, S(sz));
+          Check(FEqSz(sz, PephsrcGet(isrc)->szKey),
+            "and a one-source chain's head is that name (%s)", sz);
+        }
+      }
+      FCloneSz("srv-legacy-sentinel", &us.szEphSrv);
+      rgsz[1] = (char *)"-bP";
+      rgsz[2] = (char *)"server.url";
+      rgsz[3] = (char *)"wss://probe.example:47190"; rgsz[4] = NULL;
+      Check(FProcessSwitches(4, rgsz, NULL), "-bP server.url parses");
+      Check(FEqSz(us.rgszEphParam[epServerUrl], "wss://probe.example:47190"),
+        "the parameter carries its value");
+      Check(FEqSz(us.szEphSrv, "srv-legacy-sentinel"),
+        "and the legacy spelling of the same setting is left alone");
+      rgsz[3] = (char *)"";
+      Check(FProcessSwitches(4, rgsz, NULL), "-bP with an empty value");
+      Check(!FSzSet(us.rgszEphParam[epServerUrl]),
+        "and \"\" is the parameter's default");
+      rgsz[2] = (char *)"bogus.key"; rgsz[3] = (char *)"v";
+      Check(!FProcessSwitches(4, rgsz, NULL),
+        "an unknown source.param is refused, like an unknown switch");
+      // The legacy spelling mirrors INTO the parameter when written, so
+      // both representations agree in every state a real path made.
+      rgsz[2] = (char *)"server.url";
+      rgsz[3] = (char *)"wss://probe2.example";
+      Check(FProcessSwitches(4, rgsz, NULL), "-bW's parameter form again");
+      FCloneSz("wss://probe2.example", &us.szEphSrv);
+      Check(FEqSz(us.rgszEphParam[epServerUrl], "wss://probe2.example"),
+        "-bW writes the parameter as well as the legacy field");
+      FCloneSz(NULL, &us.rgszEphParam[epServerUrl]);
+      FCloneSz(NULL, &us.szEphSrv);
     }
 
     // The fallback with the sources' own bits: with the ephemeris

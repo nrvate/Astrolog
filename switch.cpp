@@ -2265,11 +2265,15 @@ static int NSwA(CONST char *szSwitch, PARSEIN *pin)
 // fallback chain as a comma list of source keys, primary first. Setting
 // it is idempotent -- the chain is set, not toggled -- and every legacy
 // spelling beside it re-derives the chain from its own shadow (NSwb). ""
-// restores the default chain. A key this build does not compile is not an
-// error: the walk skips it, the same rule an unavailable source follows.
+// restores the default chain. A key this build does not compile is not
+// an error -- the walk skips it, the same rule an unavailable source
+// follows -- but a key no source defines is refused, because the chain's
+// head falls through to the Swiss files and a silent typo would both
+// cast from the wrong source and be written back into the settings.
 
 static int NSwbE(CONST char *szSwitch, PARSEIN *pin)
 {
+  char szErr[cchSzMax];
   CONST char *pch, *pchTok;
 
   if (FErrorArgc("bE", pin->argc, 1))
@@ -2281,6 +2285,15 @@ static int NSwbE(CONST char *szSwitch, PARSEIN *pin)
       if (pch == pchTok) {
         PrintError("The -bE chain needs a source key between its commas, "
           "like \"-bE swiss\" or \"-bE server,swiss,moshier\".");
+        return tcError;
+      }
+      if (!FEphSrcKeyKnownN(pchTok, (int)(pch - pchTok))) {
+        // The key is quoted in the message through its range, never
+        // copied: a token can be any length, and a truncated copy could
+        // name a different key than the one the user typed.
+        sprintf2(S(szErr), "Unknown ephemeris source '%.*s'",
+          (int)(pch - pchTok), pchTok);
+        PrintError(szErr);
         return tcError;
       }
       if (*pch != ',')

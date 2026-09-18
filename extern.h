@@ -565,6 +565,8 @@ extern flag FSwissPlanet
 extern int CEphSrc P((void));
 extern EPHSRCDEF *PephsrcGet P((int));
 extern int IEphSrcFromKey P((CONST char *));
+extern flag FEphSrcKeyKnown P((CONST char *));
+extern flag FEphSrcKeyKnownN P((CONST char *, int));
 extern int IEphSrcPrimary P((void));
 extern void EphQueryInit P((EPHQUERY *, real));
 extern flag FEphQueryAdd P((EPHQUERY *, int, int, int, char *));

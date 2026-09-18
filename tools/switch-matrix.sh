@@ -69,7 +69,7 @@ if [ "${1:-}" = "--one" ]; then
       | awk -v t="$W" '{ i = index($0, t); while (i) { $0 = substr($0, 1, i - 1) "TMP" substr($0, i + length(t)); i = index($0, t) } print } NR >= 2 { exit }'
     # The relevant settings lines. "-m 1000" is the cap "head -1000"
     # provided; see the header for why it is 1000 and not 30.
-    grep -m 1000 -E "^[-=_:]Y|^-~|^[-=_:]RA|^-zl|^-z0|^:Xw|^:Xs|^:XS|^[=_]X|^:XE|^:X1|^-A |^[=_]?RO?|^[=_]?[bspc1-4fGJ9]|^-h|^-x|^-F|^:p|^-z|^-M0|^:5|^[=_]k|^:U|^:E0|^:v3|^:c3" $W/o.as 2>/dev/null
+    grep -m 1000 -E "^[-=_:]Y|^-~|^[-=_:]RA|^-zl|^-z0|^:Xw|^:Xs|^:XS|^[=_]X|^:XE|^:X1|^-A |^[=_]?RO?|^[=_]?[bspc1-4fGJ9]|^[-=_:]b[EP]|^-h|^-x|^-F|^:p|^-z|^-M0|^:5|^[=_]k|^:U|^:E0|^:v3|^:c3" $W/o.as 2>/dev/null
   } > "$T/out/$i"
   rm -rf "$W"
   exit 0
@@ -407,6 +407,24 @@ run -Am 99 5
 run -R 999
 run =b
 run _b
+# The selection's own spellings (EPHEMERIS_PLUGINS_PLAN.md 5.2): the
+# chain, idempotent, and one parameter of one source, "" meaning its
+# default; and the shapes that refuse. The old-engine locks too: -0b and
+# -0n are accepted so saved settings files load, and registered as inert
+# in tools/inert_option_audit.py.
+run =bE swiss
+run =bE server,swiss,moshier
+run =bE none
+run -bE bogus
+run -bE
+run -bP server.url wss://probe.example
+run -bP jpl.file de431.eph
+run -bP server.url ""
+run -bP bogus.key v
+run -bP
+run -0b
+run -0n
+run =b0
 run =b0
 run =b1
 run =b2
