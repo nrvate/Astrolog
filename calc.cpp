@@ -1042,7 +1042,6 @@ void ComputeEphem(real t)
   EPHQUERY eq;
 #endif
 #ifdef QT
-  flag fSrvPla;
 #endif
   PT3R ptPla, ptEar, vEar;
 #ifdef JPLWEB
@@ -1054,7 +1053,6 @@ void ComputeEphem(real t)
 
   fJPLPla = FSrcChainHead("horizons");
 #ifdef QT
-  fSrvPla = FSrcChainHead("server");
 #endif
   objCentCalc = us.objCenter;
   if (objCentCalc > oNorm || FNodal(objCentCalc) ||
@@ -1063,13 +1061,6 @@ void ComputeEphem(real t)
     objCentCalc = oSun;
 
   imax = Min(oNorm, is.nObj); imax = Max(imax, oSun);
-#ifdef QT
-  // The Ephemeris Server backend asks for the whole cast at once, before
-  // the loop reads it per object below (EPHEMERIS_CLIENT_PLAN.md lesson
-  // 1: the fetch must not be per object).
-  if (fSrvPla)
-    SrvPrefetchQt(t, objCentCalc, imax, NULL);
-#endif
 #ifdef SWISS
   // The Swiss-family source of the registry asks the same way: one
   // query per cast, submitted once down the chain today's settings
@@ -1080,14 +1071,14 @@ void ComputeEphem(real t)
   // used to compute. One FSwissPlanet() call per object in the same
   // order, through FSubmitSwissLocal()'s delegation, so the calls --
   // and their bytes -- are the ones this branch has always made.
+  // Every source, including the server: phase 6 made it a registered
+  // source over a transport, so the chain walk reaches it like any other
+  // and this function no longer knows it exists. It used to -- an
+  // "#ifdef QT" branch prefetched the whole cast from the adapter and a
+  // second one read each object back from it, bypassing the registry
+  // entirely -- which is why a remote cast and a local one could drift.
   {
-    flag fHost =
-#ifdef QT
-      !fSrvPla;
-#else
-      fTrue;
-#endif
-    if (fHost) {
+    {
       EphQueryInit(&eq, JulianDayFromTime(t));
       for (i = oEar; i <= imax; i++) {
         if (FSkipEphem(i, objCentCalc, fJPLPla))
@@ -1125,20 +1116,6 @@ void ComputeEphem(real t)
         (i == oSun && us.fBarycenter ? 0 : rgObjJPL[i]);
       fRet = GetJPLHorizons(j, &r1, &r2, &r3, &r4, &r5, &r6, NULL);
       us.fTruePos = fSav;
-    } else
-#endif
-#ifdef QT
-    if (fSrvPla) {
-      if (FCust(i) && rgTypSwiss[i - custLo] == 5)
-        // A custom slot with no ephemeris stays ephemeris-less exactly
-        // as the Swiss branch below leaves it.
-        fRet = fTrue;
-      else {
-        // The server analogue of the Horizons call above: the six reals
-        // from the window the prefetch left, or a soft failure.
-        fRet = FSrvPlanetQt(i, JulianDayFromTime(t), &r1, &r2, &r3, &r4,
-          &r5, &r6);
-      }
     } else
 #endif
     {

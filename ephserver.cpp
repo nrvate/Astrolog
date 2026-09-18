@@ -131,17 +131,45 @@ static void StopServer()
 // is a round trip per body (EPHEMERIS_CLIENT_PLAN.md lesson 1).
 static flag FSubmitServer(EPHQUERY *pq)
 {
-  if (s_ptrans == NULL || s_ptrans->FSubmit == NULL)
+  int i;
+
+  if (s_ptrans == NULL || s_ptrans->FSubmit == NULL ||
+    s_ptrans->FRead == NULL)
     return fFalse;
-  return s_ptrans->FSubmit(pq);
+  // The transport attempts the whole query at once -- a per-object fetch
+  // is a round trip per body -- and returns once the answer is there or
+  // is not coming. False means it attempted NOTHING, a transport that is
+  // down, and every object stays open for the next source in the chain.
+  if (!s_ptrans->FSubmit(pq))
+    return fFalse;
+  // Returning true obliges this source to have filled a row for every
+  // object still open: a success, or a per-object error. An object the
+  // server did not answer must carry an error rather than a zero row,
+  // because the chain walk claims any row whose nErr is ephErrNone --
+  // so a silent zero would be claimed as an ANSWER and the fallback
+  // would never be reached.
+  for (i = 0; i < pq->cobj; i++) {
+    if (pq->rgisrc[i] != ephSrcNone)
+      continue;
+    if (!s_ptrans->FRead(pq, i, &pq->rgrow[i])) {
+      ClearB((pbyte)&pq->rgrow[i], sizeof(EPHROW));
+      pq->rgrow[i].nErr = ephErrDataUnavailable;
+      pq->rgrow[i].nNativeRes = ephNativeNone;
+    }
+  }
+  return fTrue;
 }
 
 
 static flag FReadServer(CONST EPHQUERY *pq, int iObj, int iRow, EPHROW *prow)
 {
-  if (s_ptrans == NULL || s_ptrans->FRead == NULL)
+  // The rows were filled by FSubmit above, like every other source: one
+  // instant per query, so there is one row per object.
+  if (iObj < 0 || iObj >= pq->cobj || pq->rgisrc[iObj] == ephSrcNone ||
+    iRow != 0)
     return fFalse;
-  return s_ptrans->FRead(pq, iObj, prow);
+  *prow = pq->rgrow[iObj];
+  return fTrue;
 }
 
 
