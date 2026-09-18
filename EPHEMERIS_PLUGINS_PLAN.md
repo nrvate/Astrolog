@@ -1458,7 +1458,7 @@ may select another from A.20):
   Ephemeris — which is a definitional difference, not an error, and a server
   whose distance rates omit it says so with the flag.
 
-**Sidereal zodiacs** (plane 0 only; see §3.5):
+**Sidereal zodiacs** (see §3.5):
 - A zodiac has a **zero point**: a mean ayanamsa A₀ at an anchor epoch t₀ (TT).
   - `user`: t₀ = `anchorEpoch` (TT), A₀ = `anchorAyanamsaDeg`, a **mean**
     ayanamsa (no nutation in it).
@@ -2257,6 +2257,16 @@ astrolog-ephd and Astrolog's `swiss`/`moshier`/`jpl` plugins use it.
 - **Zodiac** → `SEFLG_SIDEREAL` with `swe_set_sid_mode`: the mode from A.11,
   `SE_SIDM_USER` with the anchor, plus `SE_SIDBIT_ECL_T0` or
   `SE_SIDBIT_SSY_PLANE` for sidereal planes 1 and 2.
+
+  **Known defect, 2026-09-18.** Swiss declines both plane bits for 16 of the
+  47 A.11 tokens — `b1950`, `j1900`, `j2000`, the five `true-*` and the eight
+  `gal*` — and this server returns the plane-0 answer for them **bit
+  identically**, with no error. A.8 is a request field, so a plane the server
+  cannot honour is `kOErrUnsupported`, not a different answer. Measured with
+  `tools/sidplane-origin.py`; recorded in `EPHEMERIS_ACCURACY_REGISTRY.md`
+  §4.1, and fixed by the same change as the zero point, since that makes the
+  plane transform this server's own arithmetic rather than a Swiss sidereal
+  mode.
 - **Time scale.** UT1 calls the `_ut` entry points (or TT = UT1 + ΔT when
   `deltaTSec` is given). TT is used directly. TDB is error 2 unless it converts
   exactly.
@@ -2279,7 +2289,11 @@ These are Prometheia's C ABI names; the C++ engine is the same.
 - **Corrections** → `light_time`, `deflection`, `aberration`.
 - **Speeds** → `speed`.
 - **Zodiac:** `fagan-bradley`, `lahiri`, `user` → `sidereal` with the anchor.
-  Sidereal plane 0 only.
+  All three of A.8's sidereal planes → `sidereal_plane`
+  (`PROMETHEIA_SIDEREAL_PLANE_DATE`/`_ANCHOR`/`_INVARIABLE`), since **C ABI
+  6**, which appended the field. An ABI-5 build binds no longer — the binding
+  check is equality — and before it only plane 0 was reachable. A sidereal
+  zodiac on the equatorial plane is still refused, by §3.5.
 - **Extra columns:** σ → `sigma`, `HAS_SIGMA`; ayanamsa → `ayanamsa_deg`;
   light time → `light_time_days`.
 - **Time:** TT → `prometheia_calc`, UT1 → `_ut` with the ΔT hook or

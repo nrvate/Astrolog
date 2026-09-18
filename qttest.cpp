@@ -19840,9 +19840,25 @@ static void TestPrometheiaQt()
     pf.plane = eph::kPlaneEquator;
     Check(!FEphPromOptions(&pf, &opts),
       "a sidereal zodiac on the equator refuses (3.5)");
-    pf.plane = eph::kPlaneEcliptic; pf.siderealPlane = eph::kSidPlaneAnchor;
+    // All three of A.8's sidereal planes since C ABI 6, which appended
+    // options.sidereal_plane. Before it only plane 0 was reachable and
+    // this asserted the refusal; the assertion is inverted rather than
+    // deleted, because the field being carried at all is the new
+    // contract and a plugin that ignored it would pass a weaker check.
+    pf.plane = eph::kPlaneEcliptic; pf.siderealPlane = eph::kSidPlaneDate;
+    Check(FEphPromOptions(&pf, &opts) && opts.sidereal_plane ==
+      PROMETHEIA_SIDEREAL_PLANE_DATE, "sidereal plane 0 is the ecliptic of date");
+    pf.siderealPlane = eph::kSidPlaneAnchor;
+    Check(FEphPromOptions(&pf, &opts) && opts.sidereal_plane ==
+      PROMETHEIA_SIDEREAL_PLANE_ANCHOR, "sidereal plane 1 carries to the anchor");
+    pf.siderealPlane = eph::kSidPlaneInvariable;
+    Check(FEphPromOptions(&pf, &opts) && opts.sidereal_plane ==
+      PROMETHEIA_SIDEREAL_PLANE_INVARIABLE,
+      "sidereal plane 2 carries to the invariable plane");
+    pf.plane = eph::kPlaneEquator;
     Check(!FEphPromOptions(&pf, &opts),
-      "sidereal plane 1 refuses (Appendix C: plane 0 only)");
+      "a fixed sidereal plane on the equator still refuses (3.5)");
+    pf.plane = eph::kPlaneEcliptic;
     pf.siderealPlane = eph::kSidPlaneDate; pf.zodiac = "sassanian";
     Check(!FEphPromOptions(&pf, &opts),
       "an A.11 token this engine does not serve refuses");
@@ -20302,6 +20318,40 @@ static void TestPrometheiaQt()
             "applies the zodiac exactly once",
             iZod ? "sidereal" : "tropical", rD);
         }
+      }
+
+      // The A.8 sidereal plane has to MOVE the answer. A source that
+      // accepts sidplane=2 and hands back the plane-0 numbers reads
+      // exactly like support, and that is not hypothetical: astrolog-ephd
+      // does it for 16 of the 47 registry zodiac tokens, because Swiss
+      // declines SE_SIDBIT_SSY_PLANE for the star- and frame-anchored
+      // ayanamsas and nothing noticed. So assert the movement, not the
+      // acceptance. The Moon reaches 5 degrees of latitude, where the
+      // 1.578701-degree tilt is worth thousands of arcsec; 60" is a
+      // floor far below anything real and far above zero.
+      {
+        eph::Profile pf0, pf2;
+        double rg0[kEphPromStride], rg2[kEphPromStride];
+        EPHPROMANSWER a0, a2;
+        real rD;
+
+        pf0 = eph::Profile(); pf0.zodiac = "fagan-bradley";
+        pf2 = pf0; pf2.siderealPlane = eph::kSidPlaneInvariable;
+        if (FPromRowsQt(eph::kTimeUT1, jd, 0.0, 1, &pf0, eph::kObjBody,
+            301, 0, 0, rg0, &a0) && a0.rowsOk == 1 &&
+          FPromRowsQt(eph::kTimeUT1, jd, 0.0, 1, &pf2, eph::kObjBody,
+            301, 0, 0, rg2, &a2) && a2.rowsOk == 1) {
+          rD = SphDistance(rg0[0], rg0[1], rg2[0], rg2[1]) * 3600.0;
+          printf("  sidereal plane 2 moves the Moon %9.1f\" off plane 0\n", rD);
+          Check(rD > 60.0, "sidereal plane 2 MOVES the answer (%.4f\"): a "
+            "plane that is accepted and then ignored reads like support", rD);
+        } else
+          // Not a skip. The engine is loaded by the time this runs and
+          // the Moon needs no catalog, so a refusal here is the finding
+          // -- and a skip would let a plugin that declines the plane
+          // pass the one check written to watch the plane.
+          Check(fFalse, "sidereal plane 0 and 2 both answer for the Moon "
+            "(rowsOk %d and %d)", (int)a0.rowsOk, (int)a2.rowsOk);
       }
 
       // ---- The Prometheia review's findings, each with its net -------

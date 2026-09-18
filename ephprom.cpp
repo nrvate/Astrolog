@@ -376,13 +376,25 @@ flag FEphPromOptions(CONST eph::Profile *ppf, prometheia_options *popts)
   } else if (ppf->observer == eph::kObsBody)
     popts->center_body = ppf->observerBody;
 
-  // Sidereal zodiacs: ecliptic plane only (3.5), and of the sidereal
-  // planes only 0, the ecliptic of date -- Appendix C says sidereal
-  // plane 0 only, so 1 and 2 are unsupported here, not malformed.
+  // Sidereal zodiacs: ecliptic plane only (3.5). All three of A.8's
+  // sidereal planes are served since C ABI 6, which appended
+  // options.sidereal_plane; before it, only plane 0 was reachable and
+  // 1 and 2 were unsupported here. The C boundary refuses a fixed plane
+  // with equatorial coordinates, and 3.5 refuses equatorial with any
+  // sidereal zodiac at all, so the wider rule is the one to apply.
   if (FSzSet(ppf->zodiac.c_str())) {
-    if (ppf->plane == eph::kPlaneEquator || ppf->siderealPlane !=
-      eph::kSidPlaneDate)
+    if (ppf->plane == eph::kPlaneEquator)
       return fFalse;
+    switch (ppf->siderealPlane) {
+    case eph::kSidPlaneDate:
+      popts->sidereal_plane = PROMETHEIA_SIDEREAL_PLANE_DATE;       break;
+    case eph::kSidPlaneAnchor:
+      popts->sidereal_plane = PROMETHEIA_SIDEREAL_PLANE_ANCHOR;     break;
+    case eph::kSidPlaneInvariable:
+      popts->sidereal_plane = PROMETHEIA_SIDEREAL_PLANE_INVARIABLE; break;
+    default:
+      return fFalse;             // an A.8 plane this ABI does not name
+    }
     if (FEqSz(ppf->zodiac.c_str(), "fagan-bradley"))
       popts->sidereal = PROMETHEIA_SIDEREAL_FAGAN_BRADLEY;
     else if (FEqSz(ppf->zodiac.c_str(), "lahiri"))
@@ -828,7 +840,6 @@ static flag FSubmitProm(EPHQUERY *pq)
   SWISSSPEC ss;
   EPHROW *prow;
   int i, naif, naifCent;
-  flag fSiderealBad = fFalse;
 
   if (!FEphPromStart(szWhy, (int)sizeof(szWhy)))
     return fFalse;               // the walk asks the next source
@@ -873,10 +884,11 @@ static flag FSubmitProm(EPHQUERY *pq)
       rgpf[i].frame = us.fNoNutation ? eph::kFrameMeanOfDate :
         eph::kFrameTrueOfDate;
       if (us.fSidereal) {
+        // "-Ys" is Fagan/Bradley either way; "-Yss" moves the PLANE, not
+        // the zodiac, which is a profile field since C ABI 6.
+        rgpf[i].zodiac = "fagan-bradley";
         if (us.fSidereal2)
-          fSiderealBad = fTrue;  // the solar-system plane: not served
-        else
-          rgpf[i].zodiac = "fagan-bradley";
+          rgpf[i].siderealPlane = eph::kSidPlaneInvariable;
       }
       continue;
     }
@@ -889,8 +901,15 @@ static flag FSubmitProm(EPHQUERY *pq)
       prow->nErr = ephErrUnsupported;
       continue;
     }
-    if (ss.nSidMode != SE_SIDM_FAGAN_BRADLEY && ss.iflag & SEFLG_SIDEREAL)
-      fSiderealBad = fTrue;      // the solar-system plane: not served
+    // The two sidereal modes this program spells are Fagan/Bradley and
+    // Fagan/Bradley on the solar-system plane, and C ABI 6 serves both.
+    // Any OTHER base ayanamsa would come back as Fagan/Bradley without
+    // saying so, which is a silently wrong zodiac, so it is refused.
+    if ((ss.iflag & SEFLG_SIDEREAL) &&
+      (ss.nSidMode & ~SE_SIDBIT_SSY_PLANE) != SE_SIDM_FAGAN_BRADLEY) {
+      prow->nErr = ephErrUnsupported;
+      continue;
+    }
 
     if (ss.iobj == SE_TRUE_NODE || ss.iobj == SE_MEAN_NODE) {
       // The Moon's named node bodies are kind 1 here: the ascending
@@ -959,8 +978,11 @@ static flag FSubmitProm(EPHQUERY *pq)
     rgpf[i].frame = (ss.iflag & SEFLG_NONUT) ? eph::kFrameMeanOfDate :
       eph::kFrameTrueOfDate;
     rgpf[i].speeds = (ss.iflag & SEFLG_SPEED) != 0;
-    if (ss.iflag & SEFLG_SIDEREAL)
+    if (ss.iflag & SEFLG_SIDEREAL) {
       rgpf[i].zodiac = "fagan-bradley";
+      if (ss.nSidMode & SE_SIDBIT_SSY_PLANE)
+        rgpf[i].siderealPlane = eph::kSidPlaneInvariable;
+    }
   }
 
   // One internal question: one row per object, at the query's instant,
@@ -991,10 +1013,6 @@ static flag FSubmitProm(EPHQUERY *pq)
     // South Node could come back as the SSB's position, marked answered.
     if (prow->nErr != ephErrNone)
       continue;
-    if (fSiderealBad && rga[i].errCode == ephErrNone) {
-      prow->nErr = ephErrUnsupported;
-      continue;
-    }
     if (rga[i].rowsOk < 1) {
       prow->nErr = rga[i].errCode;   // the A.17 values are the ephErr* ones
       continue;
