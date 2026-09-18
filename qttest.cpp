@@ -20494,6 +20494,17 @@ static void TestEphSrvLiveQt()
       strEphe += ";";
     strEphe += strDir;
   }
+  // And the tree root, because sefstars.txt lives THERE and not in the
+  // bundled ephem/. An explicit --ephe is the server's whole search path,
+  // so without this the daemon has no star catalogue and answers every
+  // star "data unavailable" -- which is exactly why P1's regression test
+  // could not be written when P1 was fixed, and why the plan carried it
+  // as an outstanding gap. The local cast finds the file regardless,
+  // because Swiss falls back to the working directory; the server, with
+  // its path stated, does not.
+  if (!strEphe.isEmpty())
+    strEphe += ";";
+  strEphe += QCoreApplication::applicationDirPath();
   if (strEphe.isEmpty()) {
     printf("  skipped: no -Yi ephemeris directory to point the server at\n");
     goto LRestore;
@@ -20656,6 +20667,78 @@ static void TestEphSrvLiveQt()
   AdjustRestrictions();
   OraclePinUtQt(1990, 6, 15, 12.0);
   ciCore.lon = 122.3; ciCore.lat = 47.6;
+
+  // ---- P1: a fixed star through the server, in both zodiacs ---------
+  // The gap this closes was named in the plan and left open: D2's fix
+  // made the server compute a star with the chart's real settings, and
+  // the consumer half still applied the BODY convention to the answer,
+  // putting every fixed star about 24.7 degrees out in sidereal charts
+  // -- silently, nErr clear, so the chain claimed the row. The scenario
+  // loop above cannot see it, because its snapshot compares PLANETS.
+  //
+  // The test written for it at the time was withdrawn rather than kept:
+  // its first form set us.fStar alone and PASSED while sabotaged,
+  // because SwissComputeStars() only asks about stars whose ignore[] is
+  // clear, so the query was empty. This asks the chain directly instead,
+  // one named star, and checks provenance so the swiss fallback cannot
+  // answer for the server.
+  {
+    char szStarT[cchSzMax];
+    real p1, p2, p3, p4, p5, p6, s1, s2, s3, s4, s5, s6, rD, jdT;
+    int rgisrcSrv[1], rgisrcSw[1], iZod;
+
+    rgisrcSrv[0] = IEphSrcFromKey("server");
+    rgisrcSw[0] = IEphSrcFromKey("swiss");
+    OraclePinUtQt(1990, 6, 15, 12.0);
+    for (iZod = 0; iZod <= 1; iZod++) {
+      EPHQUERY eqp, eqs;
+      flag fP, fS;
+      Borrow bSidStar(us.fSidereal, iZod ? fTrue : fFalse);
+
+      // Inside the borrow, or is.rSid keeps the last cast's value: the
+      // prometheia star leg was blind to its own subtraction that way.
+      CastChart(0);
+      jdT = JulianDayFromTime(is.T);
+      Check(!us.fSidereal || is.rSid != 0.0,
+        "the sidereal star leg really has an ayanamsa (%.6f)", is.rSid);
+
+      EphQueryInit(&eqp, jdT);
+      sprintf2(S(szStarT), "%s", "Sirius");
+      FEphQueryAdd(&eqp, 1, 0, 0, szStarT);
+      fP = FEphSubmitChain(&eqp, rgisrcSrv, 1) &&
+        FEphRead(&eqp, 1, &p1, &p2, &p3, &p4, &p5, &p6);
+
+      EphQueryInit(&eqs, jdT);
+      sprintf2(S(szStarT), "%s", "Sirius");
+      FEphQueryAdd(&eqs, 1, 0, 0, szStarT);
+      fS = FEphSubmitChain(&eqs, rgisrcSw, 1) &&
+        FEphRead(&eqs, 1, &s1, &s2, &s3, &s4, &s5, &s6);
+
+      if (!fP) {
+        // Said out loud rather than passed over: the server's --ephe is
+        // every -Yi directory, and sefstars.txt lives in the TREE ROOT,
+        // which "-Yi1 ephem" does not name. That is the whole of why
+        // this leg could not be written before.
+        printf("  P1 %s: the server served no star (nErr %d); its --ephe "
+          "needs a directory holding sefstars.txt\n",
+          iZod ? "sidereal" : "tropical", (int)eqp.rgrow[0].nErr);
+        continue;
+      }
+      Check(fS, "the local Swiss path serves the same star");
+      Check(FEqSz(SzSet(eqp.rgrow[0].szSrc), "server"),
+        "the %s star row really came from the server (%s)",
+        iZod ? "sidereal" : "tropical", SzSet(eqp.rgrow[0].szSrc));
+      if (!fS)
+        continue;
+      rD = SphDistance(p1, p2, s1, s2) * 3600.0;
+      printf("  P1 star %-9s server vs swiss: %11.4f\"\n",
+        iZod ? "sidereal" : "tropical", rD);
+      Check(rD < 1.0, "the %s star through the server agrees with the "
+        "local one (%.4f\")", iZod ? "sidereal" : "tropical", rD);
+    }
+    us.fSidereal = fFalse;
+    CastChart(0);
+  }
 
   // A cast made inside another cast's wait -- a timer, a paint -- leaves
   // the waiting cast alone: it lands bit-identical. The first form wiped

@@ -63,13 +63,12 @@ version 3, and this section is the design authority behind it.
   this branch's life -- and is the one that reaches the crash. **That is
   worth a line in CLAUDE.md whatever you decide about this branch.**
 
-  **That third review has now been done** (work-log item 21), and every
-  finding it raised is fixed. **One piece of work is outstanding and is
-  not a finding:** P1's fix has no regression test, because the suite's
-  loopback daemon is started without a star catalogue on its own path and
-  so cannot serve a star at all. The version written without that passed
-  while sabotaged, and was withdrawn rather than kept. Giving that daemon
-  an `--ephe` pointing at a tree with `sefstars.txt` is the whole of it.
+  **That third review has now been done** (work-log item 21), every
+  finding it raised is fixed, **and P1's missing net is closed**
+  (work-log item 24): the suite's loopback daemon was started without a
+  star catalogue because `sefstars.txt` is in the tree root rather than
+  the bundled `ephem/`, and its `--ephe` is its whole search path. Nothing
+  is now carried as outstanding from any of the three reviews.
 
   **Two gate-level findings are recorded here and deliberately NOT added
   to CLAUDE.md**, because that file is yours: (a) `make check` and the
@@ -2387,6 +2386,32 @@ the gates the phase touches.
    did not exist before this corpus and is the reason 6h was called
    unverifiable.
 
+24. **P1's missing net, closed (2026-09-18).** The one thing the three
+   reviews left open, and the reason it stayed open for a day: a fixed
+   star through the Ephemeris Server could not be tested because the
+   suite's own loopback daemon could not serve one.
+
+   **Why.** `sefstars.txt` is in the TREE ROOT, not in the bundled
+   `ephem/`. The live group hands the daemon an explicit `--ephe` built
+   from every `-Yi` directory, and an explicit `--ephe` is the server's
+   whole search path -- so under `-Yi1 ephem` the daemon had no star
+   catalogue and answered every star `ephErrDataUnavailable`. The local
+   cast finds the file regardless, because Swiss falls back to the
+   working directory. That asymmetry is the whole of it, and it is worth
+   remembering generally: **a server told where to look is stricter than
+   a library allowed to guess.**
+
+   The leg now appends the tree root, asks the chain for one named star
+   directly rather than through `SwissComputeStars()` (whose query is
+   empty unless the stars are unrestricted -- the trap that made the
+   first attempt vacuous), and asserts the row's provenance is `server`
+   so the swiss fallback behind it cannot answer for it. Measured
+   agreement: **0.0000 arcsec tropical, 0.0031 sidereal.** Sabotaged by
+   putting back the body convention for stars, the sidereal star moves
+   **68036 arcsec** -- a 24.7 degree longitude shift seen at Sirius's
+   -39.6 degree latitude -- and the tropical one does not move at all,
+   which is exactly the signature P1 was reported with.
+
 23. **The Prometheia project's review of `ephprom.cpp` (2026-09-18).**
    A review from the OTHER side of the plugin boundary, run under the
    cleanroom rule -- their agent read this plugin and their own headers,
@@ -2474,13 +2499,21 @@ the gates the phase touches.
      already kept the contract, `ephprom.cpp` with a comment naming this
      exact failure.
 
-     **It has no net.** One was written and withdrawn: its first version
-     set `us.fStar` alone and PASSED with the fix sabotaged, because
-     `SwissComputeStars()` only asks for stars whose `ignore[]` is clear
-     -- an empty query, exercising nothing. Unrestricting them then
-     showed the suite's loopback daemon has no star catalogue on its own
-     path. **A leg needs that daemon started with the catalogue; that is
-     the outstanding piece here.**
+     **It has a net since 2026-09-18** (work-log item 24). One was
+     written and withdrawn first: its version set `us.fStar` alone and
+     PASSED with the fix sabotaged, because `SwissComputeStars()` only
+     asks for stars whose `ignore[]` is clear -- an empty query,
+     exercising nothing. Unrestricting them then showed the suite's
+     loopback daemon has no star catalogue on its own path, and that is
+     what took the rest of the session to close: **`sefstars.txt` lives
+     in the TREE ROOT, not in the bundled `ephem/`**, and an explicit
+     `--ephe` is the server's whole search path. The local cast finds the
+     file anyway, because Swiss falls back to the working directory; the
+     server, with its path stated, does not. The live group now appends
+     the tree root, asks the chain for one named star directly rather
+     than going through `SwissComputeStars()`, and checks provenance so
+     the swiss fallback cannot answer for the server. Sabotaged, the
+     sidereal star moves 68036 arcsec and tropical does not move at all.
 
    - **P2: a lossy round trip made a far-dated cast pay for an answer and
      then reject it.** The instant went out as centuries and came back,
