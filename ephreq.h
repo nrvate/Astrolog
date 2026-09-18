@@ -45,20 +45,42 @@
 // lock is on the bytes, not on the format. A free function over the
 // already-parsed capabilities does the same work outside the lock.
 inline uint8_t NBestCorrMaskEph(CONST eph::Capabilities &caps,
-  uint8_t observer, uint8_t m)
+  uint8_t observer, uint32_t kinds, uint8_t m)
 {
-  uint32_t best = 0;
-  bool found = false;
+  int best = -1, i, k;
 
-  for (size_t i = 0; i < caps.corrMasks.size(); i++) {
-    uint32_t obs = caps.corrMasks[i].first, mask = caps.corrMasks[i].second;
-    if (observer < 32 && ((obs >> observer) & 1u) != 0 &&
-      (mask & ~(uint32_t)m) == 0 && (!found || mask > best)) {
-      best = mask;
-      found = true;
+  // Every mask A.7 can express, largest first: there are eight, so this is
+  // cheaper than reasoning about which advertised entries combine.
+  for (i = (int)eph::kCorrMask; i >= 0; i--) {
+    if (((uint8_t)i & ~m) != 0)
+      continue;                 // asks for more than the caller wanted
+    // kinds == 0 means "no object references this profile", and the drop
+    // judges such a profile on 0x0004 alone -- the conservative reading,
+    // which costs nothing because nothing is computed from it. Without
+    // this branch the loop below would vacuously accept ANY mask, since
+    // there are no kinds to disagree.
+    if (kinds == 0) {
+      if (caps.CorrectionMask(observer, (uint8_t)i)) {
+        best = i;
+        break;
+      }
+      continue;
+    }
+    // Section 2 of the per-kind drop: a profile's mask must be honoured
+    // for EVERY kind that references it, because one profile answers them
+    // all and the server refuses the whole request otherwise.
+    for (k = 0; k < 32; k++) {
+      if (((kinds >> k) & 1u) == 0)
+        continue;
+      if (!caps.CorrectionMaskFor(observer, (uint8_t)k, (uint8_t)i))
+        break;
+    }
+    if (k >= 32) {
+      best = i;
+      break;
     }
   }
-  return found ? (uint8_t)best : (uint8_t)0;
+  return best >= 0 ? (uint8_t)best : (uint8_t)0;
 }
 
 

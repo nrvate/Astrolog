@@ -1883,6 +1883,32 @@ static const char *UnservedOf(const eph::Request &req) {
   if (req.representation != 0) return "segments are not served by this server";
   if (req.timeScale != eph::kTimeUT1 && req.timeScale != eph::kTimeTT)
     return "time scale not served: UT1 and TT only";
+  // Section 2 of the per-kind drop. A profile's correction mask can no
+  // longer be judged on its own: the mask is on the PROFILE and the kind is
+  // on the OBJECTS referencing it, so it is checked against every
+  // (observer, kind) pair that actually uses it, and a failure refuses the
+  // WHOLE request -- never a per-object error, because the profile is part
+  // of the question (3.4). A profile no object references is checked
+  // against 0x0004 alone. This holds whatever the representation: a
+  // segments request is the same request with representation = 1 and the
+  // same object list.
+  {
+    std::vector<uint8_t> fUsed(req.profiles.size(), 0);
+    for (const eph::Object &o : req.objs) {
+      if (o.profile >= req.profiles.size()) continue;   // caught in parsing
+      const eph::Profile &pfO = req.profiles[o.profile];
+      fUsed[o.profile] = 1;
+      if (!gCaps.CorrectionMaskFor(pfO.observer, o.kind, pfO.corrections))
+        return "this correction mask is not honoured for this observer and "
+               "object kind";
+    }
+    for (size_t i = 0; i < req.profiles.size(); i++)
+      if (!fUsed[i] &&
+        !gCaps.CorrectionMask(req.profiles[i].observer,
+                              req.profiles[i].corrections))
+        return "an unreferenced profile's correction mask is not honoured "
+               "for its observer";
+  }
   for (const eph::Profile &pf : req.profiles) {
     // Unknown BITS are refused; a mask this observer merely narrows is
     // not. WELCOME now advertises, per observer, the terms a body will
@@ -2979,6 +3005,24 @@ static void BuildWelcome(const EphDiscovery &disc, const char *szSwe) {
       {obsDefl,  eph::kCorrLightTime | eph::kCorrDeflection},
       {obsDefl,  eph::kCorrMask},
     };
+    // A.3 0x0014, the per-kind drop: our ONE exception. swe_nod_aps()
+    // reads the correction bits before any normalisation, so an ORBIT
+    // POINT from the Sun's centre or the barycentre honours them where a
+    // BODY from the same observer cannot -- Jupiter's ascending node moves
+    // 5.8e-3 degrees between mask 7 and mask 1. 0x0004 above is the
+    // intersection over kinds and so cannot say this; before the drop this
+    // server advertised the narrow truth and then accepted the wide mask
+    // anyway, which worked and was a divergence nobody could read off the
+    // specification.
+    {
+      const uint32_t obsSolar = 0x0C;   // heliocentric, barycentric
+      const uint32_t kndPoint = 1u << eph::kObjOrbitPoint;
+      c.corrByKind = {
+        {obsSolar, kndPoint, eph::kCorrLightTime | eph::kCorrDeflection},
+        {obsSolar, kndPoint, eph::kCorrLightTime | eph::kCorrAberration},
+        {obsSolar, kndPoint, eph::kCorrMask},
+      };
+    }
   }
   c.orbitPoints = 0xF;
   // Mean, osculating, interpolated and the focal point -- not method 3

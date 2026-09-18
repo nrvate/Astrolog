@@ -1983,6 +1983,7 @@ older than the server it is talking to.
 | 0x0011 | hypotheticals: u16 n, n × str8 (A.15 tokens served) |
 | 0x0012 | equinoxes for elements: u32 bitmask of A.16 |
 | 0x0013 | rates bound: f32 degPerDay, f32 auPerDay — the largest difference of the server's rates from central differences of its positions (§3.5a); absent means rates meet the 1e-5 °/day, 1e-9 AU/day tolerance |
+| 0x0014 | corrections by kind: u8 n, n × {u32 observers (A.5), u32 kinds (A.4), u8 mask (A.7)} — ADDS to tag 0x0004 per (observer, kind). 0x0004 is the intersection over kinds; a pair no entry names falls back to it, so a kind-uniform server sends nothing and the two cannot contradict. A profile's mask is checked against every (observer, kind) of the objects referencing it, ERROR 11 for the whole request; an unreferenced profile against 0x0004 alone. Mask bits above 0x07 are reserved and MUST be zero (§3.1: reject, do not normalise); unknown observer and kind bits are ignored |
 
 **A.4 REQUEST TLVs:**
 - 0x0003 precession model, str8 (non-critical; an unknown model falls back and

@@ -1,11 +1,18 @@
 # file	direction	type	expect	note
-# set-sha256 1c934c7da19965f21ded99a0a53e36eaa3c45434cfbfaeabddafaf154ea454ec
+# set-sha256 934d3a0d49d3439740c0e8d063addba662354946e9686c85111032ddbc858f43
 hello_min.hex	c2s	1	ok	no token, no caps
 hello_token_caps.hex	c2s	1	ok	token and f32|cancel|lookup|segments caps
 hello_future_client.hex	c2s	1	ok	a version-9 client: envelope 9, protoMax 9, protoMin 4; the server answers v4
 welcome_swiss.hex	s2c	2	ok	astrolog-ephd-like capabilities
 welcome_prometheia.hex	s2c	2	ok	prometheiad-like, with segments
 request_basic.hex	c2s	3	ok	Sun and Moon, TT hourly grid, geocentric
+welcome_corrkind.hex	s2c	2	ok	0x0014 carrying only exceptions: an orbit point from the Sun's centre or the barycentre honours the full mask where a body cannot
+welcome_corrkind_empty.hex	s2c	2	ok	0x0014 with n = 0: legal, and means exactly what its absence means
+welcome_corrkind_unknown_bits.hex	s2c	2	ok	unknown observer and kind bits in 0x0014 are IGNORED, because both registries are open and a future member must not break an older client
+welcome_corrkind_reserved.hex	s2c	2	malformed	a 0x0014 mask with a bit above 0x07: reserved, MUST be zero, and 3.1 says reject rather than normalise
+request_corrkind_shared_profile.hex	c2s	3	ok	one heliocentric profile at mask 7 referenced by a BODY and an ORBIT POINT: well formed, and a server whose 0x0014 grants the mask to the point but not the body refuses it whole with ERROR 11
+request_corrkind_split_profiles.hex	c2s	3	ok	the same two objects across TWO heliocentric profiles, mask 1 for the body and mask 7 for the orbit point: the served form of the case above, and what a client does when kinds disagree
+request_corrkind_unreferenced_profile.hex	c2s	3	ok	a second profile no object references: checked against 0x0004 alone, since nothing is computed from it
 request_cast_profiles.hex	c2s	3	ok	one cast: three profiles (geo; helio; topocentric Fagan-Bradley on the invariable plane with the ayanamsa column) and all six object kinds
 request_deadline.hex	c2s	3	ok	a prefetch window with a 250 ms deadline: advisory, and outside the cache key
 request_list_ut.hex	c2s	3	ok	instant list in UT1, server's delta T

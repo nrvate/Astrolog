@@ -250,16 +250,29 @@ leg "sidereal FB with the ayanamsa column" 2451545.0 1 10100 0 aya -- --profile 
 # (plaus_iflag), so the full mask and the light-time mask answer the same
 # bits here -- both are asked, and both are compared against a probe that
 # passes SEFLG_HELCTR alone.
-leg "helio Mars" 2415020.5 4 108 0 tt -- --profile obs=helio --objs 4 --jd 2415020.5
+# A heliocentric BODY may ask only mask 0 or 1 since the per-kind drop:
+# Swiss turns aberration and deflection off inside the call for those
+# observers, so the masks are not merely unhelpful there, they are not
+# advertised. The NUMBERS are unchanged -- corr=1 and corr=7 always gave
+# the same answer -- which is the whole reason the wider mask was a lie.
+# The nod_aps legs below keep the full mask: an orbit point from the same
+# observer genuinely honours it, and 0x0014 is what now says so.
+leg "helio Mars" 2415020.5 4 108 0 tt -- --profile obs=helio,corr=1 --objs 4 --jd 2415020.5
 leg "helio Mars, light time only" 2415020.5 4 108 0 tt -- --profile obs=helio,corr=1 --objs 4 --jd 2415020.5
-leg "helio Moon" 2415020.5 1 108 0 tt -- --profile obs=helio --objs 301 --jd 2415020.5
-leg "bary Sun" 2451545.0 0 4100 0 tt -- --profile obs=bary --objs 10
+leg "helio Moon" 2415020.5 1 108 0 tt -- --profile obs=helio,corr=1 --objs 301 --jd 2415020.5
+leg "bary Sun" 2451545.0 0 4100 0 tt -- --profile obs=bary,corr=1 --objs 10
 TOPO="0.0 51.5 24" leg "topo greenwich Moon" 2415020.5 1 8100 0 tt -- --profile obs=topo,site=0.0:51.5:24 --objs 301 --jd 2415020.5
 TOPO="0.0 51.5 24" leg "topo greenwich Mars" 2415020.5 4 8100 0 tt -- --profile obs=topo,site=0.0:51.5:24 --objs 4 --jd 2415020.5
 TOPO="151.2 -33.9 50" leg "topo sydney Moon" 2415020.5 1 8100 0 tt -- --profile obs=topo,site=151.2:-33.9:50 --objs 301 --jd 2415020.5
 TOPO="151.2 -33.9 50" leg "topo sydney sidereal invariable" 2415020.5 4 18100 512 tt -- --profile obs=topo,site=151.2:-33.9:50,zodiac=fagan-bradley,sidplane=2 --objs 4 --jd 2415020.5
 leg "pctr Sun from Jupiter" 2451545.0 0 700 0 pctr:5 -- --profile obs=body:5,corr=1 --objs 10
-leg "pctr Sun from Jupiter, full mask" 2451545.0 0 100 0 pctr:5 -- --profile obs=body:5 --objs 10
+# Mask 5, not 7. A planet-centred observer no longer advertises
+# deflection: swe_calc_pctr() re-bases aberration on the centring body but
+# cannot re-base deflection, since swi_deflect_light() takes no observer and
+# uses the Earth's geometry -- refereed by the Prometheia project against
+# USNO Circular 179 at up to 0.544", and bending the Sun's own light, which
+# is what this very leg used to ask for.
+leg "pctr Sun from Jupiter, mask 5" 2451545.0 0 300 0 pctr:5 -- --profile obs=body:5,corr=5 --objs 10
 leg "pctr Mars from Jupiter, light time only" 2451545.0 4 700 0 pctr:5 -- --profile obs=body:5,corr=1 --objs 4
 
 # 5. Planes, forms, frames, corrections, speeds.

@@ -854,7 +854,7 @@ int main(int argc, char **argv) {
                       eph::kCapTagCoverage, eph::kCapTagCatalogs, eph::kCapTagDeltaT,
                       eph::kCapTagPrecession, eph::kCapTagRate, eph::kCapTagSegments,
                       eph::kCapTagLookup, eph::kCapTagHypotheticals, eph::kCapTagEquinoxes,
-                      eph::kCapTagRatesBound}),
+                      eph::kCapTagRatesBound, eph::kCapTagCorrectionsByKind}),
           "A.3 WELCOME capability tags are exactly the codec's");
     Check(RegTagsAre(Registry("request_tlvs"),
                      {eph::kReqTagPrecession, eph::kReqTagEphemerisPin, eph::kReqTagCatalogPin,

@@ -284,6 +284,75 @@ def fixtures():
                                   server="prometheiad/0.2")))
     add("request_basic", "c2s", REQUEST, "ok", "Sun and Moon, TT hourly grid, geocentric",
         envelope(REQUEST, delivery() + q_basic, request_id=1))
+
+    # -- A.3 0x0014, corrections by kind (the per-kind drop) -------------------
+    # "Absent" needs no fixture of its own: welcome_swiss and
+    # welcome_prometheia above carry no 0x0014, which IS the absent case, and
+    # a third copy of it would test nothing new.
+    #
+    # The drop's request-side cases (a single profile shared by a body and an
+    # orbit point; the same split across two profiles; an unreferenced
+    # profile) are WELL-FORMED REQUESTS in every case. Whether one is refused
+    # with ERROR 11 depends on the SERVER'S capabilities, which a standalone
+    # message carries none of -- so the verdict cannot live in this set, and
+    # the shapes are added as "ok" with the policy stated in the note. The
+    # refusal itself is checked in tools/crosstest-prom.sh, where a real
+    # WELCOME exists.
+    ck_entry = u32(0b01100) + u32(1 << 1) + u8(7)     # helio+bary, orbit point
+    add("welcome_corrkind", "s2c", WELCOME, "ok",
+        "0x0014 carrying only exceptions: an orbit point from the Sun's "
+        "centre or the barycentre honours the full mask where a body cannot",
+        envelope(WELCOME, welcome(0b10011101, "Swiss Ephemeris 2.10.03 files",
+                                  "swiss-2.10.03/sepl_18",
+                                  caps_swiss() + [(0x0014, u8(1) + ck_entry)])))
+    add("welcome_corrkind_empty", "s2c", WELCOME, "ok",
+        "0x0014 with n = 0: legal, and means exactly what its absence means",
+        envelope(WELCOME, welcome(0b10011101, "Swiss Ephemeris 2.10.03 files",
+                                  "swiss-2.10.03/sepl_18",
+                                  caps_swiss() + [(0x0014, u8(0))])))
+    add("welcome_corrkind_unknown_bits", "s2c", WELCOME, "ok",
+        "unknown observer and kind bits in 0x0014 are IGNORED, because both "
+        "registries are open and a future member must not break an older "
+        "client",
+        envelope(WELCOME, welcome(0b10011101, "Swiss Ephemeris 2.10.03 files",
+                                  "swiss-2.10.03/sepl_18",
+                                  caps_swiss() +
+                                  [(0x0014, u8(1) + u32(0x80000004) +
+                                    u32(0x40000002) + u8(1))])))
+    add("welcome_corrkind_reserved", "s2c", WELCOME, "malformed",
+        "a 0x0014 mask with a bit above 0x07: reserved, MUST be zero, and "
+        "3.1 says reject rather than normalise",
+        envelope(WELCOME, welcome(0b10011101, "Swiss Ephemeris 2.10.03 files",
+                                  "swiss-2.10.03/sepl_18",
+                                  caps_swiss() +
+                                  [(0x0014, u8(1) + u32(0b01100) +
+                                    u32(1 << 1) + u8(0x09))])))
+    ck_prof_shared = profile(observer=2, corrections=7)
+    add("request_corrkind_shared_profile", "c2s", REQUEST, "ok",
+        "one heliocentric profile at mask 7 referenced by a BODY and an "
+        "ORBIT POINT: well formed, and a server whose 0x0014 grants the mask "
+        "to the point but not the body refuses it whole with ERROR 11",
+        envelope(REQUEST, delivery() +
+                 question(grid_block(1, J2000, 0.0, 0, 1), [ck_prof_shared],
+                          [obj_body(4), obj_orbit(4, 2, 0)]), request_id=1))
+    add("request_corrkind_split_profiles", "c2s", REQUEST, "ok",
+        "the same two objects across TWO heliocentric profiles, mask 1 for "
+        "the body and mask 7 for the orbit point: the served form of the "
+        "case above, and what a client does when kinds disagree",
+        envelope(REQUEST, delivery() +
+                 question(grid_block(1, J2000, 0.0, 0, 1),
+                          [profile(observer=2, corrections=1),
+                           profile(observer=2, corrections=7)],
+                          [obj_body(4), obj_orbit(4, 2, 0, prof=1)]),
+                 request_id=1))
+    add("request_corrkind_unreferenced_profile", "c2s", REQUEST, "ok",
+        "a second profile no object references: checked against 0x0004 "
+        "alone, since nothing is computed from it",
+        envelope(REQUEST, delivery() +
+                 question(grid_block(1, J2000, 0.0, 0, 1),
+                          [profile(observer=0, corrections=7),
+                           profile(observer=2, corrections=7)],
+                          [obj_body(10)]), request_id=1))
     cast = [obj_body(10), obj_body(301), obj_body(4, prof=1), obj_body(20000001),
             obj_body(20002060), obj_orbit(301, 0, 1), obj_orbit(301, 3, 0, prof=2),
             obj_star("Aldebaran"), obj_hypo("cupido"),
