@@ -292,7 +292,8 @@ leg "no speeds Moon" 2451545.0 1 0 0 tt -- --profile speeds=0 --objs 301
 # 6. Orbit points. swe_nod_aps on Jupiter, all four points, mean
 #    (SE_NODBIT_MEAN 1) and osculating (2); the Moon's named bodies --
 #    SE_TRUE_NODE 11, SE_INTP_APOG 21, SE_MEAN_APOG 12 -- and the mean
-#    descending node as SE_MEAN_NODE 10's opposite point.
+#    descending node, which is swe_nod_aps's point 1 since the mean node
+#    stopped using SE_MEAN_NODE for its distance.
 for p in 0 1 2 3; do
   leg "nod_aps Jupiter mean point $p" 2415020.5 5 100 0 "nodaps:$p:1" -- --points "5:$p:0" --jd 2415020.5
   leg "nod_aps Jupiter osculating point $p" 2415020.5 5 100 0 "nodaps:$p:2" -- --points "5:$p:1" --jd 2415020.5
@@ -305,7 +306,13 @@ leg "helio nod_aps Mars perihelion, light time only" 2451545.0 4 708 0 "nodaps:2
 leg "Moon true node" 2451545.0 11 100 0 tt -- --points 301:0:1
 leg "Moon interpolated apogee" 2451545.0 21 100 0 tt -- --points 301:3:2
 leg "Moon mean apogee, sidereal" 2451545.0 12 10100 0 tt -- --profile zodiac=fagan-bradley --points 301:3:0
-leg "Moon mean descending node" 2451545.0 10 100 0 opposite -- --points 301:1:0
+# The mean node is swe_nod_aps's now, not SE_MEAN_NODE's opposite point:
+# the named body carries the Moon's mean distance CONSTANT and zero
+# latitude and distance rates, where nod_aps carries the radius the mean
+# orbit actually has at the node. Same direction to 8.7e-13 degrees, and a
+# distance a client can re-centre with. So the oracle asks the way the
+# server now asks -- point 1 of swe_nod_aps directly, no opposite flip.
+leg "Moon mean descending node" 2451545.0 1 100 0 "nodaps:1:1" -- --points 301:1:0
 
 # 7. A hypothetical and a designation.
 leg "hypothetical cupido" 2451545.0 40 100 0 tt -- --hypo cupido

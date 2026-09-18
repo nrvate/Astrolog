@@ -226,9 +226,29 @@ inline uint16_t MapObject(const Object &o, int32_t nNative, const Profile &pf,
       if (o.naif == 301 && nNative != 1) {
         int32_t named = -1;
         if (o.point == kPtAscNode || o.point == kPtDescNode) {
-          if (o.method == kMethMean) named = SE_MEAN_NODE;
-          else if (o.method == kMethOsculating) named = SE_TRUE_NODE;
-          c->fOpposite = o.point == kPtDescNode;
+          // NOT SE_MEAN_NODE for the mean node, though it is a named body.
+          // Swiss answers that question twice and the two differ in
+          // DISTANCE: the named body returns the Moon's mean distance
+          // constant (384,400 km) with zero latitude and distance rates,
+          // swe_nod_aps the radius the mean orbit has at the node
+          // (368,148.6 km at J2000). The direction agrees to 8.7e-13
+          // degrees. A constant is not a distance to anything, and a
+          // client re-centring the point -- which Astrolog does for any
+          // non-geocentric chart -- lands 4.18 arcsec out with it. So the
+          // mean node falls through to swe_nod_aps below, which is also
+          // what calc.cpp's local path now does, keeping the two in step.
+          if (o.method == kMethOsculating) named = SE_TRUE_NODE;
+          // ONLY for a named body. SE_MEAN_NODE and SE_TRUE_NODE are the
+          // ASCENDING node, so a descending one is that plus 180 degrees;
+          // swe_nod_aps returns both and the caller picks, so flipping
+          // there too would hand back the ascending node under the
+          // descending one's name. Setting this before the named lookup
+          // had succeeded did exactly that the moment the mean node
+          // started falling through -- caught by ephsrv-golden's
+          // descending-node leg on the next run, which is what that gate
+          // is for.
+          if (named >= 0)
+            c->fOpposite = o.point == kPtDescNode;
         } else if (o.point == kPtApo) {
           if (o.method == kMethMean) named = SE_MEAN_APOG;
           else if (o.method == kMethOsculating) named = SE_OSCU_APOG;

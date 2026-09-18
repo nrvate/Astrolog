@@ -348,9 +348,29 @@ int main(int argc, char **argv) {
     SwissCall c;
     eph::Object o;
     o.kind = eph::kObjOrbitPoint; o.naif = 301; o.point = eph::kPtAscNode; o.method = eph::kMethMean;
+    // NOT SE_MEAN_NODE any more: that named body carries the Moon's mean
+    // distance CONSTANT and zero latitude and distance rates, where
+    // swe_nod_aps carries the radius the mean orbit has at the node. Same
+    // direction to 8.7e-13 degrees, and a distance a client can re-centre
+    // with -- which Astrolog does for every non-geocentric chart, and was
+    // landing 4.18 arcsec out.
     Check(MapObject(o, 0, geo, eph::kTimeTT, eph::CanonicalNaN(), SEFLG_SWIEPH, &c, &why) == 0 &&
-              c.kind == kCallCalc && c.ipl == SE_MEAN_NODE && !c.fOpposite,
-          "Moon mean ascending node is SE_MEAN_NODE");
+              c.kind == kCallNodAps && c.ipl == SE_MOON &&
+              c.nodMethod == SE_NODBIT_MEAN && c.point == 0 && !c.fOpposite,
+          "Moon mean ascending node is swe_nod_aps, not SE_MEAN_NODE");
+    // And the descending one is nod_aps's own point, NOT a 180 degree
+    // flip: flipping a point the entry point already distinguishes hands
+    // back the ascending node under the descending one's name, which is
+    // what happened for one build of this change.
+    {
+      eph::Object oD = o;
+      SwissCall cD;
+      oD.point = eph::kPtDescNode;
+      Check(MapObject(oD, 0, geo, eph::kTimeTT, eph::CanonicalNaN(), SEFLG_SWIEPH,
+              &cD, &why) == 0 && cD.kind == kCallNodAps && cD.point == 1 &&
+              !cD.fOpposite,
+            "and the descending one is its own point, not an opposite");
+    }
     o.point = eph::kPtDescNode; o.method = eph::kMethOsculating;
     Check(MapObject(o, 0, geo, eph::kTimeTT, eph::CanonicalNaN(), SEFLG_SWIEPH, &c, &why) == 0 &&
               c.ipl == SE_TRUE_NODE && c.fOpposite,
@@ -452,7 +472,13 @@ int main(int argc, char **argv) {
       {SE_SUN, -1, 0, false}, {SE_MOON, -1, 0, false}, {SE_MERCURY, -1, 0, false},
       {SE_VENUS, -1, 0, false}, {SE_MARS, -1, 0, false}, {SE_PLUTO, -1, 0, false},
       {SE_EARTH, -1, 0, false}, {SE_CHIRON, -1, 0, false}, {SE_PHOLUS, -1, 0, false},
-      {SE_CERES, -1, 0, false}, {SE_VESTA, -1, 0, false}, {SE_MEAN_NODE, -1, 0, false},
+      {SE_CERES, -1, 0, false}, {SE_VESTA, -1, 0, false},
+      // SE_MEAN_NODE does NOT round trip to itself, on purpose: version 4
+      // maps the Moon's mean node to swe_nod_aps, whose distance is the
+      // radius the mean orbit has at the node rather than the named body's
+      // mean-distance constant. Same direction to 8.7e-13 degrees, and a
+      // distance a client can re-centre with.
+      {SE_MEAN_NODE, -1, 0, true},
       {SE_TRUE_NODE, -1, 0, false}, {SE_MEAN_APOG, -1, 0, false}, {SE_OSCU_APOG, -1, 0, false},
       {SE_INTP_APOG, -1, 0, false}, {SE_INTP_PERG, -1, 0, false}, {SE_CUPIDO, -1, 0, false},
       {SE_FICT_OFFSET + 18, -1, 0, false}, {SE_AST_OFFSET + 433, -1, 0, false},
@@ -468,8 +494,13 @@ int main(int argc, char **argv) {
     // barycentric flag with six zero columns and a positive return
     // (sweph.c's lunar-node branch), which version 4 refuses in the
     // mapping -- so under those flags the round trip IS the refusal.
+    // SE_MEAN_NODE is absent: it no longer takes the named-body path, so
+    // the geocentric-only guard does not apply to it. swe_nod_aps serves a
+    // heliocentric orbit point properly -- ephsrv-golden has legs for it --
+    // which makes the mean node newly askable from the Sun's centre. The
+    // other five are still named bodies and still refuse.
     auto fLunarNamed = [](int32_t ipl) {
-      return ipl == SE_MEAN_NODE || ipl == SE_TRUE_NODE || ipl == SE_MEAN_APOG ||
+      return ipl == SE_TRUE_NODE || ipl == SE_MEAN_APOG ||
              ipl == SE_OSCU_APOG || ipl == SE_INTP_APOG || ipl == SE_INTP_PERG;
     };
     const int32_t rgflag[] = {

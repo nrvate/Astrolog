@@ -3806,8 +3806,36 @@ flag FSwissPlanetSpec(int ind, int indCent, SWISSSPEC *pss)
     iobj = SE_CHIRON;
   else if (FBetween(ind, oCer, oVes))
     iobj = ind - oCer + SE_CERES;
-  else if (ind == oNod)
-    iobj = us.fTrueNode ? SE_TRUE_NODE : SE_MEAN_NODE;
+  else if (ind == oNod) {
+    if (us.fTrueNode)
+      iobj = SE_TRUE_NODE;
+    else {
+      // The MEAN node through swe_nod_aps rather than the named
+      // SE_MEAN_NODE body, for its DISTANCE. Swiss answers the same
+      // question twice and the two differ: the named body returns the
+      // Moon's mean distance CONSTANT, 384,400 km, with zero latitude and
+      // distance rates, while swe_nod_aps returns the radius the mean
+      // orbit actually has at the node -- 368,148.6 km at J2000, 16,251 km
+      // less -- and real rates. The direction is the same to 8.7e-13
+      // degrees, so nothing a chart shows as a position moves.
+      //
+      // A constant is not a distance to anything, and the node visibly
+      // moves, so the constant cannot be right. It matters because the
+      // distance is LOAD-BEARING: a node is computed geocentrically
+      // whatever the chart's centre and then re-centred in space
+      // (ComputeEphem's "Nodes and Lilith are always generated geocentric"
+      // block), so a heliocentric or planet-centred chart put the node
+      // 4.18 arcsec out. Found by the Ephemeris Prometheia cross-test,
+      // whose engine computes the radius and whose disagreement with us
+      // was the symptom.
+      //
+      // Only the MEAN node changes. Measured across all four built-in
+      // points: the mean apogee is already identical in both forms, and
+      // the true node and osculating apogee already agree in distance.
+      iobj = SE_MOON;
+      nPnt = 1;      // nNodMethod is set from us.fTrueNode below.
+    }
+  }
   else if (ind == oSou)
     return fFalse;
   else if (ind == oLil) {
