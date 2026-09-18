@@ -2233,6 +2233,100 @@ the gates the phase touches.
      -Yi paths). The locked artifacts are untouched; `ephsrv/ephproto.h`
      is read, not written.
 
+7. **Phase 7, the oracle against the local Swiss path, run for real
+   (2026-09-17).** The second increment of phase 7: the group's oracle
+   legs, angular separations only (`SphDistance()`, work log 0c's acos
+   formula), the plugin's answers against `FSwissPlanet()` over
+   1990-06-15 12h UT, 2000-01-01 12h UT and 2026-09-17 0h UT. The
+   engines met on **DE440**: the Swiss side pinned to the -bj backend
+   (`us.nSwissEph = 2`) with the DE440 binary under the `de431.eph`
+   name that backend looks for on the -Yi paths, the plugin on the same
+   binary plus the SBDB catalog and the sb441-n16-de440span perturbers.
+   Both sides answered at UT instants -- the plugin's delta T hook is
+   bound to the chart's own swe_deltat() -- so the time scales agree by
+   construction. Figures, in arcseconds of angular separation:
+   - **Bodies, geocentric apparent, tropical:** the Sun, Moon, Mercury
+     and Venus 0.0000" at all three instants; Mars 0.0000-0.0031";
+     Jupiter 0.0043-0.0111", Saturn 0.0000-0.0031", Uranus
+     0.0043-0.0092", Neptune 0.0000-0.0147", Pluto 0.0102-0.0376" --
+     the outer planets carry the two engines' different small-body
+     perturbation models (Swiss's files vs sb441) and nothing else.
+     Gate: within 0.2".
+   - **Topocentric Sun and Moon** (the same site both sides,
+     Astrolog's west-positive longitude negated into the plugin's
+     east-positive one): 0.0000" and 0.0384". Gate: 0.2".
+   - **Heliocentric** (light time only, the mask Swiss's own
+     heliocentric calls structurally carry): Moon 0.0000", Mercury
+     0.2904", Venus 0.0439", Mars 0.0565", Jupiter 0.0097", Saturn
+     0.0000", Uranus 0.0061", Neptune 0.0144", Pluto 0.0383". Gate: 1".
+   - **The sidereal binding:** the plugin's fagan-bradley Sun against
+     the Swiss side's sidereal longitude (FSwissPlanet's answer
+     un-subtracted of `is.rSid`) 0.0000". And the semantics came out of
+     the measurement: both engines subtract the **true** ayanamsa (mean
+     plus nutation in longitude), exactly 3.5a's frame-0 rule; the
+     plugin's ayanamsa column sits 8.7788" from Swiss's MEAN ayanamsa
+     (swe_get_ayanamsa) and that difference is the nutation; the
+     plugin's sidereal longitude plus its own column equals its
+     tropical longitude to 0.001". Gate: sidereal 0.05", nutation
+     within (0.5", 20"), internal identity 0.001".
+   - **The Moon's true node, osculating:** Swiss's own convention
+     (light time in the Earth's frame, a 0.003" term) against the
+     plugin's uncorrected node 0.0881"; against the plugin's
+     light-timed node 18.3150" and its fully corrected node 0.0896" --
+     the two engines' light-time conventions on a node differ by 19" by
+     design (work log 0c measured 19.10"; this instant 18.3"). Gate:
+     tight tier 1", the conventions 25".
+   - **The Moon's mean node:** 0.2045", gate 0.5" (work log 0c's
+     standing fact: mean-element fits differ between engines; 0c
+     measured 0.006-0.025" and this instant 0.2").
+   - **The Moon's osculating apogee** (oLil, kind 1 point 3): Swiss vs
+     the plugin's uncorrected 5.1601" and light-timed 3.3232" -- a
+     convention pair like the nodes, gate 25"; **mean apogee** 0.2680",
+     gate 0.5".
+   - **Jupiter's ascending node** through a customized object (type 2,
+     point 1): Swiss (aberration and deflection, no light time) against
+     the plugin's mask 6, 0.5349", and mask 7, 0.5264" -- the light
+     time the plugin adds moves it under 0.01", inside the two engines'
+     0.5" Jupiter-model gap. Gate: 1" and 2".
+   - **Chiron:** Swiss's file vs the SBDB record, 0.0350" -- the two
+     realizations agree far better than the 60" gate allowed for.
+   - **Aldebaran:** 0.0000" (Swiss star 198, found by sweeping
+     SwissComputeStar's enumeration; gate 1").
+   - **Frames and time scales, Prometheia against itself:** J2000 vs
+     ICRF 0.0516" (the frame bias, gate 0.1"); true of date vs J2000
+     20.0' (26.7 years of precession, gate 15-30'); true vs mean of
+     date 3.4" (nutation, gate 20"); UT1 vs TT at the same instant
+     0.0000"; the delta T column 0.00000 s from swe_deltat().
+   - **The oracle caught one real bug in the plugin before it could
+     ship:** the delta T hook returned `swe_deltat()`'s value as
+     SECONDS when swe_deltat() answers in DAYS, so `prometheia_calc_ut`
+     ran with an effective delta T of 0.0008 s and every UT1 answer sat
+     one delta T (~69 s) late -- the Moon 34.47", the Sun 2.80", the
+     inner planets on the same signature, the outer planets almost
+     still. The pattern (gap proportional to apparent motion, the Sun
+     at the Sun's rate) named a time offset and the probe pinned it:
+     the same TT instant, plugin against Swiss, agreed to 0.0000"
+     while the UT1 leg carried the whole 34.5". Fixed (the hook and the
+     delta T column both now scale by 86400), and every UT1 leg since
+     agrees to the fourth decimal or better.
+   - **Two vendored-Swiss facts the star leg paid for, recorded because
+     the next person will hit both:** `swe_fixstar2()` writes the
+     star's canonical name back into its first argument -- pass a
+     string literal and it segfaults inside sprintf ("Aldebaran" as a
+     .rodata target); and its NUMBER form does not count the file's
+     records in order ("1" answers 109 Virginis; Aldebaran is 198 in
+     the enumeration the local path's SwissComputeStar() uses, which is
+     how the leg finds it).
+   - The Mars legs answer NAIF 4, the system barycentre Prometheia's
+     own convention names, not 499; the barycentre is within metres of
+     the body's centre and the Mars legs measured 0.0000-0.0031".
+   - **Gates:** the prometheia group 112 passed, 0 failed with the
+     engine open (DE440 both sides); the full suite with PROMETHEIA
+     compiled in, 5720 passed, 0 failed (no data paths -- the group
+     prints its reason and skips the engine legs); make check in the
+     default build, all clear, suite 5689 passed, 0 failed. The locked
+     artifacts untouched.
+
 2. **Phase 2, protocol version 4 in code (2026-09-17).** `astrolog-ephd`,
    `eph_wsclient` and the Qt client speak version 4 and nothing else, in one
    commit, because the break is clean and the suite's live group casts

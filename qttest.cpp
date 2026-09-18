@@ -18660,6 +18660,538 @@ static flag FWaitEphdQt(QProcess *pproc, QByteArray *pbaLog, int msMax)
   return fFalse;
 }
 
+#ifdef PROMETHEIA
+
+// One plugin row at one instant, through the plugin's own question path:
+// the same code a cast would drive, at a question of one object.
+static flag FPromOneRowQt(int nTs, double jd, CONST eph::Profile *ppf,
+  int kind, int naif, int point, int method, CONST char *szName,
+  real *pLon, real *pLat, real *pAyan, real *pDeltaT)
+{
+  EPHPROMQ q;
+  EPHPROMANSWER a;
+  eph::Object ob;
+  double rgVal[kEphPromStride];
+
+  ob = eph::Object();
+  ob.kind = (uint8_t)kind;
+  ob.profile = 0;
+  ob.naif = naif;
+  ob.point = (uint8_t)point;
+  ob.method = (uint8_t)method;
+  if (szName != NULL)
+    ob.name = szName;
+  a.prgVal = rgVal;
+  q.nTs = nTs; q.fList = fFalse;
+  q.jd1 = jd; q.jd2 = 0.0; q.stepNs = 0; q.cRow = 1; q.prgJd = NULL;
+  q.rDeltaTSec = rInvalid;
+  q.cprof = 1; q.pargprof = ppf;
+  q.cobj = 1; q.pargobj = &ob;
+  if (!FEphPromCompute(&q, &a) || a.rowsOk < 1)
+    return fFalse;
+  *pLon = rgVal[0];
+  *pLat = rgVal[1];
+  *pAyan = (a.columns & 2) ? rgVal[7] : 0.0;
+  *pDeltaT = (a.columns & 8) ? rgVal[9] : 0.0;
+  return fTrue;
+}
+
+// One oracle comparison, printed so the run's own log carries the
+// figures. SphDistance() is work log 0c's acos formula: angular
+// separation, never a longitude difference.
+static real ROracleSepQt(CONST char *szLeg, real lon1, real lat1,
+  real lon2, real lat2)
+{
+  real sep = SphDistance(lon1, lat1, lon2, lat2) * 3600.0;
+
+  printf("  oracle %-46s %9.4f\"\n", szLeg, sep);
+  return sep;
+}
+
+// The oracle: the plugin's answers against the local Swiss path
+// (FSwissPlanet, calc.cpp). Both sides answer at UT instants --
+// FSwissPlanet takes UT and adds swe_deltat() itself, and the plugin's
+// delta T hook is bound to the same model -- so the time scales agree
+// by construction and the separations measure what is left: the frame,
+// observer and corrections bindings, and then the engines. The engines
+// meet on DE440 when a JPL DE440 binary sits under the name the -bj
+// backend looks for (de431.eph) on the -Yi paths and the Swiss side is
+// pinned to us.nSwissEph = 2, which is how this session ran it; on the
+// .se1 files instead the differences measured are dataset plus engine,
+// and the tolerances carry them. The tiers are work log 0c's: an orbit
+// point's corrections are interoperable in full or not at all, and mean
+// elements differ between engines' fits -- so each leg says which tier
+// it is in, and even the loose tiers stay binding checks: a wrong frame
+// or observer moves a body degrees, not arcseconds.
+static void TestPrometheiaOracleQt()
+{
+  static CONST struct { int obj, naif; } rgorb[] = {
+    {oSun, 10}, {oMoo, 301}, {oMer, 199}, {oVen, 299}, {oMar, 4},
+    {oJup, 5}, {oSat, 6}, {oUra, 7}, {oNep, 8}, {oPlu, 9},
+  };
+  static CONST struct { int yea, mon, day; real tim; } rgins[] = {
+    {1990, 6, 15, 12.0}, {2000, 1, 1, 12.0}, {2026, 9, 17, 0.0},
+  };
+  CI ciSav = ciCore, ciMainSav = ciMain;
+  char szLeg[256];
+  flag fNoEphSav = is.fNoEphFile, fS = fFalse, fCast;
+  eph::Profile pfTrop, pfTopo, pfHelio, pfNode7, pfNode6, pfNode1, pfNode0,
+    pfStar, pfSid;
+  int cOrb = (int)(sizeof(rgorb)/sizeof(*rgorb));
+  int cIns = (int)(sizeof(rgins)/sizeof(*rgins));
+  int iIns, iOrb, cSep = 0, cSkip = 0, nMode;
+  real lonS, latS, lonP, latP, lonP2, latP2, dAyan, dAyan2, dT, dT2, d, sep,
+    jd = 0.0, jdTT;
+
+  // Which Swiss backend answers: the -bj one (a JPL DE file under the
+  // de431.eph name -- this session's DE440) when it opens, else the
+  // files the run ships. Either way one Borrow pins it for the oracle.
+  {
+    Borrow bSwiss(us.nSwissEph, 2);
+    fS = FSwissPlanet(oSun, 2451544.5, oEar, &lonS, &latS, &d, &d, &d, &d);
+  }
+  nMode = fS ? 2 : 0;
+  printf("  oracle Swiss backend: %s\n",
+    nMode == 2 ? "JPL DE file (DE440 under the de431.eph name)" :
+    "Swiss Ephemeris files");
+  if (!fS) {
+    Borrow bSwiss(us.nSwissEph, 0);
+    fS = FSwissPlanet(oSun, 2451544.5, oEar, &lonS, &latS, &d, &d, &d, &d);
+  }
+  if (!fS) {
+    printf("  skipped: neither Swiss backend answers, so there is no "
+      "oracle (no ephemeris files on the -Yi paths?)\n");
+    ciCore = ciSav; ciMain = ciMainSav;
+    is.fNoEphFile = fNoEphSav;
+    return;
+  }
+
+  pfTrop = eph::Profile();
+  pfTrop.columns = 8;          // the delta T column when the scale is UT1
+  pfNode7 = eph::Profile();
+  pfNode1 = pfNode0 = pfNode6 = pfNode7;
+  pfNode1.corrections = eph::kCorrLightTime;
+  pfNode0.corrections = 0;
+  pfNode6.corrections = eph::kCorrDeflection | eph::kCorrAberration;
+
+  // Leg 1: the bodies, geocentric apparent, tropical, true ecliptic of
+  // date -- both engines' defaults, the same question both ways.
+  {
+    Borrow bSwiss(us.nSwissEph, nMode);
+    for (iIns = 0; iIns < cIns; iIns++) {
+      OraclePinUtQt(rgins[iIns].yea, rgins[iIns].mon, rgins[iIns].day,
+        rgins[iIns].tim);
+      CastChart(1);
+      jd = JulianDayFromTime(is.T);
+      for (iOrb = 0; iOrb < cOrb; iOrb++) {
+        fS = FSwissPlanet(rgorb[iOrb].obj, jd, oEar, &lonS, &latS,
+          &d, &d, &d, &d);
+        fCast = FPromOneRowQt(eph::kTimeUT1, jd, &pfTrop, eph::kObjBody,
+          rgorb[iOrb].naif, 0, 0, NULL, &lonP, &latP, &dAyan, &dT);
+        sprintf2(S(szLeg), "body %s @%d vs FSwissPlanet",
+          szObjName[rgorb[iOrb].obj], rgins[iIns].yea);
+        if (!fS || !fCast) {
+          cSkip++;
+          printf("  oracle %-46s skipped (%s side)\n", szLeg,
+            !fS ? "Swiss" : "plugin");
+          continue;
+        }
+        sep = ROracleSepQt(szLeg, lonS, latS, lonP, latP);
+        Check(sep < 1.0, "%s within 1\" (%.4f\")", szLeg, sep);
+        cSep++;
+      }
+    }
+    Check(cSep > 0, "the oracle ran (%d comparisons, %d skipped)", cSep,
+      cSkip);
+  }
+
+  // Leg 2: topocentric, at the 2026 instant, a Seattle-ish site. The
+  // site is the same numbers both sides: Astrolog's west-positive
+  // longitude is what FSwissPlanet hands swe_set_topo negated already.
+  OraclePinUtQt(2026, 9, 17, 0.0);
+  ciCore.lon = 122.3; ciCore.lat = 47.6;
+  CastChart(1);
+  jd = JulianDayFromTime(is.T);
+  {
+    Borrow bSwiss(us.nSwissEph, nMode);
+    Borrow bTopo(us.fTopoPos, fTrue);
+    pfTopo = eph::Profile();
+    pfTopo.observer = eph::kObsTopo;
+    pfTopo.siteLonEastDeg = -ciCore.lon;
+    pfTopo.siteLatDeg = ciCore.lat;
+    pfTopo.siteHeightM = us.elvDef;
+    for (iOrb = 0; iOrb < 2; iOrb++) {          // the Sun and the Moon
+      fS = FSwissPlanet(rgorb[iOrb].obj, jd, oEar, &lonS, &latS,
+        &d, &d, &d, &d);
+      fCast = FPromOneRowQt(eph::kTimeUT1, jd, &pfTopo, eph::kObjBody,
+        rgorb[iOrb].naif, 0, 0, NULL, &lonP, &latP, &dAyan, &dT);
+      sprintf2(S(szLeg), "topocentric %s vs FSwissPlanet",
+        szObjName[rgorb[iOrb].obj]);
+      if (!fS || !fCast) {
+        printf("  oracle %-46s skipped\n", szLeg);
+        continue;
+      }
+      sep = ROracleSepQt(szLeg, lonS, latS, lonP, latP);
+      Check(sep < 1.0, "%s within 1\" (%.4f\")", szLeg, sep);
+    }
+  }
+
+  // Leg 3: heliocentric. Swiss's own heliocentric calls carry light
+  // time and nothing else (its plaus_iflag turns the other two off,
+  // work log item 2), so the plugin answers under that same mask and
+  // the tier is tight.
+  {
+    Borrow bSwiss(us.nSwissEph, nMode);
+    pfHelio = eph::Profile();
+    pfHelio.observer = eph::kObsHelio;
+    pfHelio.corrections = eph::kCorrLightTime;
+    for (iOrb = 0; iOrb < cOrb; iOrb++) {
+      if (rgorb[iOrb].obj == oSun)
+        continue;                    // the Sun from the Sun is not a thing
+      fS = FSwissPlanet(rgorb[iOrb].obj, jd, oSun, &lonS, &latS,
+        &d, &d, &d, &d);
+      fCast = FPromOneRowQt(eph::kTimeUT1, jd, &pfHelio, eph::kObjBody,
+        rgorb[iOrb].naif, 0, 0, NULL, &lonP, &latP, &dAyan, &dT);
+      sprintf2(S(szLeg), "heliocentric %s vs FSwissPlanet",
+        szObjName[rgorb[iOrb].obj]);
+      if (!fS || !fCast) {
+        printf("  oracle %-46s skipped\n", szLeg);
+        continue;
+      }
+      sep = ROracleSepQt(szLeg, lonS, latS, lonP, latP);
+      Check(sep < 1.0, "%s within 1\" (%.4f\")", szLeg, sep);
+    }
+  }
+
+  // Leg 4: the sidereal binding. FSwissPlanet under us.fSidereal
+  // answers the TROPICAL position (the library subtracts the ayanamsa
+  // and FSwissPlanet un-subtracts it, calc.cpp:4003), so the separation
+  // is against the plugin's tropical answer, and the ayanamsa itself is
+  // the observable: is.rSid is Swiss's (negated), the plugin's column
+  // is Prometheia's.
+  {
+    Borrow bSwiss(us.nSwissEph, nMode);
+    Borrow bSid(us.fSidereal, fTrue);
+    Borrow bSid2(us.fSidereal2, fFalse);
+    Borrow bZoff(us.rZodiacOffset, 0.0), bZall(us.rZodiacOffsetAll, 0.0);
+    CastChart(1);
+    jd = JulianDayFromTime(is.T);
+    fS = FSwissPlanet(oSun, jd, oEar, &lonS, &latS, &d, &d, &d, &d);
+    pfSid = eph::Profile();
+    pfSid.zodiac = "fagan-bradley";
+    pfSid.columns = 2;
+    fCast = FPromOneRowQt(eph::kTimeUT1, jd, &pfSid, eph::kObjBody, 10, 0, 0,
+      NULL, &lonP, &latP, &dAyan, &dT);
+    fCast = fCast && FPromOneRowQt(eph::kTimeUT1, jd, &pfTrop, eph::kObjBody,
+      10, 0, 0, NULL, &lonP2, &latP2, &dAyan2, &dT2);
+    if (fS && fCast) {
+      // FSwissPlanet's answer carries is.rSid (Swiss's MEAN ayanamsa,
+      // negated); the library's own sidereal longitude is the answer
+      // plus it. That, not the un-subtracted tropical-equivalent, is
+      // what the locked 3.5a calls the answer: frame 0's ayanamsa is
+      // the TRUE one, mean plus the nutation in longitude at the
+      // instant -- and both engines subtract exactly that, measured to
+      // 0.0005" apart, while the mean ayanamsas differ by the nutation.
+      sep = ROracleSepQt("Sun sidereal fagan-bradley, Swiss vs plugin",
+        lonS + is.rSid, latS, lonP, latP);
+      Check(sep < 0.05, "the sidereal longitudes agree within 0.05\" "
+        "(%.4f\")", sep);
+      d = RAbs(dAyan - swe_get_ayanamsa(jd + swe_deltat(jd)));
+      printf("  oracle %-46s %9.4f\"\n",
+        "ayanamsa column vs Swiss's MEAN ayanamsa (nutation)", d * 3600.0);
+      Check(d * 3600.0 > 0.5 && d * 3600.0 < 20.0, "the plugin's "
+        "ayanamsa is the true one, nutation away from Swiss's mean "
+        "(%.4f\")", d * 3600.0);
+      // And the plugin's own two forms stay consistent: its sidereal
+      // longitude plus its own ayanamsa is its tropical longitude.
+      d = RAbs(lonP + dAyan - lonP2);
+      Check(d < 0.001, "sidereal plus ayanamsa is tropical, inside the "
+        "plugin (%.6f\")", d * 3600.0);
+    } else
+      printf("  oracle sidereal leg skipped\n");
+  }
+  // The sidereal cast left is.rSid at minus the ayanamsa; every
+  // FSwissPlanet after it would subtract that again, and the whole
+  // rest of the oracle would read 25 degrees off. Cast it back.
+  CastChart(1);
+
+  // Leg 5: the Moon's true node, osculating (kind 1). Work log 0c's
+  // finding, measured: Swiss's node carries light time in ITS
+  // convention (a 0.003" term, the Earth's frame), Prometheia's in its
+  // own (a 19.1" term, the barycentre's) -- so Swiss's answer sits
+  // within a hair of the plugin's UNCORRECTED node (tight tier) and
+  // 19" from its light-timed one (the documented convention gap, a
+  // loose tier that is still binding: a wrong frame is degrees).
+  {
+    Borrow bSwiss(us.nSwissEph, nMode);
+    Borrow bTN(us.fTrueNode, fTrue);
+    fS = FSwissPlanet(oNod, jd, oEar, &lonS, &latS, &d, &d, &d, &d);
+    if (fS) {
+      fCast = FPromOneRowQt(eph::kTimeUT1, jd, &pfNode0, eph::kObjOrbitPoint,
+        301, 0, 1, NULL, &lonP, &latP, &dAyan, &dT);
+      if (fCast) {
+        sep = ROracleSepQt("Moon true node, Swiss (its mask 1) vs plugin 0",
+          lonS, latS, lonP, latP);
+        Check(sep < 1.0, "the Moon's true node, Swiss's convention vs the "
+          "plugin's uncorrected, within 1\" (%.4f\")", sep);
+      }
+      fCast = FPromOneRowQt(eph::kTimeUT1, jd, &pfNode1, eph::kObjOrbitPoint,
+        301, 0, 1, NULL, &lonP, &latP, &dAyan, &dT);
+      if (fCast) {
+        sep = ROracleSepQt("Moon true node, Swiss vs plugin mask 1",
+          lonS, latS, lonP, latP);
+        Check(sep < 25.0, "the two light-time conventions on the Moon's "
+          "node sit 19\" apart by design (%.4f\")", sep);
+      }
+      fCast = FPromOneRowQt(eph::kTimeUT1, jd, &pfNode7, eph::kObjOrbitPoint,
+        301, 0, 1, NULL, &lonP, &latP, &dAyan, &dT);
+      if (fCast) {
+        sep = ROracleSepQt("Moon true node, Swiss vs plugin mask 7",
+          lonS, latS, lonP, latP);
+        Check(sep < 25.0, "Swiss's node against the plugin's full "
+          "corrections (%.4f\")", sep);
+      }
+    } else
+      printf("  oracle Moon node leg skipped (Swiss refused)\n");
+  }
+
+  // Leg 6: the Moon's MEAN node. Mean elements are the loose tier by
+  // work log 0c's standing fact (mean-element fits differ, 0.006-0.025"
+  // between these engines) -- and the loose tolerance still catches a
+  // wrong frame, which would move the node degrees.
+  {
+    Borrow bSwiss(us.nSwissEph, nMode);
+    Borrow bTN(us.fTrueNode, fFalse);
+    fS = FSwissPlanet(oNod, jd, oEar, &lonS, &latS, &d, &d, &d, &d);
+    if (fS) {
+      fCast = FPromOneRowQt(eph::kTimeUT1, jd, &pfNode0, eph::kObjOrbitPoint,
+        301, 0, 0, NULL, &lonP, &latP, &dAyan, &dT);
+      if (fCast) {
+        sep = ROracleSepQt("Moon mean node (both uncorrected) vs Swiss",
+          lonS, latS, lonP, latP);
+        Check(sep < 0.5, "the mean nodes' fits agree within 0.5\" "
+          "(%.4f\")", sep);
+      }
+    } else
+      printf("  oracle mean node leg skipped (Swiss refused)\n");
+  }
+
+  // Leg 7: the Moon's osculating and mean apogee (oLil), the same two
+  // tiers as the nodes.
+  {
+    Borrow bSwiss(us.nSwissEph, nMode);
+    {
+      Borrow bTN(us.fTrueNode, fTrue);
+      Borrow bNN(us.fNaturalNode, fFalse);
+      fS = FSwissPlanet(oLil, jd, oEar, &lonS, &latS, &d, &d, &d, &d);
+      if (fS) {
+        fCast = FPromOneRowQt(eph::kTimeUT1, jd, &pfNode0,
+          eph::kObjOrbitPoint, 301, 3, 1, NULL, &lonP, &latP, &dAyan, &dT);
+        if (fCast) {
+          sep = ROracleSepQt("Moon osculating apogee, Swiss vs plugin 0",
+            lonS, latS, lonP, latP);
+          Check(sep < 25.0, "the Moon's osculating apogee, a convention "
+            "pair like the nodes (%.4f\")", sep);
+        }
+        fCast = FPromOneRowQt(eph::kTimeUT1, jd, &pfNode1,
+          eph::kObjOrbitPoint, 301, 3, 1, NULL, &lonP, &latP, &dAyan, &dT);
+        if (fCast) {
+          sep = ROracleSepQt("Moon osculating apogee, Swiss vs plugin mask 1",
+            lonS, latS, lonP, latP);
+          Check(sep < 25.0, "the apogee conventions' gap (%.4f\")", sep);
+        }
+      } else
+        printf("  oracle osculating apogee leg skipped (Swiss refused)\n");
+    }
+    {
+      Borrow bTN(us.fTrueNode, fFalse);
+      Borrow bNN(us.fNaturalNode, fFalse);
+      fS = FSwissPlanet(oLil, jd, oEar, &lonS, &latS, &d, &d, &d, &d);
+      if (fS) {
+        fCast = FPromOneRowQt(eph::kTimeUT1, jd, &pfNode0,
+          eph::kObjOrbitPoint, 301, 3, 0, NULL, &lonP, &latP, &dAyan, &dT);
+        if (fCast) {
+          sep = ROracleSepQt("Moon mean apogee (both uncorrected)",
+            lonS, latS, lonP, latP);
+          Check(sep < 0.5, "the mean apogees' fits agree within 0.5\" "
+            "(%.4f\")", sep);
+        }
+      } else
+        printf("  oracle mean apogee leg skipped (Swiss refused)\n");
+    }
+  }
+
+  // Leg 8: a planetary orbit point. Jupiter's ascending node through a
+  // customized object (type 2, the Astrolog object index; point 1 is
+  // the north node): Swiss's planetary nodes carry aberration and
+  // deflection and NO light time (work log 0c), so the tight tier is
+  // against the plugin's mask 6, and mask 7 differs only by the
+  // light-time convention's ~0.3".
+  {
+    Borrow bSwiss(us.nSwissEph, nMode);
+    Borrow bTyp(rgTypSwiss[oNorm - custLo], 2);
+    Borrow bObj(rgObjSwiss[oNorm - custLo], (int)oJup);
+    Borrow bPnt(rgPntSwiss[oNorm - custLo], 1);
+    Borrow bFlg(rgFlgSwiss[oNorm - custLo], 0);
+    fS = FSwissPlanet(oNorm, jd, oEar, &lonS, &latS, &d, &d, &d, &d);
+    if (fS) {
+      fCast = FPromOneRowQt(eph::kTimeUT1, jd, &pfNode6, eph::kObjOrbitPoint,
+        5, 0, 1, NULL, &lonP, &latP, &dAyan, &dT);
+      if (fCast) {
+        sep = ROracleSepQt("Jupiter asc node, Swiss vs plugin mask 6",
+          lonS, latS, lonP, latP);
+        Check(sep < 1.0, "Jupiter's node, same subset both sides, within "
+          "1\" (%.4f\")", sep);
+      }
+      fCast = FPromOneRowQt(eph::kTimeUT1, jd, &pfNode7, eph::kObjOrbitPoint,
+        5, 0, 1, NULL, &lonP, &latP, &dAyan, &dT);
+      if (fCast) {
+        sep = ROracleSepQt("Jupiter asc node, Swiss vs plugin mask 7",
+          lonS, latS, lonP, latP);
+        Check(sep < 2.0, "the planetary node's light-time convention "
+          "(%.4f\")", sep);
+      }
+    } else
+      printf("  oracle Jupiter node leg skipped (Swiss refused)\n");
+  }
+
+  // Leg 9: a small body through the catalog. Chiron: Swiss's own file
+  // and orbit vs the SBDB record with the sb441 perturbers -- different
+  // realizations of the same body, so the loosest of the body tiers,
+  // and still a binding check.
+  if (FSzSet(SzEphPromParam(epPromCatalog))) {
+    Borrow bSwiss(us.nSwissEph, nMode);
+    fS = FSwissPlanet(oChi, jd, oEar, &lonS, &latS, &d, &d, &d, &d);
+    fCast = FPromOneRowQt(eph::kTimeUT1, jd, &pfTrop, eph::kObjBody,
+      20002060, 0, 0, NULL, &lonP, &latP, &dAyan, &dT);
+    if (fS && fCast) {
+      sep = ROracleSepQt("Chiron, Swiss's file vs the SBDB catalog",
+        lonS, latS, lonP, latP);
+      Check(sep < 60.0, "Chiron's realizations agree within 60\" (%.4f\")",
+        sep);
+    } else
+      printf("  oracle Chiron leg skipped (%s side)\n",
+        !fS ? "Swiss" : "plugin");
+  } else
+    printf("  oracle Chiron leg skipped (no catalog)\n");
+
+  // Leg 10: a fixed star. The numeric oracle's own precedent applies:
+  // its Swiss reference is the library call the local path makes, and
+  // SwissComputeStar()'s swe_fixstar2 under the same flags is that call
+  // for stars. Swiss's fixstar path applies deflection and aberration
+  // and no light time (work log 0c), so the plugin answers under mask 6.
+  {
+    char serr[AS_MAXCH];
+    double xx[6];
+    Borrow bSwiss(us.nSwissEph, nMode);
+    pfStar = eph::Profile();
+    pfStar.corrections = eph::kCorrDeflection | eph::kCorrAberration;
+    // swe_fixstar2() WRITES the star's canonical name back into its
+    // first argument, and its NUMBER form counts a list whose head is
+    // not the file's first record (measured: "1" answers 109 Vir), so
+    // the leg sweeps the numbers the local path's own enumeration uses
+    // (SwissComputeStar's istar = 1, 2, ...) until one answers
+    // Aldebaran.
+    char szStar[AS_MAXCH];
+    int iStarSw;
+    fS = fFalse;
+    for (iStarSw = 1; iStarSw < 1000; iStarSw++) {
+      sprintf2(S(szStar), "%d", iStarSw);
+      if (swe_fixstar2(szStar, jd, SEFLG_SWIEPH | SEFLG_SPEED, xx,
+        serr) < 0)
+        break;
+      if (strncmp(szStar, "Aldebaran", 9) == 0) {
+        fS = fTrue;
+        break;
+      }
+    }
+    if (fS) {
+      fCast = FPromOneRowQt(eph::kTimeUT1, jd, &pfStar, eph::kObjStar, -1, 0,
+        0, "Aldebaran", &lonP, &latP, &dAyan, &dT);
+      if (fCast) {
+        sprintf2(S(szLeg), "Aldebaran (Swiss star %d) vs the plugin",
+          iStarSw);
+        sep = ROracleSepQt(szLeg, xx[0], xx[1], lonP, latP);
+        Check(sep < 1.0, "Aldebaran within 1\" (%.4f\")", sep);
+      }
+    } else
+      printf("  oracle Aldebaran leg skipped (%s)\n",
+        iStarSw >= 1000 ? "not found in 1000" : serr);
+  }
+
+  // Leg 11: the frames, Prometheia against itself. These are the
+  // binding checks the Swiss path cannot ask: the J2000 and ICRF
+  // ecliptics differ by the ~23 mas frame bias, the true and mean of
+  // date by nutation (under 18"), and true of date and J2000 by 26.7
+  // years of precession -- degrees would mean a wrong frame binding.
+  {
+    eph::Profile pfT, pfM, pfJ, pfI;
+    real lonJ, latJ, lonI, latI, lonM, latM, lonT, latT;
+
+    pfJ = eph::Profile(); pfJ.frame = eph::kFrameJ2000;
+    pfI = eph::Profile(); pfI.frame = eph::kFrameIcrf;
+    pfM = eph::Profile(); pfM.frame = eph::kFrameMeanOfDate;
+    pfT = eph::Profile();
+    jdTT = jd + swe_deltat(jd);
+    fCast = FPromOneRowQt(eph::kTimeTT, jdTT, &pfJ, eph::kObjBody, 499, 0, 0,
+      NULL, &lonJ, &latJ, &dAyan, &dT);
+    fCast = fCast && FPromOneRowQt(eph::kTimeTT, jdTT, &pfI, eph::kObjBody,
+      499, 0, 0, NULL, &lonI, &latI, &dAyan, &dT2);
+    if (fCast) {
+      sep = ROracleSepQt("Mars, J2000 vs ICRF (frame bias)",
+        lonJ, latJ, lonI, latI);
+      Check(sep < 0.1, "J2000 and ICRF differ by the frame bias only "
+        "(%.4f\")", sep);
+      if (FPromOneRowQt(eph::kTimeTT, jdTT, &pfT, eph::kObjBody, 499, 0, 0,
+        NULL, &lonT, &latT, &dAyan, &dT2)) {
+        sep = ROracleSepQt("Mars, true of date vs J2000 (precession)",
+          lonT, latT, lonJ, latJ);
+        Check(sep > 15.0*60.0 && sep < 30.0*60.0, "true of date vs J2000 "
+          "differ by 26.7 years of precession (%.1f')", sep / 60.0);
+        if (FPromOneRowQt(eph::kTimeTT, jdTT, &pfM, eph::kObjBody, 499, 0, 0,
+          NULL, &lonM, &latM, &dAyan, &dT2)) {
+          sep = ROracleSepQt("Mars, true of date vs mean of date (nutation)",
+            lonT, latT, lonM, latM);
+          Check(sep < 20.0, "true and mean of date differ by nutation only "
+            "(%.4f\")", sep);
+        }
+      }
+    }
+  }
+
+  // Leg 12: the time scales and the delta T column. The same instant
+  // asked as UT1 and as TT (with Astrolog's own delta T added) is the
+  // same answer; and the delta T column is the hook's value, within
+  // 0.01 s of the chart's own one-shot swe_deltat().
+  {
+    real lonU, latU;
+    fCast = FPromOneRowQt(eph::kTimeUT1, jd, &pfTrop, eph::kObjBody, 301, 0,
+      0, NULL, &lonU, &latU, &dAyan, &dT);
+    if (fCast) {
+      jdTT = jd + swe_deltat(jd);
+      fS = FPromOneRowQt(eph::kTimeTT, jdTT, &pfTrop, eph::kObjBody, 301, 0,
+        0, NULL, &lonP, &latP, &dAyan, &d);
+      if (fS) {
+        sep = ROracleSepQt("Moon, UT1 vs TT with Astrolog's delta T",
+          lonU, latU, lonP, latP);
+        Check(sep < 0.01, "the time scales agree within 0.01\" (%.5f\")",
+          sep);
+        d = RAbs(dT - swe_deltat(jd) * 86400.0);
+        printf("  oracle %-46s %9.5f s\n", "delta T column vs swe_deltat",
+          d);
+        Check(d < 0.01, "the delta T column is the chart's model within "
+          "0.01 s (%.5f)", d);
+      }
+    }
+  }
+
+  ciCore = ciSav; ciMain = ciMainSav;
+  is.fNoEphFile = fNoEphSav;
+}
+
+#endif // PROMETHEIA
+
+
 // The Prometheia source plugin (EPHEMERIS_PLUGINS_PLAN.md 4.2, phase 7).
 // Without -DPROMETHEIA -- pkg-config prometheia unresolved, which is
 // every stock checkout -- the group says so and passes; nothing else in
@@ -18971,6 +19503,10 @@ static void TestPrometheiaQt()
     Check(cm == 2 && rgm[0].nKind == eph::kObjStar && rgm[1].nKind ==
       eph::kObjStar, "the ambiguous star LOOKUPs as both components (%d)",
       cm);
+
+    // The oracle: the plugin against the local Swiss path, while the
+    // engine is open and the settings are still ours to borrow.
+    TestPrometheiaOracleQt();
 
 LStop:
     ;

@@ -79,7 +79,8 @@ static double FEnumDeltaTProm(void *puser, double jd)
   (void)puser;
   if (g_rDeltaTSec != rInvalid)
     return (double)g_rDeltaTSec;
-  return swe_deltat(jd - swe_deltat(jd) / 86400.0);
+  // swe_deltat() answers in DAYS; the hook is seconds of TT - UT1.
+  return swe_deltat(jd - swe_deltat(jd) / 86400.0) * 86400.0;
 }
 
 void EphPromStop(void)
@@ -601,7 +602,7 @@ flag FEphPromCompute(CONST EPHPROMQ *pq, EPHPROMANSWER rga[])
 
       if (pq->nTs == eph::kTimeUT1)
         rDeltaT = (g_rDeltaTSec != rInvalid) ? (real)g_rDeltaTSec :
-          swe_deltat(jd - swe_deltat(jd) / 86400.0);
+          swe_deltat(jd - swe_deltat(jd) / 86400.0) * 86400.0;
       if (po->kind == eph::kObjOrbitPoint)
         s = prometheia_calc_orbit_point(pephProm, naif, po->point,
           po->method == eph::kMethMean ? PROMETHEIA_ELEMENTS_MEAN :
