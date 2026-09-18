@@ -20979,6 +20979,42 @@ static void TestEphemRegistryQt()
             "\"%s\" selects the chain that spelling always meant (%s)",
             rglegacy[isw].szSw, us.szEphemSource);
       }
+      // A SEQUENCE keeps the Matrix bit. The shadow is the authority
+      // across consecutive -b spellings, and it stopped being one:
+      // EphSourceSetShadow() bumps the selection's generation, the
+      // parser did not claim it, so the NEXT spelling rebuilt the
+      // shadow from the chain TEXT -- and that round trip cannot carry
+      // fMatrix, since every head the triple cannot name derives
+      // {files, 0, no-matrix}. "=bm _b" therefore became "none", and a
+      // chain of "none" computes nothing: a whole chart of 0Ari00'00"
+      // with no warning. That is the order the PRE-BRANCH writer
+      // emitted for a Matrix selection, so it is what an old settings
+      // file replays (phase 8 review, E1).
+      {
+        struct { CONST char *szSw1, *szSw2, *szSw3, *szSw4; } const
+          rgseq[] = {
+          {"=bm", "_b", NULL, NULL},
+          {"-bm", "-bU", "-b", NULL},
+          {"_bs", "=bm", "_bU", "_b"}};
+        int iseq, c;
+
+        for (iseq = 0; iseq < (int)(sizeof(rgseq)/sizeof(*rgseq)); iseq++) {
+          EphSourceSet("swiss");
+          rgsz[0] = (char *)szAppNameCore;
+          c = 1;
+          rgsz[c++] = (char *)rgseq[iseq].szSw1;
+          if (rgseq[iseq].szSw2 != NULL) rgsz[c++] = (char *)rgseq[iseq].szSw2;
+          if (rgseq[iseq].szSw3 != NULL) rgsz[c++] = (char *)rgseq[iseq].szSw3;
+          if (rgseq[iseq].szSw4 != NULL) rgsz[c++] = (char *)rgseq[iseq].szSw4;
+          rgsz[c] = NULL;
+          Check(FProcessSwitches(c, rgsz, NULL), "\"%s ...\" parses",
+            rgseq[iseq].szSw1);
+          Check(FSrcChainHead("matrix"),
+            "\"%s ...\" keeps the Matrix selection rather than losing it "
+            "to \"none\" (%s)", rgseq[iseq].szSw1, SzSet(us.szEphemSource));
+        }
+      }
+
       // And consecutive toggles compose, as the live fields used to:
       // the shadow re-syncs from the chain the previous spelling wrote.
       EphSourceSet("server,swiss");

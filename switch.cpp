@@ -2416,6 +2416,7 @@ static int NSwb(CONST char *szSwitch, PARSEIN *pin)
     if (nSwiss == 5) {
       fFiles = fTrue;
       EphSourceSetShadow(fFiles, nSwiss, fMatrix);
+      nGen = NEphSourceGen();   // ours; see below
       return 0;
     }
   }
@@ -2443,6 +2444,15 @@ static int NSwb(CONST char *szSwitch, PARSEIN *pin)
   }
   SwitchF(fFiles);
   EphSourceSetShadow(fFiles, nSwiss, fMatrix);
+  // Claim the generation this call just made. Without it the NEXT -b
+  // spelling sees a generation it does not recognise and rebuilds the
+  // shadow from the chain TEXT -- and that round trip cannot carry
+  // fMatrix, because every head the triple cannot name derives
+  // {files, 0, no-matrix}. So "=bm _b" turned a Matrix selection into
+  // "none" and drew a chart of 0Ari00'00" with no warning at all, and
+  // that is exactly the order the pre-branch writer emitted for a
+  // Matrix selection.
+  nGen = NEphSourceGen();
   return 0;
 }
 
