@@ -614,7 +614,10 @@ int main(int argc, char **argv) {
         Hello hello;
         hello.protoMax = (uint32_t)protoVersion;
         hello.protoMin = protoMin >= 0 ? (uint32_t)protoMin : kProtoMin;
-        hello.caps = kCapF32 | kCapCancel | kCapLookup | kCapInstantLists | kCapDesignations;
+        // The client sends the 0x8004 delta-T-table TLV (--deltat-table),
+        // so it advertises the cap that TLV requires (A.4, 3.6 rule 4).
+        hello.caps = kCapF32 | kCapCancel | kCapLookup | kCapInstantLists |
+          kCapDesignations | kCapDeltaTTable;
         hello.clientName = "eph_wsclient/2.0";
         if (szToken) hello.token = szToken;
         EncodeHello(&pay, hello);

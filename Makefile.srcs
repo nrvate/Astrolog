@@ -123,7 +123,7 @@ PROMETHEIA_LIBS := $(if $(PROMETHEIA_FOUND),$(shell pkg-config --static --libs p
 # command is silent on success by design; its output is makefile text
 # the moment $(shell) returns it.
 define prometheia-stamp
-$(shell d='$(1)'; stamp="$$d/.prometheia-stamp"; \
+$(shell d='$(1)'; [ -n "$$d" ] || d=.; stamp="$$d/.prometheia-stamp"; \
   mkdir -p "$$d" 2>/dev/null; \
   if [ -f "$$d/ephem.o" ] || [ -f "$$d/ephprom.o" ] || [ -f "$$d/qttest.o" ]; then \
     cur='$(PROMETHEIA_FLAGS)'; old=`cat "$$stamp" 2>/dev/null`; \

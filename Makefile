@@ -62,6 +62,10 @@ RM = rm -f
 CPPFLAGS += $(PROMETHEIA_FLAGS)
 LIBS += $(PROMETHEIA_LIBS)
 
+# Stamp the plugin state the root objects were built with; the console
+# build's OBJDIR is empty, so the stamp lives at the root. See Makefile.srcs.
+$(call prometheia-stamp,$(OBJDIR))
+
 # "make" alone builds two binaries on Linux: upstream's X11 one and this
 # fork's Qt port, side by side. The maintainer's rule, 2026-09-04.
 #

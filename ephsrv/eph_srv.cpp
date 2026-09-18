@@ -1906,14 +1906,28 @@ static void HandleRequest(WebSocket<SSL, true, Conn> *ws, LoopCtx *lc, uint32_t 
     return;
   }
   // The pins (A.4): answered only from the dataset or catalog named.
+  // 0x8001 names the ephemeris component of the identity, 0x8003 the
+  // whole datasetId; both refuse with ERROR 5 (3.5).
   for (const eph::Tlv &e : req.ext) {
     std::string pin;
-    if (e.tag == eph::kReqTagEphemerisPin && eph::TlvStr8(e, &pin) && pin != gDatasetId) {
-      SendError(ws, requestId, eph::kErrSource, "the pinned ephemeris is not this server's dataset");
-      return;
+    if (e.tag == eph::kReqTagEphemerisPin && eph::TlvStr8(e, &pin)) {
+      std::string szEphe;
+      size_t p1 = gDatasetId.find('/');
+      size_t p2 = p1 == std::string::npos ? std::string::npos :
+        gDatasetId.find('/', p1 + 1);
+      if (p1 != std::string::npos && p2 != std::string::npos)
+        szEphe = gDatasetId.substr(p1 + 1, p2 - p1 - 1);
+      if (szEphe.empty() || pin != szEphe) {
+        SendError(ws, requestId, eph::kErrSource, "the pinned ephemeris is not this server's dataset");
+        return;
+      }
     }
     if (e.tag == eph::kReqTagCatalogPin) {
       SendError(ws, requestId, eph::kErrSource, "this server has no catalogs to pin");
+      return;
+    }
+    if (e.tag == eph::kReqTagDatasetPin && eph::TlvStr8(e, &pin) && pin != gDatasetId) {
+      SendError(ws, requestId, eph::kErrSource, "the pinned datasetId is not this server's");
       return;
     }
     // A precession model (0x0003) is not selectable here: the default is

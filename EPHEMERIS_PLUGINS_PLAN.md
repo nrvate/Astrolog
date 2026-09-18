@@ -15,7 +15,8 @@ version 3, and this section is the design authority behind it.
 
 - **HANDOFF BLOCK (2026-09-17 ~21:00, for the next agent).** The live state,
   all of it:
-  - **ephv4 head `b89475b`** (dates corrected; everything happened the 17th).
+  - **ephv4 head `5ac12d2`** (dates corrected; everything happened the 17th;
+    this line moves with each Status commit).
     Phase 3 is DONE and merged. **Phase 7 is MERGED (2026-09-17 ~21:15):
     the peer answered in the mail file** — the orbit-point corrections are
     intended, settled jointly for v4, recorded in their engine commit
@@ -25,13 +26,15 @@ version 3, and this section is the design authority behind it.
     `prometheia.pc` prefix — the build-tree .pc now works bare, validated
     live by our rebuild; our scratch .pc is retired). The merge did the
     checklist: both Jupiter-node legs **re-pinned as §3.5a courtesy tier**
-    (`2dee040`: measured 10.4750"/10.4834" masks 6/7 against their engine
+    (`1fe84a8`: measured 10.4750"/10.4834" masks 6/7 against their engine
     at `df0ae42`, tolerance 11", the two masks 0.008" apart); the
-    **PROMETHEIA stamp** landed (`9aa3232`: each opting-in makefile stamps
+    **PROMETHEIA stamp** landed (`dc05d07`: each opting-in makefile stamps
     its object dir with the plugin flags; a flip removes
     ephprom/ephem/qttest objects before make considers them — falsified
     both directions); the **work-log items renumbered** (`ed6e4f2`:
-    phase 7's are 10-12, phase 3 owns 6-9, newest-first order restored).
+    phase 7's are 10-12, phase 3 owns 6-9; the phase-7 block sits
+    ascending inside the log's descending run -- a reader must rely on
+    the numbers, not the position).
     Gates on the merged tree: default `make check` all clear (suite
     5834/0), plugin-on Prometheia group 143/0, ephsrv/ byte-identical
     throughout. Branch `eph7prom` was rebased onto ephv4 for the merge
@@ -433,7 +436,7 @@ support, with ERROR 11 or a per-object error as §3.5 says.
 The payload is a **delivery block**, then a **question block**. Only the
 question block goes into the cache key.
 
-Delivery block (12 bytes):
+Delivery block (16 bytes):
 | type | field |
 |---|---|
 | u8 | precision — 0 f64, 1 f32 (DATA values only) |

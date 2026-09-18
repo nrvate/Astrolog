@@ -80,6 +80,11 @@ static double FEnumDeltaTProm(void *puser, double jd)
   (void)puser;
   if (g_rDeltaTSec != rInvalid)
     return (double)g_rDeltaTSec;
+  // The user's -Yz0 override binds both sources to the same TT instant:
+  // FSwissPlanet applies it as us.rDeltaT/86400 (calc.cpp), so the same
+  // seconds, not the model's, are what this hook must answer too.
+  if (us.rDeltaT != rInvalid)
+    return (double)us.rDeltaT;
   // swe_deltat() answers in DAYS; the hook is seconds of TT - UT1.
   return swe_deltat(jd - swe_deltat(jd) / 86400.0) * 86400.0;
 }
@@ -847,7 +852,15 @@ static flag FSubmitProm(EPHQUERY *pq)
       prow->nErr = rga[i].errCode;   // the A.17 values are the ephErr* ones
       continue;
     }
-    prow->rg[0] = rga[i].prgVal[0] - is.rSid;
+    // Star rows are the entry point's own six (ephem.h): FSwissStar
+    // answers raw tropical and the consumer's own zodiac machinery
+    // applies the offset -- so unlike the body rows (which mirror
+    // FSwissPlanet's xx[0] - is.rSid) a star row carries no is.rSid.
+    // The library's zodiac option is a label, not a transform (its
+    // values are tropical in the profile's frame), so under fSidereal
+    // the subtraction here would hand the consumer a second ayanamsa.
+    prow->rg[0] = rgobj[i].kind == eph::kObjStar ? rga[i].prgVal[0] :
+      rga[i].prgVal[0] - is.rSid;
     prow->rg[1] = rga[i].prgVal[1];
     prow->rg[2] = rga[i].prgVal[2];
     prow->rg[3] = rga[i].prgVal[3];

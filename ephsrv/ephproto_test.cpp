@@ -122,6 +122,57 @@ static bool RegTagsAre(const std::vector<RegEntry> &reg, const std::vector<long>
   return got == w;
 }
 
+// A compact SHA-256 (FIPS 180-4). 3.10 makes the manifest's set-sha256 the
+// set's atomicity guarantee -- "a reader that computes a different digest
+// MUST refuse to report verdicts" -- so this reader computes it itself,
+// over every fixture file's exact bytes in manifest order, and refuses a
+// half-written or reformatted directory instead of parsing through it.
+static void Sha256(const std::vector<uint8_t> &msg, uint8_t rg[32]) {
+  static const uint32_t k[64] = {
+    0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
+    0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
+    0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
+    0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+    0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
+    0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
+    0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
+    0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2};
+  uint32_t h[8] = {0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,
+                   0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19};
+  std::vector<uint8_t> m = msg;
+  uint64_t bits = (uint64_t)m.size() * 8;
+  m.push_back(0x80);
+  while (m.size() % 64 != 56) m.push_back(0);
+  for (int i = 7; i >= 0; i--) m.push_back((uint8_t)(bits >> (i * 8)));
+  for (size_t off = 0; off < m.size(); off += 64) {
+    uint32_t w[64];
+    for (int i = 0; i < 16; i++)
+      w[i] = (uint32_t)m[off + i * 4] << 24 | (uint32_t)m[off + i * 4 + 1] << 16 |
+             (uint32_t)m[off + i * 4 + 2] << 8 | (uint32_t)m[off + i * 4 + 3];
+    for (int i = 16; i < 64; i++) {
+      uint32_t s0 = (w[i-15] >> 7 | w[i-15] << 25) ^ (w[i-15] >> 18 | w[i-15] << 14) ^ (w[i-15] >> 3);
+      uint32_t s1 = (w[i-2] >> 17 | w[i-2] << 15) ^ (w[i-2] >> 19 | w[i-2] << 13) ^ (w[i-2] >> 10);
+      w[i] = w[i-16] + s0 + w[i-7] + s1;
+    }
+    uint32_t a = h[0], b = h[1], c = h[2], d = h[3], e = h[4], f = h[5], g = h[6], hh = h[7];
+    for (int i = 0; i < 64; i++) {
+      uint32_t S1 = (e >> 6 | e << 26) ^ (e >> 11 | e << 21) ^ (e >> 25 | e << 7);
+      uint32_t ch = (e & f) ^ (~e & g);
+      uint32_t t1 = hh + S1 + ch + k[i] + w[i];
+      uint32_t S0 = (a >> 2 | a << 30) ^ (a >> 13 | a << 19) ^ (a >> 22 | a << 10);
+      uint32_t mj = (a & b) ^ (a & c) ^ (b & c);
+      uint32_t t2 = S0 + mj;
+      hh = g; g = f; f = e; e = d + t1; d = c; c = b; b = a; a = t1 + t2;
+    }
+    h[0] += a; h[1] += b; h[2] += c; h[3] += d;
+    h[4] += e; h[5] += f; h[6] += g; h[7] += hh;
+  }
+  for (int i = 0; i < 8; i++) {
+    rg[i * 4] = h[i] >> 24; rg[i * 4 + 1] = h[i] >> 16;
+    rg[i * 4 + 2] = h[i] >> 8; rg[i * 4 + 3] = h[i];
+  }
+}
+
 int main(int argc, char **argv) {
   std::string dir = argc > 1 ? argv[1] : "ephsrv/conformance";
   std::ifstream man(dir + "/MANIFEST.tsv");
@@ -131,9 +182,16 @@ int main(int argc, char **argv) {
   }
   std::string line;
   int cFixtures = 0;
+  std::string szDigestSet;
+  std::vector<std::string> rgFile;
   std::vector<std::vector<uint8_t>> accepted;
   while (std::getline(man, line)) {
+    if (line.rfind("# set-sha256 ", 0) == 0) {
+      szDigestSet = line.substr(13);
+      continue;
+    }
     if (line.empty() || line[0] == '#') continue;
+    rgFile.push_back(line.substr(0, line.find('\t')));
     std::vector<std::string> col;
     std::stringstream ss(line);
     std::string f;
@@ -156,6 +214,32 @@ int main(int argc, char **argv) {
     }
   }
   Check(cFixtures >= 60, "manifest lists the fixtures (" + std::to_string(cFixtures) + ")");
+
+  // 3.10: the reader computes the set's digest itself -- every fixture
+  // file's exact bytes, in manifest order -- and refuses the set when it
+  // differs from what the manifest declares.
+  {
+    std::vector<uint8_t> all;
+    bool fRead = !rgFile.empty();
+    for (const std::string &name : rgFile) {
+      std::ifstream f(dir + "/" + name, std::ios::binary);
+      if (!f) { fRead = false; break; }
+      all.insert(all.end(), std::istreambuf_iterator<char>(f),
+        std::istreambuf_iterator<char>());
+    }
+    if (fRead && szDigestSet.size() == 64) {
+      uint8_t rg[32];
+      Sha256(all, rg);
+      std::string hex;
+      static const char *rgch = "0123456789abcdef";
+      for (int i = 0; i < 32; i++) {
+        hex += rgch[rg[i] >> 4];
+        hex += rgch[rg[i] & 15];
+      }
+      Check(hex == szDigestSet, "the fixture set's digest matches the manifest's");
+    } else
+      Check(false, "the manifest's set-sha256 could not be verified");
+  }
 
   // Truncation: every strict prefix of an accepted frame, with the envelope's
   // length patched to match, must be refused -- never read past its end
@@ -274,6 +358,22 @@ int main(int argc, char **argv) {
     o.point = eph::kPtApo; o.method = eph::kMethInterpolated;
     Check(MapObject(o, 0, geo, eph::kTimeTT, eph::CanonicalNaN(), SEFLG_SWIEPH, &c, &why) == 0 &&
               c.ipl == SE_INTP_APOG, "interpolated apogee is SE_INTP_APOG");
+    // 3.5a: the Moon's named points are geocentric definitions. The
+    // engine answers a heliocentric or barycentric flag on them with six
+    // zero columns and a positive return (sweph.c's lunar-node branch),
+    // which would reach the wire as a successful row of 0s -- so the
+    // mapping refuses the observer pair, and topocentric still serves.
+    eph::Profile helio2; helio2.observer = eph::kObsHelio;
+    Check(MapObject(o, 0, helio2, eph::kTimeTT, eph::CanonicalNaN(), SEFLG_SWIEPH, &c, &why)
+              == eph::kOErrUnsupported,
+          "the Moon's named point refuses a heliocentric observer");
+    eph::Profile bary2; bary2.observer = eph::kObsBary;
+    Check(MapObject(o, 0, bary2, eph::kTimeTT, eph::CanonicalNaN(), SEFLG_SWIEPH, &c, &why)
+              == eph::kOErrUnsupported,
+          "the Moon's named point refuses a barycentric observer");
+    eph::Profile topo2; topo2.observer = eph::kObsTopo;
+    Check(MapObject(o, 0, topo2, eph::kTimeTT, eph::CanonicalNaN(), SEFLG_SWIEPH, &c, &why) == 0,
+          "topocentric still serves the Moon's named point");
     o.point = eph::kPtAscNode; o.method = eph::kMethOsculating;
     Check(MapObject(o, 1, geo, eph::kTimeTT, eph::CanonicalNaN(), SEFLG_SWIEPH, &c, &why) == 0 &&
               c.kind == kCallNodAps && c.ipl == SE_MOON && c.nodMethod == SE_NODBIT_OSCU && c.point == 0,
@@ -363,6 +463,15 @@ int main(int argc, char **argv) {
       {SE_AST_OFFSET + 1, -1, 0, true}, {SE_AST_OFFSET + 2060, -1, 0, true},
       {SE_MOON, 0, SE_NODBIT_MEAN, true}, {SE_MOON, 3, SE_NODBIT_OSCU, true},
     };
+    // The Moon's named node and apogee bodies (sweph's SE_MEAN_NODE family,
+    // the ipl the table above names directly) answer a heliocentric or
+    // barycentric flag with six zero columns and a positive return
+    // (sweph.c's lunar-node branch), which version 4 refuses in the
+    // mapping -- so under those flags the round trip IS the refusal.
+    auto fLunarNamed = [](int32_t ipl) {
+      return ipl == SE_MEAN_NODE || ipl == SE_TRUE_NODE || ipl == SE_MEAN_APOG ||
+             ipl == SE_OSCU_APOG || ipl == SE_INTP_APOG || ipl == SE_INTP_PERG;
+    };
     const int32_t rgflag[] = {
       SEFLG_SWIEPH | SEFLG_SPEED,
       SEFLG_SWIEPH | SEFLG_SPEED | SEFLG_SIDEREAL | SEFLG_NONUT,
@@ -372,7 +481,7 @@ int main(int argc, char **argv) {
     };
     const int32_t rgsid[] = {SE_SIDM_FAGAN_BRADLEY, SE_SIDBIT_SSY_PLANE, SE_SIDM_LAHIRI | SE_SIDBIT_ECL_T0};
     const double topo[3] = {-122.3, 47.6, 12.0};
-    int cBad = 0, cTried = 0, cExcept = 0;
+    int cBad = 0, cTried = 0, cExcept = 0, cLunarRefused = 0, cLunarLeak = 0;
     std::string firstBad;
     for (const auto &b : bodies)
       for (int32_t fl : rgflag)
@@ -404,6 +513,13 @@ int main(int argc, char **argv) {
               fSame = c.ipl == SE_JUPITER && (c.iflag & SEFLG_CENTER_BODY) &&
                       SwissEffectiveFlags(c.iflag & ~SEFLG_CENTER_BODY, ctr >= 0) ==
                         SwissEffectiveFlags(flag, ctr >= 0);
+            if (fLunarNamed(b.ipl) && (flag & (SEFLG_HELCTR | SEFLG_BARYCTR))) {
+              // The refused pair: the mapping must say error 2, and a
+              // mapping that succeeds here is the zero-row bug back.
+              cLunarRefused += !fOk;
+              cLunarLeak += fOk;
+              continue;
+            }
             if (b.fException) {
               cExcept += fOk && !fSame;
               continue;
@@ -416,6 +532,8 @@ int main(int argc, char **argv) {
     Check(cBad == 0, "Swiss calls round trip through version 4 (" + std::to_string(cBad) + " of " +
                          std::to_string(cTried) + " differ; first: " + firstBad + ")");
     Check(cExcept > 0, "the documented exceptions are answered, from the canonical body");
+    Check(cLunarLeak == 0, "the Moon's named points refuse a heliocentric or barycentric flag (" +
+          std::to_string(cLunarLeak) + " answered, " + std::to_string(cLunarRefused) + " refused)");
     eph::Profile pf;
     Check(!ProfileFromSwiss(SEFLG_SWIEPH | SEFLG_SIDEREAL, -1, SE_SIDM_FAGAN_BRADLEY | SE_SIDBIT_PREC_ORIG,
                             topo, &pf), "a sidereal bit version 4 has no field for is refused");

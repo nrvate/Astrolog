@@ -83,3 +83,6 @@ astrolog-qt-base
 /astrolog-ephd
 /eph_wsclient
 /ephproto_test
+# The PROMETHEIA flag stamp (Makefile.srcs); the console build objects
+# sit at the root, so its stamp does too.
+.prometheia-stamp

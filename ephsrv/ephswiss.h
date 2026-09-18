@@ -237,10 +237,22 @@ inline uint16_t MapObject(const Object &o, int32_t nNative, const Profile &pf,
           named = SE_INTP_PERG;
         }
         if (named >= 0) {
+          // The Moon's named points are geocentric definitions. The
+          // engine does not refuse a heliocentric or barycentric flag
+          // on them -- it fills all six columns with zeros and reports
+          // success (sweph.c's lunar-node branch) -- which would reach
+          // the wire as a successful row of 0s (3.9a rule 3). Refuse
+          // here instead; 3.5a's orbit-point table is geo/topo only.
+          if (pf.observer == kObsHelio || pf.observer == kObsBary) {
+            *why = "the Moon's named points are geocentric; a heliocentric "
+              "or barycentric observer is not served";
+            return kOErrUnsupported;
+          }
           c->kind = kCallCalc;
           c->ipl = named;
           // Nodes and apsides of the Moon are geocentric points; Swiss
-          // refuses heliocentric flags on them, as it always has.
+          // answers them under any observer flag (zeroing the result at
+          // helio/bary), which the guard above refuses for us.
           break;
         }
       }
