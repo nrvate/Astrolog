@@ -763,7 +763,14 @@ def main():
     # The set's identity, over every fixture file in manifest order: a reader
     # can say "I have a consistent set" rather than inferring it from
     # timestamps, and a half-written directory is visibly half-written.
+    # The definition, in the file, because a digest whose meaning lives only
+    # in a generator becomes a convention by accident. This one is over the
+    # .hex FILES' bytes in the order below -- NOT over these rows, and not
+    # over the messages they decode to. JUDGEMENTS.tsv's is defined
+    # differently and says so in its own header.
     header = ["# file\tdirection\ttype\texpect\tnote",
+              "# set-sha256 is sha256 over each .hex file's bytes, in the "
+              "order of the rows below",
               "# set-sha256 %s" % digest.hexdigest()]
     files["MANIFEST.tsv"] = "\n".join(header + rows) + "\n"
 
@@ -816,8 +823,15 @@ def main():
     jdig = hashlib.sha256()
     for r in jrows:
         jdig.update(r.encode() + b"\n")
+    # Over the NON-COMMENT LINES of this table exactly as written, each
+    # with its newline -- a different definition from MANIFEST.tsv's, which
+    # is over the fixture files' bytes, because this table has no files of
+    # its own. Prometheia read it this way independently and matched; it is
+    # written here so that neither of us is relying on having guessed.
     files["JUDGEMENTS.tsv"] = "\n".join(
         ["# request\twelcome\texpect\tnote",
+         "# set-sha256 is sha256 over the non-comment lines below, each "
+         "with its trailing newline",
          "# set-sha256 %s" % jdig.hexdigest()] + jrows) + "\n"
     if check:
         bad = [f for f, text in files.items()

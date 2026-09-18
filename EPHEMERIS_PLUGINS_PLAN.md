@@ -211,7 +211,29 @@ version 3, and this section is the design authority behind it.
   (use `atan2(|a x b|, a.b)`); and a subset check that reads only the
   mask-0 answer is vacuous against a server that echoes the request.
 
-- **A NAMED DROP IS OPEN: correction masks per object KIND**
+- **A NAMED DROP IS CLOSED: correction masks per object KIND**
+  (`/nvm/work/ephv4-drop-corrkind/DROP.md`, cut at `050a5a4`, implemented
+  at `eed6429`, completed at `472b21a`). **Verdicted by Prometheia 99/99**,
+  `set-sha256 d904e358…` independently computed, `JUDGEMENTS.tsv` 7/7
+  through their own section-2 judge, and live on both servers: their
+  refusal leg checks every (observer, kind, mask) for bodies AND orbit
+  points, **160/160**, fault-injected both ways -- 48 findings if every
+  mask is treated as listed, exactly six misjudged pairs if `0x0014` is
+  ignored. The "permissive by decision" divergence is gone from the
+  cross-test table, which is what the drop was for.
+
+  **Three things this drop found that were not its subject.** The fixture
+  harness had never validated a capability TLV's PAYLOAD -- WELCOME stores
+  them raw -- so any tag could have carried any bytes and the set would
+  have passed; closed for every tag. `JUDGEMENTS.tsv` exists because a
+  standalone message fixture cannot render a verdict that depends on the
+  server's capabilities, which is a hole the format had from the start.
+  And **the cut was short one fixture**: the drop promised the
+  `representation = 1` twin and the commit did not contain it, reported as
+  present without counting, found by Prometheia counting the files against
+  the nine cases.
+
+- **The drop, as proposed and reviewed:**
   (`/nvm/work/ephv4-drop-corrkind/DROP.md`, cut 2026-09-18 at `050a5a4`),
   approved by the maintainer and **sent to Prometheia for review before
   anything is built** -- deliberately, because their implementer found the
