@@ -18,10 +18,14 @@ version 3, and this section is the design authority behind it.
   is squashed into `qt` when the maintainer says so; never before.
 - **Approved plan.** `/nvmraid/home/n/.claude/plans/reactive-percolating-prism.md`
   (2026-09-17). This document supersedes it wherever they differ.
-- **Phases.** See §7. The work log (§8) says which are done. Phase 2 is done,
+- **Phases.** See §7. The work log (§8) says which are done. **Phase 3 is
+  done** (work log items 6-8: the registry, ComputeEphem's Swiss branch, the
+  side calls, the fallback chain; merged to this branch, matrices
+  byte-identical, suite 5834/0). Phase 2 is done,
   and work log item 3 cleared what it deferred except **segments** (no fitter;
-  the capability is not advertised) and **orbital elements** (kind 4 is a
-  per-object error 2 until the fork has an entry point). `cancel` IS
+  the capability is not advertised); **orbital elements** is unblocked — the
+  fork gained `swe_calc_orbel_r` (8c4a23a), so kind 4 can be served when the
+  server reaches it. `cancel` IS
   advertised now: requests are computed in blocks across loop turns.
 - **Prometheia.** `/shares/ephemeris-prometheia` pins `ephproto.h`,
   `ephsrv/registries.json` and the conformance fixtures (§3.10). With version
@@ -1184,6 +1188,8 @@ typedef struct _EphSrcDef {
 **Query and row types**
 - `EPHQUERY` is the host-side form of a version 4 question block (§3.4),
   declared in `ephproto.h`, so the wire and the plugins cannot drift apart.
+  (As implemented it lives in `ephem.h` — `ephproto.h` is the locked
+  artifact; work log item 6 has the reason and the shape.)
   - Each OBJECT also carries a host-only `nNative`, the source's own id for the
     body, which never goes on the wire. The local Swiss plugin uses it to make
     exactly today's calls.
