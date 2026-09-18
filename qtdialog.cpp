@@ -5361,7 +5361,7 @@ void ShowEphemDialogQt()
   QVector<RCBUILT> rgbuilt;
   QLineEdit *rgepeParam[cEphParamRowQt];
   int rgiepParam[cEphParamRowQt], cParamRow;
-  char sz[cchSzMax], szChain[cchSzMax], szHead[cchSzDef], szT[cchSzMax];
+  char sz[cchSzMax], szHead[cchSzDef];
   char szWhy[cchSzDef];
   int i, nTick = 0, nHold = 0;
 
@@ -5630,15 +5630,27 @@ void ShowEphemDialogQt()
   // OPENED, so they are written before a new chain takes effect --
   // otherwise a run that changed both would write the old head's values
   // against the new head's indexes.
+  // Stored WHOLE, not through a cchSzMax buffer. Both stores are
+  // unbounded underneath -- EphSourceSet() and FEphParamSet() clone --
+  // and the chain was VALIDATED at full length just above, so copying it
+  // through a 255-byte field accepted a chain and then wrote a different,
+  // shorter one. A chain over 254 characters lost its last token, and the
+  // settings file that came out refused to load: "Unknown ephemeris
+  // source 'swi'", which aborts the load, so every setting after the -bE
+  // line was dropped and no chart was drawn (phase 8 review, E4). The
+  // same ceiling silently shortened a long -bP path merely because the
+  // dialog had been opened and OK pressed.
   for (i = 0; i < cEphParamRowQt; i++) {
     if (rgepeParam[i] == NULL)
       continue;
-    SzFieldQt(szT, rgepeParam[i]->text());
-    FEphParamSet(rgiepParam[i], szT);
+    {
+      QByteArray baVal = rgepeParam[i]->text().toLocal8Bit();
+      FEphParamSet(rgiepParam[i], baVal.constData());
+    }
   }
   if (peChain != NULL) {
-    SzFieldQt(szChain, peChain->text());
-    EphSourceSet(szChain);
+    QByteArray baChain = peChain->text().toLocal8Bit();
+    EphSourceSet(baChain.constData());
   }
   RecastAndRedrawQt();
 }

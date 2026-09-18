@@ -21389,6 +21389,41 @@ static void TestEphemDialogQt()
     });
   }
 
+  // A long chain is stored WHOLE, not truncated (phase 8 review, E4).
+  // The dialog validated the full text and then copied it through a
+  // 255-byte field, so a chain over 254 characters was accepted and a
+  // different, shorter one stored -- ending in a partial key. The
+  // settings file that came out refused to load ("Unknown ephemeris
+  // source 'swi'"), and a refused line ABORTS the load, so every setting
+  // after it was dropped and no chart was drawn.
+  {
+    QString strLong;
+    char szHeadLong[cchSzDef];
+    int iRep;
+
+    // Valid keys throughout, repeated well past the old ceiling.
+    strLong = "swiss";
+    for (iRep = 0; strLong.length() < 400; iRep++)
+      strLong += (iRep & 1) ? ",moshier" : ",matrix";
+    EphSourceSet("swiss");
+    DriveModalQt(ShowEphemDialogQt, [&](QWidget *pw) {
+      QLineEdit *peChain = pw->findChild<QLineEdit *>("deEp_chain");
+      if (peChain != NULL)
+        peChain->setText(strLong);
+      if (!FClickButtonQt(pw, "IDOK"))
+        pw->close();
+    });
+    Check(FEqSz(SzSet(us.szEphemSource),
+      strLong.toLocal8Bit().constData()),
+      "a %d-character chain is stored whole (%d stored)",
+      strLong.length(), (int)CchSz(SzSet(us.szEphemSource)));
+    // And it still ends in a whole key, which is what a truncation broke.
+    SzEphChainHead(us.szEphemSource, S(szHeadLong));
+    Check(FEphSrcKeyKnown(szHeadLong),
+      "and its head is still a key this build defines (%s)", szHeadLong);
+    EphSourceSet(szChainSav);
+  }
+
   // Picking a source KEEPS THE FALLBACK TAIL (phase 8 review, E3). The
   // composer stopped its tail pointer ON the comma, so the token scan
   // that follows could not advance and broke before appending anything:
