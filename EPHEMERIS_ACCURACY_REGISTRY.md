@@ -118,6 +118,15 @@ of thing at stake. Parity is worth having only where it is parity with the
 truth; a program that answers a documented, two-degree falsehood because its
 upstream does is not compatible, it is jointly wrong.
 
+**What checked this, and what could NOT.** The fix rests on the IAU WGSN's
+name-to-component assignments and SIMBAD's astrometry. It has **not** been
+confirmed against an independent pre-Gaia catalogue, and that is not for want
+of trying: the cross-test's FK5 leg (2026-09-18) covers 28 stars, and FK5 has
+α Cen **A only** — no separate B entry, and Proxima is far too faint for a
+ground-based catalogue of that era. So Toliman and Proxima are the two entries
+in this file resting on one catalogue rather than two. Recorded here so nobody
+later reads the FK5 leg's clean result as having covered them.
+
 **Net:** `tools/star_identity_audit.py`, which checks catalogued positions by
 name and requires the IAU's distinct components of a multiple system to sit at
 different places. It reports **5 failures** against the unfixed file and none
@@ -186,6 +195,38 @@ call. Advertised is promised, so a capability we cannot deliver correctly
 is not offered. The arithmetic remains Swiss's to fix. Commit `050a5a4`.
 
 ---
+
+### 2.4 Astrometric binaries — up to 2.33″, and not a defect
+
+Both this server and Prometheia carry fixed stars as a position plus a
+**linear** proper motion, which is what every star catalogue supplies. A star
+whose photocentre is swinging around an unseen companion does not move in a
+straight line, so propagating it over a century accumulates the orbit.
+
+Measured 2026-09-18 against **FK5** (Fricke et al. 1988, CDS I/149A) — ground
+based and pre-Hipparcos, so independent of the Hipparcos-derived numbers both
+servers read. Barycentric ICRS, no corrections, separation in arcsec at
+1900 / 2000 / 2100:
+
+| star | this server | Prometheia |
+|---|---|---|
+| Sirius | 1.756 / 0.687 / 2.332 | 1.760 / 0.687 / 2.334 |
+| Procyon | 1.356 / 0.174 / 1.539 | 1.354 / 0.174 / 1.546 |
+| Achernar | 0.783 / 0.143 / 1.009 | 0.783 / 0.143 / 1.009 |
+| Polaris | 0.548 / 0.118 / 0.780 | 0.548 / 0.118 / 0.779 |
+
+The other 24 stars are within **0.56″** on both servers over the same two
+centuries (worst: Antares at 1900), and within 0.31″ at 2000. The two servers
+agree with each other to **0.007″** everywhere.
+
+**Why this is not a defect and is recorded anyway.** The error is smallest at
+2000 and grows both ways, which is the signature of a straight line fitted
+through a curve at its catalogue epoch — not of an engine being wrong. Two
+independent implementations share it because they share the *model*, not the
+code. It is here so that a later reader measuring Sirius against a modern
+catalogue and finding two arcsec does not go looking for a bug in either
+server. Fixing it would mean carrying orbital elements for the companion,
+which no star catalogue either of us reads supplies.
 
 ## 3. Divergences deliberately DECLINED
 
