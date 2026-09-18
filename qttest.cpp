@@ -212,12 +212,6 @@ extern void SetChunkRowsSrvTestQt(int);
 extern int CRecastSrvTestQt();
 extern void SetWelcMaxObjsSrvTestQt(uint32_t);
 extern void SetWelcMaxCellsSrvTestQt(uint32_t);
-extern flag FEphSrvRequiredQt();
-extern void SetRequiredEphSrvTestQt(int, int, int);
-extern void SetRequiredNoExitSrvTestQt(flag);
-extern void ResetRequiredSrvTestQt();
-extern flag FRequiredShownSrvTestQt();
-extern int CRequiredTriesSrvTestQt();
 extern void SzEphSrvStatusQt(char *, int);
 extern int NChunkProbeSrvTestQt(int);
 extern flag FSendEphSrvQt(eph::Request *);
@@ -20498,77 +20492,54 @@ static void TestEphSrvLiveQt()
   Check(NCastWarnSrvTestQt() == cWarn && CReqSentEphSrvTestQt() == cReq,
     "a cast with the server deselected sends nothing and warns not");
 
-  // Required-server mode (increment 4): no local ephemeris anywhere and
-  // the server backend selected -- the startup dialog and its ladder.
-  // The probe is pinned, not re-run: SwissEnsurePath() early-returns
-  // once is.fSwissPathSet is set, so fNoEphFound is whatever the tests
-  // pin here, whatever directories this machine has.
+
+  // Startup with the server selected and NOTHING listening (phase 6e).
+  // This is what replaced required-server mode, so it is what has to be
+  // pinned: startup must not block and must not exit. The old path did
+  // both -- a modal dialog, an hour-long retry ladder, and
+  // EXIT_NO_EPHEMERIS on give-up -- because a selection was one backend
+  // and an unreachable one left nothing to cast from. The chain ended
+  // that: a source that cannot answer is offered past, and the failure is
+  // reported where it happens.
+  //
+  // "Did not exit" is not directly assertable from inside the process, so
+  // this asserts the two things whose absence the exit depended on: the
+  // call RETURNS, and it returns fast. A build that still climbed the
+  // ladder would sit here for its hour and the suite's watchdog would say
+  // so; a build that exited would take the whole run with it, which is
+  // its own loud failure.
   {
-    flag fNoEphSav = is.fNoEphFound, fPathSetSav = is.fSwissPathSet;
-    QWebSocketServer srvReq("eph-required", QWebSocketServer::NonSecureMode);
-    byte bProtoReq = eph::kProtoVersion;
-    uint32_t dwCapsReq = 0;
-    char szVerReq[64];
-    QByteArray baReqReq;
-    QWebSocket *pconnReq = NULL;
+    QElapsedTimer timNoSrv;
+    char szStatNoSrv[cchSzMax];
+    int msNoSrv;
 
-    // The pin goes on AFTER the selection, not before: changing the
-    // source invalidates the Swiss path latch by design (phase 4c,
-    // EphSourceChanged()), so a pin set first is cleared by the very
-    // call it was meant to survive -- SwissEnsurePath() would then run
-    // for real, find this machine's ephemeris, and clear fNoEphFound
-    // out from under the assertion.
-    EphSourceSet("server,swiss");
-    is.fSwissPathSet = fTrue;
-    is.fNoEphFound = fTrue;
-    Check(FEphSrvRequiredQt(), "required: the server backend with no "
-      "local ephemeris");
-    EphSourceSet("swiss");
-    is.fSwissPathSet = fTrue;
-    Check(!FEphSrvRequiredQt(), "not required: a local backend is "
-      "selected");
-    EphSourceSet("server,swiss");
-    is.fSwissPathSet = fTrue;
-    is.fNoEphFound = fFalse;
-    Check(!FEphSrvRequiredQt(), "not required: a local ephemeris exists");
-    is.fNoEphFound = fTrue;
-
-    // The dialog against a server that answers: one attempt, welcomed,
-    // no ladder, no exit.
-    Check(srvReq.listen(QHostAddress::LocalHost),
-      "the required-mode loopback listens");
-    sprintf2(S(szVerReq), "astrolog-ephd required-test");
-    WireEphLoopbackQt(&srvReq, &bProtoReq, &dwCapsReq, szVerReq, &baReqReq,
-      &pconnReq);
-    sprintf2(S(sz), "localhost:%d", (int)srvReq.serverPort());
-    FEphParamSet(epServerUrl, sz);
     EphSrvFinalizeQt();
-    ResetRequiredSrvTestQt();
-    SetRequiredEphSrvTestQt(1, 1, 30000);
-    EphSrvStartupQt();
-    Check(NEphSrvStateTestQt() == 2 && CRequiredTriesSrvTestQt() == 1,
-      "required mode: the dialog welcomed in one attempt (%d)",
-      CRequiredTriesSrvTestQt());
-    Check(FRequiredShownSrvTestQt(), "the dialog latched itself shown");
-    EphSrvFinalizeQt();
-
-    // The ladder against a port nothing listens on: the attempts tick by,
-    // the give-up returns instead of exiting (the suite's hook), and the
-    // dialog stays latched shown.
+    ClearWinSrvTestQt();
+    EphSourceSet("server,swiss");
     sprintf2(S(sz), "localhost:1");   // Nothing listens on port 1.
     FEphParamSet(epServerUrl, sz);
-    ResetRequiredSrvTestQt();
-    SetRequiredNoExitSrvTestQt(fTrue);
-    SetRequiredEphSrvTestQt(1, 1, 40);
+    timNoSrv.start();
     EphSrvStartupQt();
-    Check(CRequiredTriesSrvTestQt() >= 1 && FRequiredShownSrvTestQt(),
-      "the give-up made %d attempts and returned, not exited",
-      CRequiredTriesSrvTestQt());
+    msNoSrv = (int)timNoSrv.elapsed();
+    Check(msNoSrv < 2000 * nScaleTest,
+      "startup with the server unreachable returns at once (%d ms)",
+      msNoSrv);
+    Check(NEphSrvStateTestQt() != 2,
+      "and is not welcomed by a server that is not there (%d)",
+      NEphSrvStateTestQt());
+
+    // And it says so when asked, rather than having said it at startup.
+    SzEphSrvStatusQt(S(szStatNoSrv));
+    Check(*szStatNoSrv != chNull,
+      "the status line carries the state for a dialog to show (\"%.60s\")",
+      szStatNoSrv);
+
+    // The chain is what makes the above safe: the Swiss files behind the
+    // server still answer, so the cast is not lost with the connection.
+    EphSourceSet("swiss");
+    Check(FEqSz(us.szEphemSource, "swiss"), "and a local source still casts");
     EphSrvFinalizeQt();
-    ResetRequiredSrvTestQt();
     FEphParamSet(epServerUrl, NULL);
-    is.fNoEphFound = fNoEphSav;
-    is.fSwissPathSet = fPathSetSav;
   }
 
   // TLS (EPHEMERIS_SERVER_PRODUCTION_PLAN.md Phase 1): the same server

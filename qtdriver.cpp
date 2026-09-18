@@ -7765,260 +7765,31 @@ flag FSendEphSrvQt(eph::Request *preq)
 }
 
 
-// Required-server mode (plan §4): the backend selected and NO local
-// ephemeris anywhere -- SwissEnsurePath() probed every candidate
-// directory and none holds a file Swiss reads (is.fNoEphFound, calc.cpp).
-// The server is then the only source, and startup shows the one blocking
-// UI the plan allows: a modal "Connecting to cloud ephemeris" dialog with
-// the full text of every error, retrying on an exponential ladder -- one
-// second, doubling to eight, for an hour total. Cancel (or the window's
-// X) gives up at once: everything so far goes to stderr and the process
-// exits EXIT_NO_EPHEMERIS, the same place the exhausted ladder lands, so
-// a launcher can tell "no ephemeris anywhere, none reachable" from every
-// other exit either way.
-
-#define msEphSrvRetryBase   1000  // First rung of the required ladder.
-#define msEphSrvRetryCap    8000  // Doubles up to this, then stays.
-#define msEphSrvRequiredMax (60 * 60 * 1000)
-static int s_msEphSrvFastRetryQt = msEphSrvRetryBase;
-static int s_msEphSrvSlowRetryQt = msEphSrvRetryCap;
-static int s_msEphSrvRequiredMaxQt = msEphSrvRequiredMax;
-static flag s_fEphSrvRequiredShownQt = fFalse;
-static flag s_fEphSrvRequiredNoExitQt = fFalse;   // The suite's give-up.
-static int s_cEphSrvRequiredTriesQt = 0;
-
-flag FEphSrvRequiredQt()
-{
-  if (!FSrcChainHead("server"))
-    return fFalse;
-  SwissEnsurePath();
-  return is.fNoEphFound;
-}
-
-// The required-server dialog and its retry ladder. Returns fTrue when a
-// WELCOME arrived; in the real binary a give-up never returns -- it
-// exits EXIT_NO_EPHEMERIS after printing everything to stderr too (a
-// launcher or console run reads that; the dialog alone is for the
-// window). The suite's s_fEphSrvRequiredNoExitQt makes a give-up return
-// fFalse instead, so tests can survive it.
-static flag FWaitRequiredSrvQt()
-{
-  QDialog *pdlg = new QDialog(gi.qwind);
-  QVBoxLayout *playout = new QVBoxLayout(pdlg);
-  QLabel *plabel = new QLabel("Connecting to cloud ephemeris ...");
-  QLabel *plabelAddr;
-  QLabel *plabelState = new QLabel(pdlg);
-  QProgressBar *pprog = new QProgressBar(pdlg);
-  QPlainTextEdit *ptext = new QPlainTextEdit(pdlg);
-  QPushButton *pcancel = new QPushButton("Cancel", pdlg);
-  QElapsedTimer timRun;
-  QTimer timUi;
-  char szAddr[cchSzMax];
-  // The dialog's own pulse, below: fWaiting is the gap between attempts,
-  // which the bar fills and the state line counts down. The first hand
-  // test read both as broken: the bar (busy range) painted as a solid
-  // strip, and the minute-long slow lane looked like the dialog had
-  // stopped. fCancel is the Cancel button or the window's X; the wait
-  // below pumps user input on purpose so both work.
-  flag fWaiting = fFalse;
-  flag fCancel = fFalse;
-  qint64 msWaitStart = 0, msWaitEnd = 0;
-  int cTry = 0, msDelayCur = 0;
-
-  pdlg->setWindowTitle(szAppName);
-  plabel->setTextFormat(Qt::PlainText);
-  {
-    QFont fontBold = plabel->font();
-    fontBold.setBold(fTrue);
-    plabel->setFont(fontBold);
-  }
-  if (SzSet(us.rgszEphParam[epServerUrl]))
-    sprintf2(S(szAddr), "%s", us.rgszEphParam[epServerUrl]);
-  else
-    sprintf2(S(szAddr), "localhost:%d (the default)", eph::kDefaultPort);
-  plabelAddr = new QLabel(QString("Server address: %1").arg(szAddr));
-  plabelAddr->setTextFormat(Qt::PlainText);
-  plabelAddr->setTextInteractionFlags(Qt::TextBrowserInteraction);
-  plabelState->setTextFormat(Qt::PlainText);
-  plabelState->setText("Retrying every second, doubling to every eight "
-    "seconds, for up to an hour.");
-  // The ladder's bar, quiet: thin, a trough slightly darker than the
-  // dialog, and a chunk that is the theme's own highlight drained of
-  // most of its saturation and brightness -- the default bright green
-  // was hard to sit in front of (hand test: "softer, gray/stone blue").
-  pprog->setFixedHeight(10);
-  pprog->setFormat(QString());   // No percent readout; the state line counts.
-  // Errors read one line each (no word wrap): a wrapped attempt was the
-  // hand test's complaint, and one line is what makes the reactive
-  // widening below exact.
-  ptext->setLineWrapMode(QPlainTextEdit::NoWrap);
-  {
-    QColor colWin = pdlg->palette().color(QPalette::Window);
-    QColor colChunk = pdlg->palette().color(QPalette::Highlight);
-    int nHue, nSat, nVal;
-    colChunk.getHsv(&nHue, &nSat, &nVal);
-    colChunk.setHsv(nHue, nSat / 4, nVal * 3 / 4);
-    pprog->setStyleSheet(QString(
-      "QProgressBar { background: %1; border: 1px solid %2; "
-      "border-radius: 2px; margin: 2px 0; } "
-      "QProgressBar::chunk { background: %3; border-radius: 2px; }")
-      .arg(colWin.darker(120).name())
-      .arg(colWin.darker(170).name())
-      .arg(colChunk.name()));
-  }
-  ptext->setReadOnly(fTrue);
-  ptext->setPlaceholderText("Connection errors appear here, per attempt.");
-  playout->addWidget(plabel);
-  playout->addWidget(plabelAddr);
-  playout->addWidget(plabelState);
-  playout->addWidget(pprog);
-  playout->addWidget(ptext, 1);
-  playout->addWidget(pcancel, 0, Qt::AlignRight);
-  // Wide enough for the expected default error on ONE line, measured
-  // with the address actually configured; the reactive widening below
-  // covers whatever the measurement misses (font substitution, a longer
-  // hostname, the scrollbar's own width). Either way the window stops
-  // at three fifths of the screen: a dialog wider than that is its own
-  // readability problem, and the scrollbar keeps the rest reachable.
-  QRect rcScreen = gi.qapp->primaryScreen()->availableGeometry();
-  int dxWideMax = rcScreen.width() * 3 / 5;
-  pdlg->resize(560, 300);
-  {
-    QFontMetrics fm(ptext->font());
-    int dxNeed = fm.horizontalAdvance(QString(
-      "Attempt 1: Couldn't reach the Ephemeris Server at ws://%1: "
-      "Connection refused.").arg(szAddr)) + 96;
-    pdlg->resize(Min(Max(pdlg->width(), dxNeed), dxWideMax), pdlg->height());
-  }
-  pdlg->setModal(fTrue);
-  pdlg->show();
-  // The pulse: a 100ms UI timer paints the countdown while the ladder's
-  // own wait runs. Timer events reach the dialog through the wait's
-  // event loop (they are not user input).
-  QObject::connect(&timUi, &QTimer::timeout, pdlg, [&]() {
-    if (fWaiting) {
-      pprog->setRange(0, 100);
-      pprog->setValue(Min((int)(100.0 * (timRun.elapsed() - msWaitStart) /
-        msDelayCur), 99));
-      plabelState->setText(QString("Next attempt in %1s").arg(
-        (int)((msWaitEnd - timRun.elapsed() + 999) / 1000)));
-    } else {
-      pprog->setRange(0, 0);
-      plabelState->setText("Contacting the Ephemeris Server ...");
-    }
-  });
-  QObject::connect(pcancel, &QPushButton::clicked, pdlg,
-    [&]() { fCancel = fTrue; });
-  // The window's X closes a QDialog through reject(); the same flag.
-  QObject::connect(pdlg, &QDialog::rejected, pdlg,
-    [&]() { fCancel = fTrue; });
-
-  timRun.start();
-  for (;;) {
-    int msDelay;
-
-    cTry++;
-    s_cEphSrvRequiredTriesQt = cTry;
-    fWaiting = fFalse;
-    // The address is re-read by EphSrvConnect() per attempt, so a fixed
-    // setting file takes effect on the next try (plan §4).
-    if (SzSet(us.rgszEphParam[epServerUrl]))
-      plabelAddr->setText(QString("Server address: %1")
-        .arg(QString::fromUtf8(us.rgszEphParam[epServerUrl])));
-    esrv.strErr.clear();
-    EphSrvConnect();
-    // Bounded past the HELLO timeout: a silent server is a refusal, and
-    // the ladder continues either way.
-    FSrvWaitQt([]() -> flag { return esrv.est != esConnecting; },
-      s_msEphSrvHelloQt + 1000);
-    if (esrv.est == esWelcomed) {
-      delete pdlg;
-      return fTrue;
-    }
-    ptext->appendPlainText(QString("Attempt %1: %2").arg(cTry).arg(
-      esrv.strErr.isEmpty() ? QString("could not connect (no error text)") :
-      esrv.strErr));
-    // If even the measured opening width does not hold the line, widen
-    // by the horizontal scrollbar's own overflow -- exact, whatever the
-    // font or hostname turned out to be -- still inside the screen cap.
-    if (ptext->horizontalScrollBar()->maximum() > 0)
-      pdlg->resize(Min(pdlg->width() +
-        ptext->horizontalScrollBar()->maximum() + 16, dxWideMax),
-        pdlg->height());
-    // The drop armed the background ladder's own retry timer; the dialog
-    // owns the pace from here.
-    if (esrv.ptim != NULL)
-      esrv.ptim->stop();
-    if (fCancel || esrv.fTerminal)
-      break;   // A refusal for good (ERROR 7 or 8) ends the ladder at once.
-    // The required ladder: one second, doubling to eight (the state
-    // line above says so), until the hour is up.
-    msDelay = s_msEphSrvFastRetryQt;
-    for (int i = 1; i < cTry && msDelay < s_msEphSrvSlowRetryQt; i++)
-      msDelay = Min(msDelay * 2, s_msEphSrvSlowRetryQt);
-    if (timRun.elapsed() + (qint64)msDelay > s_msEphSrvRequiredMaxQt)
-      break;
-    // The gap between attempts pumps ALL events, user input included,
-    // so the Cancel button and the window's X work through it: the
-    // startup cast is long over and nothing can cast behind the modal.
-    // (The attempt wait above keeps input held back, its old C1 guard;
-    // a refused connection lands in a moment, and a silent server only
-    // holds the HELLO timeout.)
-    fWaiting = fTrue;
-    msDelayCur = msDelay;
-    msWaitStart = timRun.elapsed();
-    msWaitEnd = msWaitStart + msDelay;
-    timUi.start(100);
-    {
-      QEventLoop loopGap;
-      QTimer timGap;
-      timGap.setSingleShot(fTrue);
-      QObject::connect(&timGap, &QTimer::timeout, &loopGap,
-        &QEventLoop::quit);
-      QObject::connect(pcancel, &QPushButton::clicked, &loopGap,
-        &QEventLoop::quit);
-      QObject::connect(pdlg, &QDialog::rejected, &loopGap,
-        &QEventLoop::quit);
-      timGap.start(msDelay);
-      loopGap.exec();
-    }
-    timUi.stop();
-    fWaiting = fFalse;
-  }
-
-  pdlg->close();
-  {
-    std::string strAll = ptext->toPlainText().toStdString();
-    fprintf(stderr, "%s after %d attempts and %d minutes:\n%s\n",
-      fCancel ? "Cancelled connecting to the Ephemeris Server" :
-      "Giving up on the Ephemeris Server", cTry,
-      (int)(timRun.elapsed() / 60000), strAll.c_str());
-  }
-  delete pdlg;   // Before ShutdownQt() tears its parent window down.
-  EphSrvFinalizeQt();
-  if (s_fEphSrvRequiredNoExitQt)
-    return fFalse;
-  ShutdownQt();
-  exit(EXIT_NO_EPHEMERIS);
-}
-
 
 // The startup path's hook, called from BeginQt() -- and, mid-session,
-// from a cast that found the connection down. Only the startup call can
-// show the required-server dialog: mid-session a cast fails soft and the
-// WELCOME recasts it (plan §8), the background ladder keeps working, and
-// a modal popping inside a cast would block it on itself.
+// from a cast that found the connection down. It never blocks and never
+// shows anything.
+//
+// It used to. With no local ephemeris and the server selected, the server
+// was the only source there was, so startup put up a modal "Connecting to
+// cloud ephemeris" dialog and climbed a retry ladder for an hour, and a
+// give-up printed to stderr and exited EXIT_NO_EPHEMERIS. All of that was
+// for a world where a selection was a single backend and an unreachable
+// one left nothing to cast from.
+//
+// The fallback chain ended that world (section 4.1). A selected source
+// that cannot answer is a source that did not answer: the walk offers
+// each object to the next source in the chain, and a failure is reported
+// WHERE IT HAPPENS -- once per cast, with the engine's own words -- which
+// is both more accurate than a startup modal and available to a run that
+// never had a window. A chart with no source at all still says so,
+// through the same path a missing ephemeris file has always used.
 
 void EphSrvStartupQt()
 {
   if (!FEphSrvOn() || esrv.est != esDisconnected || esrv.pws != NULL ||
     (esrv.ptim != NULL && esrv.ptim->isActive()))
     return;
-  if (FEphSrvRequiredQt() && !s_fEphSrvRequiredShownQt) {
-    s_fEphSrvRequiredShownQt = fTrue;
-    if (FWaitRequiredSrvQt())
-      return;   // Welcomed; nothing else to begin.
-  }
   EphSrvConnect();
 }
 
@@ -9222,27 +8993,6 @@ int CRecastSrvTestQt() { return s_cSrvRecastQt; }
 flag FWaitingSrvTestQt() { return s_fSrvWaitingQt; }
 void SetWelcMaxObjsSrvTestQt(uint32_t dw) { esrv.welc.maxObjs = dw; }
 void SetWelcMaxCellsSrvTestQt(uint32_t dw) { esrv.welc.maxCells = dw; }
-// Required-server mode's hooks (increment 4): the ladder's pace, whether
-// a give-up exits the process or returns, the shown latch, and how many
-// attempts the last dialog made.
-void SetRequiredEphSrvTestQt(int msFast, int msSlow, int msMax)
-{
-  s_msEphSrvFastRetryQt = msFast;
-  s_msEphSrvSlowRetryQt = msSlow;
-  s_msEphSrvRequiredMaxQt = msMax;
-}
-void SetRequiredNoExitSrvTestQt(flag f) { s_fEphSrvRequiredNoExitQt = f; }
-void ResetRequiredSrvTestQt()
-{
-  s_fEphSrvRequiredShownQt = fFalse;
-  s_fEphSrvRequiredNoExitQt = fFalse;
-  s_cEphSrvRequiredTriesQt = 0;
-  s_msEphSrvFastRetryQt = msEphSrvRetryBase;
-  s_msEphSrvSlowRetryQt = msEphSrvRetryCap;
-  s_msEphSrvRequiredMaxQt = msEphSrvRequiredMax;
-}
-flag FRequiredShownSrvTestQt() { return s_fEphSrvRequiredShownQt; }
-int CRequiredTriesSrvTestQt() { return s_cEphSrvRequiredTriesQt; }
 // Feed hand-built DATA chunks to a window of rows 2, one object, f64, held
 // under a request id nothing else uses, and say what became of it:
 // 1 done, 0 still waiting, -1 failed. The cases are the chunk defects the
