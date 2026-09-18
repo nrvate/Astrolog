@@ -744,6 +744,18 @@ static flag FSubmitProm(EPHQUERY *pq)
   for (i = 0; i < pq->cobj; i++) {
     rgpf[i] = eph::Profile();
     rgobj[i] = eph::Object();
+    // Each object names ITS OWN profile. The question carries one
+    // profile per object (q.cprof = pq->cobj), and this was never
+    // assigned -- eph::Object::profile defaults to 0, so every object in
+    // the cast was computed under OBJECT 0's profile, and the bounds
+    // check passed because 0 is always in range. A heliocentric chart
+    // computed the lunar node heliocentrically (FSwissPlanetSpec strips
+    // SEFLG_HELCTR for nodal objects, so the node's own profile is
+    // geocentric and object 0's is not), and the same for a custom
+    // object whose own flags invert the chart's, a topocentric object
+    // beside a non-topocentric one, and a star beside bodies. Wrong
+    // positions, no error, nothing said (phase 8 review, E2).
+    rgobj[i].profile = (uint8_t)i;
     rga[i].prgVal = rgval + i * kEphPromStride;
     prow = &pq->rgrow[i];
     if (pq->rgisrc[i] != ephSrcNone)
@@ -876,6 +888,17 @@ static flag FSubmitProm(EPHQUERY *pq)
     if (pq->rgisrc[i] != ephSrcNone)
       continue;
     prow = &pq->rgrow[i];
+    // A row the FIRST loop already refused stays refused. It skipped
+    // only on rgisrc, which the walk does not set until FSubmit returns
+    // -- so an object this conversion had declared unsupported was
+    // handed to the engine anyway, with a default or half-built object,
+    // and if the engine answered it the refusal was overwritten with
+    // ephErrNone and a computed row. The walk then CLAIMS that row and
+    // never asks the source behind it. Worst with a naif of 0, which is
+    // the solar-system barycentre and which the engine does serve: the
+    // South Node could come back as the SSB's position, marked answered.
+    if (prow->nErr != ephErrNone)
+      continue;
     if (fSiderealBad && rga[i].errCode == ephErrNone) {
       prow->nErr = ephErrUnsupported;
       continue;
