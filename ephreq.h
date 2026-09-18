@@ -64,6 +64,11 @@ inline int CEphRequestFromQuery(CONST EPHQUERY *pq, real rDeltaTSec,
 
   for (i = 0; i < pq->cobj; i++) {
     SWISSSPEC ss;
+    // Already answered by an earlier source in the chain: not ours to
+    // ask about (ephem.h). Sending it anyway is a wasted round trip and
+    // its answer is discarded.
+    if (pq->rgisrc[i] != ephSrcNone)
+      continue;
     eph::Profile pf;
     eph::Object obj;
     std::vector<uint8_t> rgbThis;

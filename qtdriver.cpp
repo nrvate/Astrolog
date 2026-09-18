@@ -7897,8 +7897,14 @@ static flag FSubmitTransQt(CONST EPHQUERY *pq)
   // nothing", every object stays open, and the Swiss files behind this
   // source answer them, which is where those side calls were always
   // served from.
+  // Only the objects still OPEN. ephem.h states the contract -- "FSubmit
+  // skips marked objects, so no source is asked twice" -- and ignoring it
+  // meant a chain of "swiss,server" translated, sent and waited on
+  // objects swiss had already answered, and let ONE already-answered
+  // out-of-range object refuse the whole query (review M2).
   for (i = 0; i < pq->cobj; i++)
-    if (!FBetween(pq->rgobj[i], 0, objMax-1))
+    if (pq->rgisrc[i] == ephSrcNone &&
+      !FBetween(pq->rgobj[i], 0, objMax-1))
       return fFalse;
   // One submit for the whole query, which is what a remote source needs:
   // a per-object fetch is a round trip per body (EPHEMERIS_CLIENT_PLAN.md
@@ -8711,7 +8717,21 @@ static int CObjReqSrvQt()
 
 void SrvPrefetchQt(real t, int objCentCalc, int imax, CONST EPHQUERY *pqSrv)
 {
-  real jd = JulianDayFromTime(t), jde;
+  // The QUERY's own instant when there is one, not a reconstruction of
+  // it. The transport had to hand this function Astrolog's T, so the JD
+  // went out as (jd - 2415020) / 36525 and came back as t * 36525 +
+  // 2415020 -- and that is not the identity in IEEE double once the date
+  // is far from 1900. FSrvPlanetQt() compares s_plan.jd against the
+  // caller's jd EXACTLY, so a mismatch meant the request was built,
+  // sent, waited for and cached, and then every object was rejected with
+  // "no request was made of the Ephemeris Server for this cast": the
+  // whole network cost plus an alarming and untrue modal.
+  //
+  // Most callers never saw it because their rJD came from
+  // JulianDayFromTime() itself, which makes the round trip self-inverse.
+  // RProgArc()'s does not -- it is jd + rDays -- and that missed 5% of
+  // the time at year 0 and 55% at -3000 (phase 8, third review, P2).
+  real jd = pqSrv != NULL ? pqSrv->rJD : JulianDayFromTime(t), jde;
   std::vector<eph::Profile> rgprof;    // the cast's profiles, deduplicated
   QVector<QByteArray> rgbaProf;        // each profile's bytes, to compare by
   std::vector<eph::Object> rgobjCast;  // every object, in cast order
