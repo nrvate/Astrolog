@@ -57,8 +57,12 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
+# --cells-per-sec 0 because leg 5 has to ask for a request big enough that
+# cancelling it means something, and the default budget of 10000 cells a
+# second refuses that with ERROR 6 rather than answering it. This is our
+# own loopback instance for the duration of one run.
 "$PROMD" --ephemeris "$EPHE" --bind 127.0.0.1 --port "$PORT" --threads 1 \
-  > "$WORK/daemon.log" 2>&1 &
+  --cells-per-sec 0 > "$WORK/daemon.log" 2>&1 &
 PID=$!
 
 # Wait until the daemon ANSWERS, not until it says it is listening. Those
@@ -125,6 +129,110 @@ probe "a negative NAIF id"                  2 --objs -5
 probe "the solar-system barycentre"         2 --objs 0
 probe "an instant outside coverage"         3 --objs 4 --jd2 -900000.0
 probe "helio with correction mask 7"        E11 --profile obs=helio,corr=7 --objs 4
+
+# ---- Leg 3: no silent fallback -------------------------------------------
+# The failure this guards against is the worst kind an ephemeris server can
+# have: answering from something other than what was asked for, plausibly,
+# with no error. Astrolog's own console build does exactly that when it has
+# no files -- the main planets keep computing from Moshier while every
+# esoteric body reads 0Ari00 -- so the shape is familiar here.
+#
+# At the wire it is checkable without trusting any number: DATA carries a
+# source table and every object's META names its index. A served object must
+# name a real source; a REFUSED object must name none (255), not a source it
+# did not come from.
+echo ""
+echo "Leg 3: a refused object names no source, and a served one does."
+srcOf() {
+  "$CLIENT" --host 127.0.0.1 --port "$PORT" --quiet --jd "$1" --meta \
+    --count 1 --objs "$2" 2>/dev/null | grep -m1 "^META" \
+    | sed -n 's/.*src=\([0-9]*\).*/\1/p'
+}
+sOk=$(srcOf 2451545.0 4)
+sBad=$(srcOf 2451545.0 20000433)
+if [ "$sOk" = "255" ] || [ -z "$sOk" ]; then
+  echo "  a served object names a source        MISMATCH (src=$sOk)"
+  cFail=$((cFail+1))
+else
+  echo "  a served object names a source        ok (src=$sOk)"
+fi
+if [ "$sBad" = "255" ]; then
+  echo "  a refused object names NO source      ok (src=255)"
+else
+  echo "  a refused object names NO source      MISMATCH (src=$sBad --"
+  echo "    a refusal that carries a source is a silent substitution)"
+  cFail=$((cFail+1))
+fi
+
+# ---- Leg 4: delivery equivalence -----------------------------------------
+# The same question, asked three ways, must answer with the same BYTES.
+# Delivery is explicitly outside the cache key (3.4), so a grid, a list of
+# the same instants, and a grid chunked one row at a time are the same
+# question wearing three hats. Any difference is a bug in whoever built
+# the rows -- and hexfloat makes it exact rather than "close".
+echo ""
+echo "Leg 4: delivery equivalence -- grid, list and one-row chunks agree."
+J1=2451545.0
+J2=2451546.0
+J3=2451547.0
+vals() {   # vals <args...>  -> the six columns of every row, one line each
+  "$CLIENT" --host 127.0.0.1 --port "$PORT" --quiet --out /dev/stdout \
+    --objs 4 "$@" 2>/dev/null | grep -v "^META" | cut -d" " -f6-11
+}
+gGrid=$(vals --jd "$J1" --step 86400 --count 3)
+gList=$(vals --list "$J1,$J2,$J3")
+gChunk=$(vals --jd "$J1" --step 86400 --count 3 --chunk-rows 1)
+
+nGrid=$(printf '%s\n' "$gGrid" | grep -c .)
+if [ "$nGrid" -ne 3 ]; then
+  echo "  the grid did not return three rows ($nGrid); leg 4 cannot judge"
+  cFail=$((cFail+1))
+else
+  if [ "$gGrid" = "$gList" ]; then
+    echo "  grid == list                       ok (3 rows, bit-identical)"
+  else
+    echo "  grid == list                       MISMATCH"
+    cFail=$((cFail+1))
+  fi
+  if [ "$gGrid" = "$gChunk" ]; then
+    echo "  grid == the same grid in 1-row chunks  ok"
+  else
+    echo "  grid == the same grid in 1-row chunks  MISMATCH"
+    cFail=$((cFail+1))
+  fi
+fi
+
+# ---- Leg 5: CANCEL --------------------------------------------------------
+# A cancelled request stops: the server drops unsent chunks and answers
+# ERROR 10. What matters here is that it ENDS -- a server that ignored
+# CANCEL would keep sending and the client would sit until its deadline.
+echo ""
+echo "Leg 5: CANCEL ends a request rather than being ignored."
+# Ten objects over nine thousand rows, one row to a chunk. The size is not
+# arbitrary: WELCOME's maxRows is 20000, so a single object over 50000 rows
+# is refused with ERROR 2 before any cancel can matter -- which is exactly
+# what the first version of this leg did, while printing "finished first"
+# and counting it as nothing. A leg that cannot tell a limits refusal from
+# a race reports neither.
+outC=$("$CLIENT" --host 127.0.0.1 --port "$PORT" --quiet --jd "$J1" \
+  --step 3600 --count 9000 --chunk-rows 1 --cancel-after-ms 1 \
+  --objs 4,10,199,299,499,599,699,799,899,301 --deadline-ms 20000 2>&1)
+if printf '%s' "$outC" | grep -q "ERROR 10"; then
+  echo "  a cancelled request answers ERROR 10   ok"
+  printf '    %s\n' "$(printf '%s' "$outC" | grep -m1 'cancel:')"
+elif printf '%s' "$outC" | grep -q "server ERROR"; then
+  echo "  a cancelled request answers ERROR 10   MISMATCH (refused before"
+  printf '    the cancel could matter: %s)\n' \
+    "$(printf '%s' "$outC" | grep -m1 'server ERROR' | cut -c1-70)"
+  cFail=$((cFail+1))
+elif printf '%s' "$outC" | grep -qi "answered in full"; then
+  echo "  a cancelled request answers ERROR 10   (server finished first;"
+  echo "    not judged -- the race went the other way, which is not a bug)"
+else
+  echo "  a cancelled request answers ERROR 10   MISMATCH (no ERROR 10, no"
+  echo "    refusal, no completion -- the request simply hung)"
+  cFail=$((cFail+1))
+fi
 
 if [ "$SELFTEST" = 1 ]; then
   # The gate must be able to fail. A served body cannot be code 1.
