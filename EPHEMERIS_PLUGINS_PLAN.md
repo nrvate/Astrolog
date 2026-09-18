@@ -2265,6 +2265,53 @@ the gates the phase touches.
      injection rather than by trusting the green. The symptom to grep
      for in any existing leg is a column of suspiciously exact zeros.
 
+21. **Phase 8's third review: the fixes' own damage (2026-09-18).** A
+   pass over phase 6's transport AS IT NOW STANDS, briefed to hunt what
+   the earlier fixes broke rather than to re-find what they fixed. It
+   paid, and the first finding is the argument for the whole exercise.
+
+   - **P1: D2's fix broke fixed stars in sidereal charts.** D2 made the
+     server compute a star with the chart's real settings; the CONSUMER
+     half still applied `FSwissPlanet()`'s body convention to the answer,
+     and a star row carries no `is.rSid` because the star callers apply
+     the zodiac themselves. Every fixed star landed about 24.7 degrees
+     out, `nErr` clear, so the chain claimed the row. Tropical charts
+     cancel it exactly, which is why nothing saw it. Both other sources
+     already kept the contract, `ephprom.cpp` with a comment naming this
+     exact failure.
+
+     **It has no net.** One was written and withdrawn: its first version
+     set `us.fStar` alone and PASSED with the fix sabotaged, because
+     `SwissComputeStars()` only asks for stars whose `ignore[]` is clear
+     -- an empty query, exercising nothing. Unrestricting them then
+     showed the suite's loopback daemon has no star catalogue on its own
+     path. **A leg needs that daemon started with the catalogue; that is
+     the outstanding piece here.**
+
+   - **P2: a lossy round trip made a far-dated cast pay for an answer and
+     then reject it.** The instant went out as centuries and came back,
+     and the plan's instant is compared exactly. Measured over the
+     expression `RProgArc()` builds: 0.00% at 1990 and 1500, 4.93% at
+     year 0, 52.94% at year -3000. When it missed, the request was built,
+     sent, waited for and cached, then every object was refused with a
+     modal saying no request had been made.
+
+   - **M2: the transport ignored `rgisrc`**, contrary to ephem.h's stated
+     contract, so a `swiss,server` chain re-sent objects swiss had
+     already answered and one already-answered out-of-range object could
+     refuse the whole query.
+
+   - **M1, still open and cosmetic:** a per-object failure message names
+     `szObjName[obj]` for a star whose object slot holds its CATALOGUE
+     NUMBER, so `-XU` can report "could not compute Moon" for star #1.
+     Positions are unaffected -- the same index writes and reads.
+
+   - **And the sanitizer found one more, in a NET.** AddressSanitizer
+     over the changed groups caught a stack overflow in the E1 test
+     itself: it borrowed a five-entry argv array for a sequence needing
+     six. A regression test can be the regression. UBSan over the same
+     ground is clean.
+
 20. **Phase 8's second review, and the gate that could not see it
    (2026-09-18).** A second independent pass over phases 2-5 -- ground
    the first review was told to skip -- found four more defects. With the
