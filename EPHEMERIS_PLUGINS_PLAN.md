@@ -16,24 +16,27 @@ version 3, and this section is the design authority behind it.
 - **HANDOFF BLOCK (2026-09-17 ~21:00, for the next agent).** The live state,
   all of it:
   - **ephv4 head `b89475b`** (dates corrected; everything happened the 17th).
-    Phase 3 is DONE and merged. Phase 7 is DONE on branch **`eph7prom` at
-    `95fae2d`** (worktree `/nvm/work/eph7prom`) but its **merge is HELD**:
-    two oracle legs (Jupiter's node same-subset 10.4750", the light-time
-    convention leg 10.4834") fail against Prometheia's CURRENT engine —
-    proven not ours by isolation (their pre-fix code fails identically;
-    Moon-node legs unchanged); their `28661cb`/`405cb94` moved
-    planetary-orbit-point answers by ~the aberration term. The question is
-    asked in the LAST section of **`/nvm/work/ephv4-mail-to-astrolog.md`**
-    (scratch, shared channel with the peer session). When they answer:
-    intended → re-pin those two legs' tolerance with their engine sha in
-    the comment; not intended → they fix. Then **ff-merge `eph7prom` into
-    `ephv4`**, and at that merge: **renumber the duplicated work-log items**
-    (the phase-3 and phase-7 agents both appended items numbered 6-8 on
-    their branches) and consider a **PROMETHEIA stamp file** in the
-    makefiles (the pkg-config flag does not invalidate built objects; a
-    plugin-less `ephem.o` links silently beside a plugin-built
-    `ephprom.o` and the registry row is absent — flipping the flag today
-    requires `rm obj-*/[ephem,ephprom,qttest].o`).
+    Phase 3 is DONE and merged. **Phase 7 is MERGED (2026-09-17 ~21:15):
+    the peer answered in the mail file** — the orbit-point corrections are
+    intended, settled jointly for v4, recorded in their engine commit
+    `cf889eb` ("Nodes and apsides answer in the frame they are compared
+    against") and docs/ORBIT-POINTS.md; their two smaller items they fixed
+    themselves (`fa4e0b3`: the stale ENGINE.md sentence and the
+    `prometheia.pc` prefix — the build-tree .pc now works bare, validated
+    live by our rebuild; our scratch .pc is retired). The merge did the
+    checklist: both Jupiter-node legs **re-pinned as §3.5a courtesy tier**
+    (`2dee040`: measured 10.4750"/10.4834" masks 6/7 against their engine
+    at `df0ae42`, tolerance 11", the two masks 0.008" apart); the
+    **PROMETHEIA stamp** landed (`9aa3232`: each opting-in makefile stamps
+    its object dir with the plugin flags; a flip removes
+    ephprom/ephem/qttest objects before make considers them — falsified
+    both directions); the **work-log items renumbered** (`ed6e4f2`:
+    phase 7's are 10-12, phase 3 owns 6-9, newest-first order restored).
+    Gates on the merged tree: default `make check` all clear (suite
+    5834/0), plugin-on Prometheia group 143/0, ephsrv/ byte-identical
+    throughout. Branch `eph7prom` was rebased onto ephv4 for the merge
+    and force-pushed; its worktree can be removed when convenient.
+    Nothing is owed the peer until phase 6's live traffic check.
   - **Phase 7 review findings (main agent):** the plugin had mapped Swiss
     TRUEPOS → `kCorrLightTime`; the protocol's mask **0** is TRUEPOS
     (`ephswiss.h`'s own mapping) — fixed at both conversion sites in
