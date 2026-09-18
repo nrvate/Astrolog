@@ -21389,6 +21389,37 @@ static void TestEphemDialogQt()
     });
   }
 
+  // Picking a source KEEPS THE FALLBACK TAIL (phase 8 review, E3). The
+  // composer stopped its tail pointer ON the comma, so the token scan
+  // that follows could not advance and broke before appending anything:
+  // a user with "server,swiss,moshier" who clicked another row to look
+  // at it and pressed OK was left with that source alone, its fallbacks
+  // silently gone. Asked through the dialog rather than the composer, so
+  // it covers what a user actually does.
+  {
+    EphSourceSet("server,swiss,moshier");
+    DriveModalQt(ShowEphemDialogQt, [&](QWidget *pw) {
+      QListWidget *plist = pw->findChild<QListWidget *>("dlEp_src");
+      QLineEdit *peChain = pw->findChild<QLineEdit *>("deEp_chain");
+      int iJpl = IEphSrcFromKey("jpl"), i, iRow = -1;
+
+      if (plist == NULL || peChain == NULL || iJpl < 0) { pw->close(); return; }
+      for (i = 0; i < plist->count(); i++)
+        if (plist->item(i)->data(Qt::UserRole).toInt() == iJpl)
+          iRow = i;
+      if (iRow >= 0)
+        plist->setCurrentRow(iRow);
+      // The picked key, then the old chain's TAIL -- the old head is
+      // replaced, not kept, which is this composer's stated contract.
+      // Before the fix the tail went too and this read just "jpl".
+      Check(peChain->text() == QString("jpl,swiss,moshier"),
+        "picking a source keeps the fallbacks behind it (\"%s\")",
+        peChain->text().toLocal8Bit().constData());
+      pw->close();
+    });
+    EphSourceSet(szChainSav);
+  }
+
   // Picking a source in the list re-makes the parameter rows (phase 8
   // review, D5). They were built once at open and never again, so with
   // the shipped default -- "swiss", which declares NO parameters -- every

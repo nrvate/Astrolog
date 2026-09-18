@@ -2537,6 +2537,14 @@ static void SetEphemChainW(HWND hdlg, CONST char *szKey)
   GetEdit(deEp_chain, szT);
   for (pchTail = szT; *pchTail && *pchTail != ','; pchTail++)
     ;
+  // PAST the comma, not at it. Standing on the separator, the token scan
+  // below cannot advance -- its first pch equals its first pchTok, so it
+  // breaks before appending anything and the whole fallback tail is
+  // dropped. A user with "server,swiss,moshier" who clicked another row
+  // to look at it and pressed OK was left with that source alone, its
+  // fallbacks gone, and nothing said so (phase 8 review, E3).
+  if (*pchTail == ',')
+    pchTail++;
   sprintf2(S(sz), "%s", szKey);
   pchDst = sz + CchSz(sz);
   for (pchTok = pchTail; ; pchTok = pch + 1) {
