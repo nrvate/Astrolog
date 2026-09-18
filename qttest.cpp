@@ -20482,7 +20482,7 @@ static void TestEphSrvLiveQt()
   QByteArray baLog, strUrlEnv;
   EPHSNAPSHOT snLocal, snSrv;
   char sz[cchSzMax], szDiff[cchSzMax];
-  int port, iScen, cDiff, cWarn, cReq;
+  int port, iScen, cDiff, cWarn, cReq, iU;
 
   Group("Ephemeris server, live parity");
   SetNoPopupQt(fTrue);
@@ -20622,12 +20622,14 @@ static void TestEphSrvLiveQt()
   SetBackoffEphSrvTestQt(100);   // Hurry the ladder for the drop below.
 
   // The scenarios. Each: settings, local cast, server cast, compare.
-  for (iScen = 0; iScen < 10; iScen++) {
+  for (iScen = 0; iScen < 11; iScen++) {
     CONST char *szScen;
     real rTol = 0.0;
     us.fSidereal = fFalse; us.fSidereal2 = fFalse; us.objCenter = oEar;
     us.fTopoPos = fFalse; us.fProgress = fFalse;
     us.fTrueNode = fFalse; ignore[custLo] = fTrue;
+    for (iU = uranLo + 1; iU <= uranHi; iU++)
+      ignore[iU] = fTrue;
     AdjustRestrictions();
     OraclePinUtQt(1990, 6, 15, 12.0);
     ciCore.lon = 122.3; ciCore.lat = 47.6;
@@ -20668,6 +20670,24 @@ static void TestEphSrvLiveQt()
       // progressed instant.
       us.fProgress = fTrue;
       SetProgressTarget(6, 15, 2020, 12.0);
+      break;
+    case 10: szScen = "the eight Hamburg points (kind 3 on the wire)";
+      // The Uranians, which no other scenario casts -- so until now
+      // nothing here had ever put an object of KIND 3 on the wire, and the
+      // claim that Astrolog asks a server for them rather than computing
+      // them locally was a code trace and not a measurement. The
+      // Prometheia project asked for this one by name: their maintainer is
+      // a Uranian astrologer and it is the path that matters to them.
+      //
+      // FSwissPlanetSpec sends obj - uranLo + SE_FICT_OFFSET_1, and
+      // ObjectFromSwiss turns SE_FICT_OFFSET.. into kObjHypothetical with
+      // the token. The mismatched constants are load-bearing rather than
+      // an off-by-one: oVul IS uranLo and an earlier branch takes Vulcan,
+      // so the first object to reach the Uranian branch is Cupido at
+      // obj - uranLo == 1, landing on SE_FICT_OFFSET exactly.
+      for (iU = uranLo + 1; iU <= uranHi; iU++)
+        ignore[iU] = fFalse;
+      AdjustRestrictions();
       break;
     case 8: szScen = "sidereal on the solar system plane (a second sid mode)";
       // Fagan-Bradley is sidMode 0, the library's default: a server that
