@@ -359,6 +359,41 @@ different body (§4.2's principle, reached separately).
 want of "an argument from the physics". The argument is above and the
 measurement is reproducible: `tools/sidplane-origin.py`.
 
+**STILL OPEN: Astrolog's own local Swiss path.** The server computes A.8's
+planes itself; `calc.cpp` still delegates them to Swiss, so the *application*
+carries the old plane-2 origin while the *server* has the new one — about
+31.5″ apart on a `-Ys` chart. The suite's "sidereal on the solar system plane"
+leg measures that gap rather than hiding it, and requires it to be an origin
+shift and nothing else, so it cannot drift unnoticed. `ephsrv/ephsidplane.h`
+exists so the fix is the same rotation rather than a second copy of it.
+
+**What makes it more than a one-line change, found by reading before writing
+it.** Astrolog's sidereal handling is not in one place, and the pieces
+interact:
+
+- `space[]` holds **tropical rectangular** coordinates; `planet[]` is the
+  longitude with `is.rSid` added by `ProcessPlanet()`.
+- `ProcessPlanet(ind, aber)` computes `ang - aber + is.rSid`, so passing
+  `aber = is.rSid` **cancels** the addition. Several call sites use that idiom
+  to mean "already applied, do not apply again", and a reader who does not
+  notice will double-count or zero out the zodiac.
+- The re-centring paths (`fMoonMove`, the star-magnitude distances) re-derive
+  a longitude from `space[]` *after* the fact, so they apply the zodiac a
+  second time through that same idiom.
+- **Houses are Astrolog's own arithmetic** and take `is.rSid`, a flat ayanamsa
+  subtraction. They are not served by any ephemeris source, which is why the
+  suite leg finds the cusps bit-identical between server and local and only
+  the bodies moved. Whether a fixed plane should move the cusps at all is a
+  separate question this entry does not answer.
+- `is.rSid` also carries the user offsets `us.rZodiacOffset` and
+  `us.rZodiacOffsetAll`, which have nothing to do with the plane.
+- The Matrix backend sets `is.rSid` of its own accord (`matrix.cpp`), so the
+  non-Swiss path has to keep working unchanged.
+
+None of that makes the change hard, but it makes it a change to five places
+that must agree, in code every chart runs, for an option spelt `-Ys`. It is
+recorded here rather than attempted at the end of a long session.
+
 **A second defect, fixed by the same change.** Sweeping all 47 registry zodiac
 tokens on planes 0, 1 and 2: **16 returned the plane-0 answer bit-identically
 for both `sidplane=1` and `sidplane=2`**, with no error — `b1950`, `j1900`, `j2000`,
