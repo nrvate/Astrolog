@@ -241,8 +241,26 @@ version 3, and this section is the design authority behind it.
   correctionMask}`; `0x0004` keeps its encoding and becomes the
   INTERSECTION over kinds rather than the union, because it is what a
   client that has never heard of `0x0014` will trust, and advertised is
-  promised. It costs this project nothing today: our `0x0004` under that
-  reading is byte-identical to what we already advertise.
+  promised.
+
+  **Revision 2 (2026-09-18) after Prometheia's review**, which found four
+  things missing. The one that would have cost an implementation round:
+  **where ERROR 11 is decided.** The mask sits on the PROFILE and the kind
+  sits on the objects referencing it, so a profile can no longer be judged
+  alone -- it is now checked against every (observer, kind) pair of the
+  objects and series referencing it, refused whole, with an unreferenced
+  profile checked against `0x0004`. Also: an unnamed pair falls back to
+  `0x0004`, so a server lists only exceptions; "serves" then needs no
+  definition; and the contradiction case they asked for a rule about was
+  instead made **unrepresentable** -- `0x0014` can only ADD, so the two
+  tags cannot disagree.
+
+  **Neither implementer's existing WELCOME changes.** Prometheia's engine
+  is uniform across kinds, so they send no `0x0014` at all; ours under the
+  intersection reading is byte-identical to today, and only the
+  heliocentric-orbit-point row needs the new tag. A capability extension
+  that is free for the implementation which does not need it is the test
+  of whether the design is right.
 
 - **A NAMED DROP IS OPEN: the kind-4 elements rule**
   (`/nvm/work/ephv4-drop-elements/DROP.md`, cut 2026-09-18 at `176e333`).
