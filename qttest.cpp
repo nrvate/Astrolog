@@ -513,6 +513,7 @@ static CONST DLGTEST rgdlgQt[] = {
     {ShowProgressDialogQt,         "Progressions"},
     {ShowChartSettingsDialogQt,    "Chart Settings"},
     {ShowCalcDialogQt,             "Calculation Settings"},
+    {ShowEphemDialogQt,            "Ephemeris Settings"},
     {ShowDisplayDialogQt,          "Display Settings"},
     {ShowCommandLineDialogQt,      "Enter Command Line"},
     {ShowAboutDialogQt,            "About Astrolog"} };
@@ -2966,6 +2967,7 @@ static CONST PARITYITEM rgparityQt[] = {
   {"Setting",     "Include D&warfs",                             fFalse},
   {"Setting",     "Include &Fixed Stars",                        fFalse},
   {"Setting",     "Calculation Settin&gs...",                    fFalse},
+  {"Setting",     "E&phemeris Settings...",                      fFalse},
   {"Setting",     "&Display Settings...",                        fFalse},
   {"Chart",       "Standard Radi&x",                             fFalse},
   {"Chart",       "House &Wheel",                                fFalse},
@@ -10512,40 +10514,6 @@ static void TestObjSelParseQt()
 
 
 
-// Capture the ephemeris dropdown's contents from the Calculation Settings
-// dialog, then close it. The dialog blocks in exec(), so as everywhere
-// else here the inspection has to be queued before it opens.
-static QString StrEphemListQt(QString *pstrWin, QString *pstrEdit = NULL)
-{
-  QString strCombo, strWin, strEdit;
-
-  DriveModalQt(ShowCalcDialogQt, [&strCombo, &strWin, &strEdit](QWidget *pw) {
-    strWin = pw->windowTitle();
-    QList<QComboBox *> rg = pw->findChildren<QComboBox *>();
-    for (int i = 0; i < rg.size(); i++) {
-      QStringList items;
-      for (int j = 0; j < rg[i]->count(); j++)
-        items << rg[i]->itemText(j);
-      if (items.join(",").contains("Swiss")) {
-        strCombo = items.join(" | ");
-        strEdit = rg[i]->currentText();
-        break;
-      }
-    }
-    pw->close();
-  });
-  if (pstrWin != NULL)
-    *pstrWin = strWin;
-  if (pstrEdit != NULL)
-    *pstrEdit = strEdit;
-  return strCombo;
-}
-
-
-// The time as the Set Chart Info dialog puts it in its own field, which
-// is a different question from what SzTim() returns: the field is what
-// the user reads.
-
 static QString StrChartInfoTimeQt()
 {
   QString strTim;
@@ -11028,63 +10996,6 @@ static void TestChartListFilterQt()
   pinList.Restore();
   seedList.Verify("chart-list");
   printf("  the chart list honours its AstroExpression filter\n");
-}
-
-
-// Windows leaves an ephemeris out of this list when the user has switched
-// it off; see plan item 41. The maintainer's own settings file sets both
-// restrictions, so this is the list they actually get.
-static void TestEphemerisListQt()
-{
-  flag fNetSav = us.fNoNetwork, fOldSav = us.fNoOldCalc;
-  QString str, strWin;
-
-  Group("Ephemeris list");
-
-  us.fNoNetwork = us.fNoOldCalc = fTrue;
-  str = StrEphemListQt(&strWin);
-  Check(!str.isEmpty(), "the ephemeris list was found at all (modal seen: \"%s\")",
-    strWin.toLocal8Bit().constData());
-  Check(!str.contains("Web"),
-    "no web query offered when web queries are off: %s",
-    str.toLocal8Bit().constData());
-  Check(!str.contains("Matrix"),
-    "no Matrix offered when it is off: %s",
-    str.toLocal8Bit().constData());
-  Check(str.contains("Swiss"), "Swiss Ephemeris is still offered");
-
-  us.fNoNetwork = us.fNoOldCalc = fFalse;
-  str = StrEphemListQt(NULL);
-  Check(str.contains("Web"), "the web query is offered when allowed");
-  Check(str.contains("Matrix"), "Matrix is offered when allowed");
-  Check(!str.contains("Placalc"),
-    "Placalc is never offered: the backend was removed on 2026-09-04");
-
-  // The dialog shows the method in use. Horizons is nSwissEph 3, and
-  // indexing szEphem[] by that number showed row 3 -- "Matrix Formulas"
-  // -- so OK switched a Horizons user to Matrix (EPHEMERIS_REVIEW.md C15).
-  {
-    flag fEphSav = us.fEphemFiles, fMatSav = us.fMatrixPla;
-    int nSwSav = us.nSwissEph;
-    QString strEdit;
-    us.fEphemFiles = fTrue;
-    us.nSwissEph = 3;
-    StrEphemListQt(NULL, &strEdit);
-    Check(strEdit == QString(szEphem[cmJPLWeb]), "a Horizons selection "
-      "shows as Horizons (\"%s\")", strEdit.toLocal8Bit().constData());
-    us.nSwissEph = 5;
-    StrEphemListQt(NULL, &strEdit);
-    Check(strEdit == QString(szEphem[cmEphSrv]), "the Ephemeris Server "
-      "shows as itself (\"%s\")", strEdit.toLocal8Bit().constData());
-    us.fEphemFiles = fFalse; us.fMatrixPla = fTrue;
-    StrEphemListQt(NULL, &strEdit);
-    Check(strEdit == QString(szEphem[cmMatrix]), "and Matrix as Matrix "
-      "(\"%s\")", strEdit.toLocal8Bit().constData());
-    us.fEphemFiles = fEphSav; us.fMatrixPla = fMatSav; us.nSwissEph = nSwSav;
-  }
-
-  us.fNoNetwork = fNetSav; us.fNoOldCalc = fOldSav;
-  printf("  the ephemeris list omits what the user switched off\n");
 }
 
 
@@ -19992,7 +19903,6 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"settings-strings",     TestSettingsStringsQt},
   {"registry",             TestRegistryQt},
   {"relationship",         TestRelationshipModeQt},
-  {"ephemeris-list",       TestEphemerisListQt},
   {"ephem-server",         TestEphSrvQt},
   {"ephem-server-live",    TestEphSrvLiveQt},
   {"ephem-registry",       TestEphemRegistryQt},

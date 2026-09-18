@@ -3702,6 +3702,9 @@ static void BuildSettingMenu(QMainWindow *pwind)
   QAction *paCalc = pmenu->addAction("Calculation Settin&gs...");
   ConnectMenuQt(paCalc, pwind,
     []() { ShowCalcDialogQt(); });
+  QAction *paEphem = pmenu->addAction("E&phemeris Settings...");
+  ConnectMenuQt(paEphem, pwind,
+    []() { ShowEphemDialogQt(); });
   QAction *paDisplay = pmenu->addAction("&Display Settings...");
   ConnectMenuQt(paDisplay, pwind,
     []() { ShowDisplayDialogQt(); });

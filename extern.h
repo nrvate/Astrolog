@@ -1300,6 +1300,7 @@ extern flag API DlgRestrict P((HWND, uint, WORD, LONG));
 extern flag API DlgStar     P((HWND, uint, WORD, LONG));
 extern flag API DlgMoons    P((HWND, uint, WORD, LONG));
 extern flag API DlgCalc     P((HWND, uint, WORD, LONG));
+extern flag API DlgEphem    P((HWND, uint, WORD, LONG));
 extern flag API DlgDisplay  P((HWND, uint, WORD, LONG));
 extern flag API DlgTransit  P((HWND, uint, WORD, LONG));
 extern flag API DlgProgress P((HWND, uint, WORD, LONG));
