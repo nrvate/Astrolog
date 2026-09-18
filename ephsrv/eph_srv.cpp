@@ -1194,13 +1194,50 @@ static void ComputeObjectRows(swe_ctx *ctx, const eph::Request &req, uint32_t iO
       continue;
     }
     if (c.fOpposite) {
-      // The descending node of a named node body: the point opposite.
+      // The descending node of a named node body: the point opposite --
+      // in DIRECTION only.
+      //
+      // Both nodes lie on the line where the orbital plane meets the
+      // ecliptic, and that line passes through the geocentre, so the
+      // descending node's direction is exactly the ascending one's plus
+      // 180 degrees. Its DISTANCE is not: the two ends of that line sit
+      // at different radii on the osculating ellipse, p/(1 +/- e cos w).
+      // Flipping the vector kept the ascending node's radius, which at
+      // J2000 answered 365,838 km where the descending node is at
+      // 396,065 -- 30,227 km, eight per cent, wrong.
+      //
+      // Found by the Ephemeris Prometheia cross-test, which noticed our
+      // two true nodes reporting the SAME distance, and is the same
+      // family as the mean node's constant (477ad49). swe_nod_aps
+      // computes both nodes properly, so its descending radius is taken
+      // here while the direction stays the named body's -- which is
+      // exact, and which nod_aps's own ascending node differs from by
+      // 0.06 arcsec, noise between two Swiss computations of one point.
+      double xnA[6], xdA[6], xpA[6], xaA[6], rDesc = 0.0, rdotDesc = 0.0;
+      char serrA[AS_MAXCH];
+      if (swe_nod_aps_r(ctx, jdEt(), SE_MOON, c.iflag, SE_NODBIT_OSCU,
+            xnA, xdA, xpA, xaA, serrA) >= 0) {
+        rDesc = xdA[2];
+        rdotDesc = xdA[5];
+      }
       if (fRect) {
-        for (int k = 0; k < 6; k++) xx[k] = -xx[k];
+        double rAsc = sqrt(xx[0]*xx[0] + xx[1]*xx[1] + xx[2]*xx[2]);
+        double f = (rDesc > 0.0 && rAsc > 0.0) ? rDesc / rAsc : 1.0;
+        // The direction is exact, so scaling the position to the right
+        // radius is exact too. The velocity is scaled with it, which is
+        // right for its transverse part and leaves the radial part
+        // uncorrected; a client wanting the node's range rate should ask
+        // in spherical form, where it is carried exactly.
+        for (int k = 0; k < 3; k++) xx[k] = -xx[k] * f;
+        for (int k = 3; k < 6; k++) xx[k] = -xx[k] * f;
       } else {
         xx[0] = swe_degnorm(xx[0] + 180.0);
         xx[1] = -xx[1];
         xx[4] = -xx[4];
+        if (rDesc > 0.0) {
+          xx[2] = rDesc;
+          xx[5] = rdotDesc;
+        }
       }
     }
     if (!pf.speeds) xx[3] = xx[4] = xx[5] = 0.0;
