@@ -97,6 +97,24 @@ done
 step "build: console and Qt"     make -j4
 step "build: the test binary"    make qt-test -j4
 
+# And astrolog-ephd, WHERE THE THREAD-SAFE FORK IS THERE TO BUILD IT
+# AGAINST. The suite's ephem-server-live group launches the real binary
+# and compares its answers byte for byte against the local Swiss cast, and
+# it decides whether to run by asking whether that binary EXISTS. Existing
+# is not the same as being current, and a stale one is worse than a
+# missing one: a missing one skips with a printed reason and the suite
+# stays green, while a stale one runs. On 2026-09-18 a protocol-3 binary
+# five weeks old sat in this tree and failed 37 assertions across
+# animation, reconnection, the window cache and wss, none of which named
+# the real cause -- and the other way round is worse still, since a stale
+# binary that still answers grades new code against old behaviour and
+# passes. "make" is the check: it is a no-op when the binary is current.
+if [ -f /shares/swisseph/libswe.a ] || [ -d /shares/swisseph ]; then
+  step "build: astrolog-ephd"    make ephsrv -j4
+else
+  echo "   skipped: build: astrolog-ephd (no /shares/swisseph to link)"
+fi
+
 # The compiler's warnings, for every source file the three Linux builds
 # compile. The full audit is five builds and 70 s, so it is not here -- and
 # that is how two commits in a row (028b4ba, dcd939b) landed six
