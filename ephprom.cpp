@@ -728,7 +728,7 @@ static flag FSubmitProm(EPHQUERY *pq)
         rgpf[i].observer = eph::kObsGeo;
       else
         rgpf[i].observer = us.fBarycenter ? eph::kObsBary : eph::kObsHelio;
-      rgpf[i].corrections = us.fTruePos ? eph::kCorrLightTime : eph::kCorrMask;
+      rgpf[i].corrections = us.fTruePos ? 0 : eph::kCorrMask;
       rgpf[i].frame = us.fNoNutation ? eph::kFrameMeanOfDate :
         eph::kFrameTrueOfDate;
       if (us.fSidereal) {
@@ -811,8 +811,10 @@ static flag FSubmitProm(EPHQUERY *pq)
       rgpf[i].siteLatDeg = ciCore.lat;
       rgpf[i].siteHeightM = us.elvDef;
     }
-    rgpf[i].corrections = (ss.iflag & SEFLG_TRUEPOS) ? eph::kCorrLightTime :
-      eph::kCorrMask;
+    // Swiss's TRUEPOS is no corrections at all -- the protocol's mask 0
+    // (ephswiss.h's own mapping, case 0 = SEFLG_TRUEPOS), not light time
+    // alone, which is the astrometric quantity Swiss never computes there.
+    rgpf[i].corrections = (ss.iflag & SEFLG_TRUEPOS) ? 0 : eph::kCorrMask;
     rgpf[i].frame = (ss.iflag & SEFLG_NONUT) ? eph::kFrameMeanOfDate :
       eph::kFrameTrueOfDate;
     rgpf[i].speeds = (ss.iflag & SEFLG_SPEED) != 0;

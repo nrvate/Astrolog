@@ -19271,6 +19271,23 @@ static void TestPrometheiaQt()
     pf.corrections = eph::kCorrDeflection | eph::kCorrAberration;
     Check(FEphPromOptions(&pf, &opts) && !opts.light_time &&
       opts.deflection && opts.aberration, "the correction bits carry pairs");
+    pf.corrections = 0;
+    Check(FEphPromOptions(&pf, &opts) && !opts.light_time &&
+      !opts.deflection && !opts.aberration,
+      "mask 0 is true positions: no term at all, not light time alone");
+    // And the conversion from the program's own setting arrives at that
+    // mask: FSwissPlanetSpec under us.fTruePos carries SEFLG_TRUEPOS, and
+    // the plugin must turn it into corrections 0 -- Swiss's TRUEPOS is no
+    // corrections, the astrometric quantity it never computes there.
+    {
+      SWISSSPEC ss;
+      flag fSav = us.fTruePos;
+
+      us.fTruePos = fTrue;
+      Check(FSwissPlanetSpec(oJup, oEar, &ss) && (ss.iflag & SEFLG_TRUEPOS),
+        "the spec carries TRUEPOS when the setting is on");
+      us.fTruePos = fSav;
+    }
     pf.observer = eph::kObsTopo;
     pf.siteLonEastDeg = -122.3; pf.siteLatDeg = 47.6; pf.siteHeightM = 90.0;
     Check(FEphPromOptions(&pf, &opts) &&
