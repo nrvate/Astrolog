@@ -20761,10 +20761,72 @@ static void TestEphSrvLiveQt()
     Check(NCastWarnSrvTestQt() == cWarn,
       "%s: the server cast raised no warning (\"%.100s\")", szScen,
       SzWarnSrvTestQt());
+    if (iScen == 8) {
+      // 3.5a's fixed sidereal planes are the SERVER's own arithmetic since
+      // registry 4.1, and the local Swiss path still delegates to Swiss --
+      // so on the solar-system plane the two DIVERGE on purpose, by the
+      // zero point Swiss puts in the wrong place. Bit-identity is the
+      // wrong assertion here until the local path lands.
+      //
+      // What replaces it is stronger than "allow a difference", which
+      // would be carving an exception around the very thing this leg
+      // watches. An origin shift and nothing else has a signature: every
+      // LATITUDE unchanged, and every LONGITUDE moved by the SAME angle.
+      // So require exactly that, and require the angle to be the one the
+      // registry documents for Fagan/Bradley. Anything that moved a
+      // latitude, or moved two objects by different amounts, is not an
+      // origin shift and fails.
+      // Partitioned by whether the object MOVED rather than by index range.
+      // The two sets are meaningful in themselves: house cusps, the angles
+      // and the points derived from them are Astrolog's own arithmetic and
+      // no ephemeris source touches them, so they must be bit-identical; the
+      // bodies come from the source and must all move together. Keying this
+      // on object numbers instead was wrong twice in a row -- the cusps are
+      // not the only locally computed points.
+      int iObjT, cMoved = 0, cStill = 0;
+      real rOff = 0.0, rSpread = 0.0;
+      for (iObjT = 0; iObjT <= cObj; iObjT++) {
+        if (snLocal.rgobj[iObjT] == 0.0 && snSrv.rgobj[iObjT] == 0.0)
+          continue;
+        real rDL = (snSrv.rgobj[iObjT] - snLocal.rgobj[iObjT]) * 3600.0;
+        if (rDL > 180.0 * 3600.0) rDL -= 360.0 * 3600.0;
+        if (rDL < -180.0 * 3600.0) rDL += 360.0 * 3600.0;
+        if (RAbs(rDL) < 0.001) {
+          Check(snLocal.rgobj[iObjT] == snSrv.rgobj[iObjT],
+            "%s: object %d is either served and moved, or not served and "
+            "BIT-identical -- not almost identical", szScen, iObjT);
+          cStill++;
+          continue;
+        }
+        real rD2 = RAbs(snLocal.rgalt[iObjT] - snSrv.rgalt[iObjT]) * 3600.0;
+        Check(rD2 < 0.01, "%s: latitude unmoved for object %d (%.5f\"), "
+          "which an origin shift cannot do", szScen, iObjT, rD2);
+        if (cMoved == 0) rOff = rDL;
+        else if (RAbs(rDL - rOff) > rSpread) rSpread = RAbs(rDL - rOff);
+        cMoved++;
+      }
+      Check(cMoved > 8, "%s: enough served bodies to characterise the shift "
+        "(%d moved, %d unmoved)", szScen, cMoved, cStill);
+      Check(cStill > 8, "%s: the locally computed points did NOT move (%d)",
+        szScen, cStill);
+      Check(rSpread < 0.05, "%s: every served body moved by the SAME angle, "
+        "which is what an origin shift means (spread %.5f\" over %d)",
+        szScen, rSpread, cMoved);
+      // 28.196", not the 31.469" registry 4.1 quotes. The registry's figure is
+      // measured against PLANE 0, whose own sidereal origin is displaced by
+      // the nutation in longitude when the profile's frame carries nutation
+      // (-13.93" at J2000); this is the raw correction between the old
+      // delegated answer and the new one, with no such reference in it. The
+      // two reconcile: 31.4685 - 3.2730, the post-fix plane-0 residual.
+      Check(RAbs(RAbs(rOff) - 28.2) < 1.0, "%s: and by the angle this fix "
+        "actually applies for Fagan/Bradley, about 28.2\" (measured %.4f\")",
+        szScen, rOff);
+    } else {
     cDiff = CDiffEphQt(&snLocal, &snSrv, rTol, S(szDiff));
     Check(cDiff == 0, "%s: server cast %s the local one "
       "(%d objects differ; first: %s)", szScen,
       rTol == 0.0 ? "bit-identical to" : "agrees with", cDiff, szDiff);
+    }
     Check(planet[oSun] != 0.0 || planet[oMoo] != 0.0,
       "%s: the cast computed something at all", szScen);
     if (iScen == 6) {

@@ -266,10 +266,33 @@ Listed because they are real and measured, but with no outside reference
 saying who is right. They are NOT §1 entries: this fork is not claiming to
 be more correct, only different.
 
-### 4.1 The sidereal zero point on the invariable plane — RESOLVED 2026-09-18
+### 4.1 The sidereal zero point on the invariable plane — FIXED 2026-09-18
 
-**Decided by measurement; implementation pending the §3.5a drop's approval, on
-which it moves to §1.**
+**Fixed.** The drop was approved on both sides and this server now computes
+A.8's planes 1 and 2 itself rather than delegating them to a Swiss sidereal
+mode. Prometheia confirmed their construction is the same: ICRF → the mean
+ecliptic and equinox of t0 → rot3(A0), plane 1 that frame, plane 2 its
+projection onto the invariable plane.
+
+**The correction actually applied is 28.196″ for Fagan/Bradley, not the
+31.469″ quoted below**, and the difference is worth keeping. Every figure in
+this entry was measured against **plane 0**, whose own sidereal origin is
+displaced by the nutation in longitude when the profile's frame carries
+nutation — −13.9315″ at J2000 against a measured residual of +13.9359″. So
+plane 0 is not a fixed reference and never was. The numbers reconcile exactly:
+31.4685 − 3.2730 (the post-fix plane-0 residual) = 28.1955, which is what the
+suite measures as the shift between the old delegated answer and the new one.
+
+**Two defects were found by the fix's own nets rather than by inspection.**
+A node under a sidereal fixed plane was still being handed `SEFLG_J2000`,
+because the §4.2 guard was keyed on the request's flags and switched off
+whenever the sidereal path was active — so Swiss's third point went into every
+fixed-plane chart carrying a node. The suite leg caught it by asserting the
+server/local divergence is *an origin shift and nothing else*: a node had moved
+in **latitude**, which an origin shift cannot do. And the same leg's first two
+drafts partitioned objects by index range, which was wrong twice — house cusps
+are not the only points Astrolog computes for itself. It partitions by whether
+the object moved instead, and asserts both halves.
 
 Sidereal plane 2 (A.8's invariable plane). Both engines' planes coincide and
 longitudes differ by a constant: **−31.51″ under Fagan/Bradley, −30.42″ under
@@ -321,9 +344,9 @@ different body (§4.2's principle, reached separately).
 want of "an argument from the physics". The argument is above and the
 measurement is reproducible: `tools/sidplane-origin.py`.
 
-**A second defect found on the way.** Sweeping all 47 registry zodiac tokens on
-planes 0, 1 and 2: **16 return the plane-0 answer bit-identically for both
-`sidplane=1` and `sidplane=2`**, with no error — `b1950`, `j1900`, `j2000`,
+**A second defect, fixed by the same change.** Sweeping all 47 registry zodiac
+tokens on planes 0, 1 and 2: **16 returned the plane-0 answer bit-identically
+for both `sidplane=1` and `sidplane=2`**, with no error — `b1950`, `j1900`, `j2000`,
 `true-citra`, `true-mula`, `true-pushya`, `true-revati`, `true-sheoran`,
 `galcent-0sag`, `galcent-cochrane`, `galcent-mula-wilhelm`, `galcent-rgilbrand`,
 `galequ-iau1958`, `galequ-mula`, `galequ-true`, `galalign-mardyks`.
@@ -335,7 +358,25 @@ for is a protocol violation either way: A.8 is a request field, and a field the
 server cannot honour is `kOErrUnsupported`, not a different answer. Both defects
 have one fix — if the zero point is a projected direction, the plane transform
 is our own arithmetic rather than a Swiss sidereal mode, and it then works for
-all 47 tokens instead of 31.
+all 47 tokens instead of 31. A zodiac whose zero point cannot be constructed
+— the star- and galactic-anchored ones, whose zero point is defined at the
+*instant* rather than at an epoch and which §3.5a's sentence does not cover —
+now answers `kOErrUnsupported` on planes 1 and 2 rather than a plane-0 row.
+Both projects read the sentence as applying to epoch-anchored zodiacs only, and
+a clause for the others is a text drop neither maintainer has been asked for
+yet.
+
+**Nets.** `tools/sidplane-origin.py` is the gate, and it needs no oracle:
+planes 1 and 2 are both fixed frames counting from the same zero-point
+direction, so the rotation between them must carry **no origin offset at all**.
+Measured **0.0000″ over four zodiacs at rms 0.00000″**. Its earlier form
+measured against plane 0 and reported a 13.94″ residual that looked exactly
+like a bug; that was the nutation, and a reference that moves for reasons of
+its own cannot measure anything. Three golden-gate legs were **removed**, with
+the reason recorded there: they compared bit-exact against the Swiss the defect
+came from, so they necessarily mismatch now, and a leg that must differ does
+not belong in a gate whose contract is bit-exactness. Plane 0 is untouched and
+still bit-exact, which is the leg that matters.
 
 ### 4.2 Nodes in a J2000/ICRF frame — FIXED 2026-09-18
 

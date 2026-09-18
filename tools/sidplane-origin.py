@@ -10,10 +10,19 @@ carry the ARC from the equinox -- and they differ by about half an arcminute.
 The measurement needs no second engine and no external constant.  Two
 coordinate systems on the sky differ by exactly one rotation, and a z-x-z
 rotation has three angles: inclination, node, and where longitude starts.  So
-sample the same stars on plane 0 and plane 2, fit all three, and look at the
-third.  If the zero point is carried as a direction, the zodiac's own zero
-point -- sidereal longitude 0, latitude 0, by definition -- lands at plane-2
-longitude 0.  Anything else is the arc reading, and the residual names it.
+sample the same stars on plane 1 and plane 2, fit all three, and look at the
+third.  Both are FIXED frames counting from the same zero-point direction, so
+a correct pair differs by a pure rotation with no origin offset at all, and
+any nonzero third angle is the defect.
+
+PLANE 0 IS DELIBERATELY NOT THE REFERENCE, and the reason cost an evening.
+Measured against plane 0 this reported a residual of +13.9359" that looked
+exactly like a bug in the fixed-plane code.  It is the nutation in longitude
+at J2000, -13.9315" -- plane 0 carries the profile's frame, so with nutation
+on, its sidereal origin sits a nutation away from the mean-equinox zero point
+the fixed planes use.  That is pre-existing behaviour of the delegated plane-0
+path, shared with the other engine, and nothing to do with this code.  A
+reference that moves for reasons of its own cannot measure anything.
 
 Six stars from -40 to +62 degrees of latitude are enough to over-determine
 three parameters eightfold, which is the point: a rigid rotation that fits
@@ -106,19 +115,22 @@ def fit(rows):
   return p, math.sqrt(sum(x * x for x in r) / len(r))
 
 
+print("Planes 1 and 2 are both FIXED frames counting from the same zero-point")
+print("direction, so the rotation between them carries NO origin offset. Any")
+print("nonzero value in the origin column is a defect.\n")
 print("%-22s %11s %11s %12s %9s" %
       ("zodiac", "incl(deg)", "node(deg)", 'origin(")', 'rms(")'))
 fail = 0
 for z in ZODIACS:
   rows = []
   for s in STARS:
-    a, b = ask(z, 0, s), ask(z, 2, s)
+    a, b = ask(z, 1, s), ask(z, 2, s)
     if a and b:
       rows.append((a[0], a[1], b[0], b[1]))
   if len(rows) < 3:
     print("%-22s  no usable rows" % z); continue
   if all(abs(r[0] - r[2]) < 1e-12 and abs(r[1] - r[3]) < 1e-12 for r in rows):
-    print("%-22s  plane 2 answered BIT-IDENTICALLY to plane 0 -- plane ignored" % z)
+    print("%-22s  plane 2 answered BIT-IDENTICALLY to plane 1 -- plane ignored" % z)
     fail += 1
     continue
   p, rms = fit(rows)
@@ -126,6 +138,6 @@ for z in ZODIACS:
   # zero point was carried as a direction.
   origin = model(p, 0.0, 0.0)[0] * 3600
   print("%-22s %11.7f %11.6f %12.4f %9.5f" % (z, p[0], p[1], origin, rms))
-  if abs(origin) > 0.1:
+  if abs(origin) > 0.001:
     fail += 1
 sys.exit(1 if fail else 0)

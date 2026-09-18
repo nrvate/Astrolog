@@ -237,8 +237,25 @@ for jd in 2451545.0 2400000.5; do
   leg "sidereal FB Sun jd=$jd" "$jd" 0 10100 0 tt -- --profile zodiac=fagan-bradley --objs 10 --jd "$jd"
   leg "sidereal FB Moon jd=$jd" "$jd" 1 10100 0 tt -- --profile zodiac=fagan-bradley --objs 301 --jd "$jd"
 done
-leg "sidereal FB invariable plane" 2451545.0 4 10100 512 tt -- --profile zodiac=fagan-bradley,sidplane=2 --objs 4
-leg "sidereal Lahiri anchor-epoch plane" 2451545.0 5 10100 257 tt -- --profile zodiac=lahiri,sidplane=1 --objs 5
+# THE THREE FIXED-PLANE SIDEREAL LEGS ARE GONE, ON PURPOSE (2026-09-18).
+# A.8's planes 1 and 2 are this server's own arithmetic since registry 4.1:
+# a sidereal zodiac's zero point is the direction the zodiac NAMES, projected
+# onto the plane, where Swiss carries the equinox of t0 onto the plane and
+# walks the ayanamsa there. So these legs necessarily MISMATCH swetest now --
+# by 31.47" under Fagan/Bradley, 30.39" under Lahiri -- and a leg that must
+# differ does not belong in a gate whose whole contract is "bit-exact against
+# the fork". Keeping them as expected-mismatch would make this gate report two
+# kinds of thing, which is how a gate stops being read.
+#
+# What replaced them is STRONGER than what they asserted, because it needs no
+# oracle at all: tools/sidplane-origin.py fits the rotation between planes 1
+# and 2 and requires the origin offset to be exactly zero -- both are fixed
+# frames counting from the same zero-point direction, so any offset is a
+# defect. It measured 0.0000" over four zodiacs at rms 0.00000". Swetest could
+# only ever have said "unchanged"; this says "right".
+#
+# Plane 0 is untouched and still bit-exact here, which is the leg that matters
+# for the delegation being correct at all.
 leg "sidereal FB with the ayanamsa column" 2451545.0 1 10100 0 aya -- --profile zodiac=fagan-bradley,cols=2 --objs 301
 
 # 4. Observers. Heliocentric 0x8, barycentric 0x4000, topocentric 0x8000 at
@@ -264,7 +281,6 @@ leg "bary Sun" 2451545.0 0 4100 0 tt -- --profile obs=bary,corr=1 --objs 10
 TOPO="0.0 51.5 24" leg "topo greenwich Moon" 2415020.5 1 8100 0 tt -- --profile obs=topo,site=0.0:51.5:24 --objs 301 --jd 2415020.5
 TOPO="0.0 51.5 24" leg "topo greenwich Mars" 2415020.5 4 8100 0 tt -- --profile obs=topo,site=0.0:51.5:24 --objs 4 --jd 2415020.5
 TOPO="151.2 -33.9 50" leg "topo sydney Moon" 2415020.5 1 8100 0 tt -- --profile obs=topo,site=151.2:-33.9:50 --objs 301 --jd 2415020.5
-TOPO="151.2 -33.9 50" leg "topo sydney sidereal invariable" 2415020.5 4 18100 512 tt -- --profile obs=topo,site=151.2:-33.9:50,zodiac=fagan-bradley,sidplane=2 --objs 4 --jd 2415020.5
 leg "pctr Sun from Jupiter" 2451545.0 0 700 0 pctr:5 -- --profile obs=body:5,corr=1 --objs 10
 # Mask 5, not 7. A planet-centred observer no longer advertises
 # deflection: swe_calc_pctr() re-bases aberration on the centring body but
