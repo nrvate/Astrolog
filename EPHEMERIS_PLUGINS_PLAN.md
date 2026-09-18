@@ -25,13 +25,17 @@ version 3, and this section is the design authority behind it.
 
   **What is NOT done, and why.** The console and WinHTTP transports are
   unwritten: work, not problems, and low value while Qt is the shipped
-  interface on every platform. The `horizons` plugin is different and I
-  will not pretend otherwise -- its post-processing is cast-level vector
-  arithmetic across the whole object array (it needs the Earth and the
-  Sun together to re-centre a geocentric answer), so it cannot move into
-  a per-object plugin as it stands, and the path only runs against the
-  live JPL API, so a rewrite cannot be verified from here. It is a
-  rewrite someone should do with a network and a plan, not a move.
+  interface on every platform. The `horizons` plugin is unwritten too,
+  but it is **no longer blocked**: on your instruction it was tested
+  against the live service, once, and the result is a committed corpus of
+  20 recorded replies plus an offline replay harness, so the rewrite can
+  now be developed and regression-tested without a network. Its remaining
+  difficulty is honest and named -- the re-centring is cast-level vector
+  arithmetic that five sites in `ComputeEphem()` are written in the
+  negative to accommodate -- and work-log item 22 specifies the three
+  steps that resolve it. **Getting there found four defects**, including
+  a one-minute error in every position Horizons has ever returned to
+  Astrolog.
 
   **What phase 8 found, because it bears on how much to trust the rest.**
   Three delegated reviews found THIRTEEN defects -- one a crashing
@@ -89,7 +93,7 @@ version 3, and this section is the design authority behind it.
   | 6e the required-server dialog, its ladder and exit 86 deleted | landed `05a0c21` |
   | 6f the console transport (`eph_wsclient.cpp`'s framing, reusable) | **not started** -- the framing is in a PROGRAM, not a library, and ten gate scripts drive that program |
   | 6g the WinHTTP transport (Win32) | **not started** -- low value while Qt is the shipped interface on every platform |
-  | 6h the `horizons` plugin | **not started, and BLOCKED** -- see "What is NOT done" above: cast-level vector arithmetic, verifiable only against the live JPL API |
+  | 6h the `horizons` plugin | **not started; no longer blocked.** The seam, the recorded corpus and the offline replay harness are landed (work-log item 22), and the rewrite is specified there in three steps. Four defects were found getting there, one of them a one-minute error in every position Horizons has ever returned |
 
   Phase 8's three reviews are done and their thirteen findings fixed
   (work-log items 19-21). **Nothing else on this branch is implementable
@@ -2290,6 +2294,98 @@ the gates the phase touches.
      bug into their own `corrapplied.py` and caught it by fault
      injection rather than by trusting the green. The symptom to grep
      for in any existing leg is a column of suspiciously exact zeros.
+
+22. **Phase 6h unblocked: a seam, a recorded corpus, and four defects
+   (2026-09-18).** The maintainer's decision -- "they should test it
+   against jpl's live service" -- turned 6h from blocked into work. What
+   it actually took was making the code testable WITHOUT the service, and
+   that paid for itself four times before a single fixture existed.
+
+   `GetJPLHorizons()` was welded to `ciCore`, a fixed temp file and
+   `GetURL()`, so nothing about it could be exercised offline. It is now
+   `SzUrlJPLHorizons()` (the question, taking its instant and site as
+   arguments), `FParseJPLHorizons()` (the reply, taking an open stream)
+   and the same wrapper as before. **The fetcher composes no URLs of its
+   own** -- it asks the client binary what it would send -- because a
+   fixture that answers a question the client never asks proves nothing,
+   and a second implementation in Python would drift from the first the
+   day anyone touched either.
+
+   **What the visible URL showed immediately:**
+
+   - **Every Horizons position was computed one minute early.** The
+     minute came from `RFract(tim)*60` TRUNCATED while the second came
+     from `RFract(tim)*3600 + rSmall` -- two different roundings of one
+     quantity. 12:00 minus five minutes is 11.916666666666666, whose
+     `RFract()*60` is 54.99999999999997, so the query went out as
+     11:54:00 meaning 11:55:00. Both ends shifted together, so the window
+     kept its 11-minute span and its three rows -- and the MIDDLE row,
+     which is the reported position, landed a minute before the chart's
+     own instant. About 33 arcseconds for the Moon. The rates were
+     unharmed, because they difference the outer two rows and that span
+     is right either way, **which is exactly why nothing downstream ever
+     looked wrong.**
+
+   - **A raw space went out in the query string**, from
+     `"COORD_TYPE= 'GEODETIC'&"`. The hand encoder below it expands only
+     `'` and `;`, so the space was never encoded and the value Horizons
+     read began with one. Topocentric queries only.
+
+   **And three things JPL itself contradicted**, which is the whole
+   argument for recording real answers instead of writing plausible ones:
+
+   - **Earth asked for from Earth's geocentre is refused as degenerate.**
+     It was in the corpus expecting a position, to cross-check the
+     re-centring. It is now an error fixture -- and the evidence for why
+     `ComputeEphem()` synthesises Earth from the Sun rather than fetching
+     it, which the code did without ever saying so.
+   - **"No ephemeris for target Mars prior to A.D. 1600-JAN-01."** The
+     observer tables do not reach 1500.
+   - **Pluto's boundary is 1800, not Mars's 1600.** The limits are **per
+     body**, so a plugin cannot carry one coverage range for the source;
+     it must answer `ephErrOutsideCover` per object.
+
+   20 requests total, sequential, 5s apart, identifying User-Agent, no
+   retry needed. The pacing policy is enforced in
+   `tools/horizons-fetch.py` rather than remembered, and follows what the
+   Prometheia project measured fetching its own corpus on 2026-09-17.
+   **Nothing in any gate reaches the network.**
+
+   ### What the rewrite still needs, specified
+
+   The remaining blocker is **semantic, not plumbing**. Horizons returns a
+   geocentric, light-time-uncorrected row, and **five** sites in
+   `ComputeEphem()` are written in the negative to accommodate that --
+   "don't shift, Horizons already did": `calc.cpp:1019-1021` (Earth
+   skipped), `:1052` (selection), `:1142-1181` (the re-centring),
+   `:1195-1196` (the Sun zeroed), `:1221-1226` and `:1247-1251` (the
+   skip-the-shift and skip-the-relocate rules). The re-centring itself
+   reads `space[oEar]`, `space[oSun]` and Earth's finished rates while
+   computing object `i`, so it is cross-object arithmetic inside a
+   per-object step, and it works only because `i` ascends with
+   `oEar < oSun`. `FRead()` hands back one row with no access to siblings.
+
+   So the rewrite is **not** "move `GetJPLHorizons()` behind `FSubmit`".
+   It is:
+
+   1. Give `EPHCAPS` a bit saying **"my rows are geocentric and
+      light-time-uncorrected"**. It has no way to say that today, which is
+      why the convention had to live in the caller.
+   2. Move the re-centring out of `ComputeEphem()`'s object loop into a
+      **host-owned emulation step that runs after the chain walk**, over
+      the whole row set at once, for any source declaring that bit. The
+      host already emulates missing capabilities (Part B); this is one
+      more, and it is the one that deletes all five negative rules.
+   3. Then `ephhorizons.cpp` is an ordinary plugin: one request per body,
+      three instants each, `ephErrOutsideCover` per object from the
+      recorded boundaries, Earth never asked for, and `NLookup` from
+      today's `SzObjSelName()`.
+
+   **Step 2 is verifiable offline with what is now committed**: cast the
+   same chart through Swiss heliocentrically, and through a recorded
+   geocentric reply plus the emulation, and require agreement. That check
+   did not exist before this corpus and is the reason 6h was called
+   unverifiable.
 
 21. **Phase 8's third review: the fixes' own damage (2026-09-18).** A
    pass over phase 6's transport AS IT NOW STANDS, briefed to hunt what
