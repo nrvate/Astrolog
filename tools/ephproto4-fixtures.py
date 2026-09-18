@@ -345,9 +345,24 @@ def fixtures():
                            profile(observer=2, corrections=7)],
                           [obj_body(4), obj_orbit(4, 2, 0, prof=1)]),
                  request_id=1))
+    add("request_corrkind_segments", "c2s", REQUEST, "ok",
+        "the shared-profile case again at representation = 1: a segments "
+        "request is the same request with the same object list, so it is "
+        "judged identically -> ERROR 11 under welcome_corrkind. The "
+        "profile is RECTANGULAR because segments require it (the parser "
+        "refuses a spherical one as unsupported before any capability is "
+        "consulted), which is the only thing that differs from "
+        "request_corrkind_shared_profile",
+        envelope(REQUEST, delivery(representation=1, seg_err=0.001) +
+                 question(grid_block(1, J2000, 0.0, 0, 1),
+                          [profile(observer=2, corrections=7, form=1)],
+                          [obj_body(4), obj_orbit(4, 2, 0)]), request_id=1))
     add("request_corrkind_unreferenced_profile", "c2s", REQUEST, "ok",
         "a second profile no object references: checked against 0x0004 "
-        "alone, since nothing is computed from it",
+        "alone, since nothing is computed from it -- so under "
+        "welcome_corrkind this is ERROR 11, because 0x0004 lists only "
+        "masks 0 and 1 for a heliocentric observer and 0x0014's grant to "
+        "heliocentric ORBIT POINTS cannot reach a profile no object uses",
         envelope(REQUEST, delivery() +
                  question(grid_block(1, J2000, 0.0, 0, 1),
                           [profile(observer=0, corrections=7),
@@ -751,6 +766,59 @@ def main():
     header = ["# file\tdirection\ttype\texpect\tnote",
               "# set-sha256 %s" % digest.hexdigest()]
     files["MANIFEST.tsv"] = "\n".join(header + rows) + "\n"
+
+    # JUDGEMENTS.tsv: the verdicts a STANDALONE message cannot carry.
+    #
+    # Whether a request is served or refused with ERROR 11 depends on the
+    # SERVER'S capabilities, and a fixture is one message with no WELCOME
+    # beside it -- so the per-kind drop's request cases could only be
+    # marked "ok" (they are all well formed) with the policy left in a
+    # note. This table pairs each with the WELCOME it is judged against and
+    # states the outcome, so both projects' readers can render a verdict
+    # the message format has no room for. Proposed by the Prometheia
+    # project when they verdicted the 0x0014 set; their reader already
+    # does it, which is the best evidence the shape is right.
+    #
+    # Its own digest, over the rows, for the same reason MANIFEST.tsv has
+    # one: a reader can say it has a consistent table.
+    judge = [
+        ("request_corrkind_shared_profile", "welcome_corrkind", "error11",
+         "one heliocentric profile at mask 7 reaches a BODY and an ORBIT "
+         "POINT; 0x0014 grants the mask to the point alone, and section 2 "
+         "refuses the whole request"),
+        ("request_corrkind_split_profiles", "welcome_corrkind", "served",
+         "the same two objects across two profiles: mask 1 for the body, "
+         "mask 7 for the point. This is what a client does when the kinds "
+         "sharing a profile disagree"),
+        ("request_corrkind_unreferenced_profile", "welcome_corrkind",
+         "error11",
+         "an unreferenced heliocentric profile at mask 7 is checked "
+         "against 0x0004 alone, which lists only 0 and 1 there -- 0x0014's "
+         "grant to orbit points cannot reach a profile no object uses"),
+        ("request_corrkind_segments", "welcome_corrkind", "error11",
+         "representation = 1 changes nothing: the same request, the same "
+         "object list, the same verdict as request_corrkind_shared_profile"),
+        ("request_corrkind_shared_profile", "welcome_corrkind_empty",
+         "error11",
+         "0x0014 with no entries is exactly 0x0004, so the orbit point "
+         "loses the grant and the refusal now has two causes rather than "
+         "one"),
+        ("request_corrkind_split_profiles", "welcome_corrkind_empty",
+         "error11",
+         "and the split form is refused too against that WELCOME, which is "
+         "what makes the pair above a test of 0x0014 rather than of "
+         "profiles"),
+        ("request_basic", "welcome_swiss", "served",
+         "a positive control: a table whose every row said error11 would "
+         "pass a reader that refused everything"),
+    ]
+    jrows = ["\t".join(r) for r in judge]
+    jdig = hashlib.sha256()
+    for r in jrows:
+        jdig.update(r.encode() + b"\n")
+    files["JUDGEMENTS.tsv"] = "\n".join(
+        ["# request\twelcome\texpect\tnote",
+         "# set-sha256 %s" % jdig.hexdigest()] + jrows) + "\n"
     if check:
         bad = [f for f, text in files.items()
                if not os.path.exists(os.path.join(out, f)) or

@@ -1,5 +1,5 @@
 # file	direction	type	expect	note
-# set-sha256 934d3a0d49d3439740c0e8d063addba662354946e9686c85111032ddbc858f43
+# set-sha256 d904e3586c25dc0eeedb0cebb316be92f04b086c2e4d96ae4d2e3bf92337c72d
 hello_min.hex	c2s	1	ok	no token, no caps
 hello_token_caps.hex	c2s	1	ok	token and f32|cancel|lookup|segments caps
 hello_future_client.hex	c2s	1	ok	a version-9 client: envelope 9, protoMax 9, protoMin 4; the server answers v4
@@ -12,7 +12,8 @@ welcome_corrkind_unknown_bits.hex	s2c	2	ok	unknown observer and kind bits in 0x0
 welcome_corrkind_reserved.hex	s2c	2	malformed	a 0x0014 mask with a bit above 0x07: reserved, MUST be zero, and 3.1 says reject rather than normalise
 request_corrkind_shared_profile.hex	c2s	3	ok	one heliocentric profile at mask 7 referenced by a BODY and an ORBIT POINT: well formed, and a server whose 0x0014 grants the mask to the point but not the body refuses it whole with ERROR 11
 request_corrkind_split_profiles.hex	c2s	3	ok	the same two objects across TWO heliocentric profiles, mask 1 for the body and mask 7 for the orbit point: the served form of the case above, and what a client does when kinds disagree
-request_corrkind_unreferenced_profile.hex	c2s	3	ok	a second profile no object references: checked against 0x0004 alone, since nothing is computed from it
+request_corrkind_segments.hex	c2s	3	ok	the shared-profile case again at representation = 1: a segments request is the same request with the same object list, so it is judged identically -> ERROR 11 under welcome_corrkind. The profile is RECTANGULAR because segments require it (the parser refuses a spherical one as unsupported before any capability is consulted), which is the only thing that differs from request_corrkind_shared_profile
+request_corrkind_unreferenced_profile.hex	c2s	3	ok	a second profile no object references: checked against 0x0004 alone, since nothing is computed from it -- so under welcome_corrkind this is ERROR 11, because 0x0004 lists only masks 0 and 1 for a heliocentric observer and 0x0014's grant to heliocentric ORBIT POINTS cannot reach a profile no object uses
 request_cast_profiles.hex	c2s	3	ok	one cast: three profiles (geo; helio; topocentric Fagan-Bradley on the invariable plane with the ayanamsa column) and all six object kinds
 request_deadline.hex	c2s	3	ok	a prefetch window with a 250 ms deadline: advisory, and outside the cache key
 request_list_ut.hex	c2s	3	ok	instant list in UT1, server's delta T
