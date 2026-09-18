@@ -61,6 +61,15 @@ CPPFLAGS = -MMD -MP -DQT -DQTTEST -fsanitize=address -g -O0 -fPIC -std=gnu++17 -
  -Wno-comment -I ephsrv $(QT_CFLAGS)
 RM = rm -f
 
+# The Prometheia plugin's optional dependency; see Makefile.srcs for the
+# detection and for why a machine without the package builds exactly as
+# it always has.
+CPPFLAGS += $(PROMETHEIA_FLAGS)
+LIBS += $(PROMETHEIA_LIBS)
+
+# Stamp the plugin state this dir was built with; see Makefile.srcs.
+$(call prometheia-stamp,$(OBJDIR))
+
 $(NAME): $(OBJS)
 	g++ -o $(NAME) $(OBJS) $(LIBS)
 

@@ -90,19 +90,28 @@ r0=$(metric "$PORT" ephd_requests_total); c0=$(metric "$PORT" ephd_cells_compute
 h0=$(metric "$PORT" ephd_cache_hits_total); e0=$(metric "$PORT" 'ephd_errors_total{code="2"}')
 # Both on ONE connection: each loop keeps its own cache, and a second
 # connection may land on the other loop and miss (it did, one run in two).
-"$CLI" --port "$PORT" --objs 0,1,2 --jd 2451545.0 --count 7 --repeat 2 --quiet ||
+"$CLI" --port "$PORT" --objs 10,301,199 --jd 2451545.0 --count 7 --repeat 2 --quiet ||
   fail "the request and its repeat failed"
 [ "$(metric "$PORT" ephd_requests_total)" = $((r0 + 2)) ] || fail "requests_total did not move by 2"
 [ "$(metric "$PORT" ephd_cells_computed_total)" = $((c0 + 21)) ] ||
   fail "cells_computed_total did not move by exactly 3 x 7 (a hit counted as computed?)"
 [ "$(metric "$PORT" ephd_cache_hits_total)" = $((h0 + 1)) ] || fail "cache_hits_total did not move on the repeat"
-"$CLI" --port "$PORT" --objs 0,1,2,3,4,5,6 --count 20000 --quiet 2> /dev/null && fail "140000 cells were not refused"
+"$CLI" --port "$PORT" --objs 10,301,199,299,4,5,6 --count 20000 --quiet 2> /dev/null &&
+  fail "140000 cells were not refused"
 [ "$(metric "$PORT" 'ephd_errors_total{code="2"}')" = $((e0 + 1)) ] || fail "errors_total{code=2} did not move"
 echo "  routes  the counters move: a computed request, a cache hit, an ERROR 2"
 
 grep -q 2451545 "$S/a.log" && fail "the log names a request's instant"
 grep -q " bodies=" "$S/a.log" && fail "the log names a request's bodies"
-echo "  privacy the log names no request's instant or bodies"
+# 3.8 covers META's error text as well as ERROR's, and Swiss's own messages
+# name the instant ("jd 2597700.5 outside ephemeris range"), so the server
+# rewrites them: a failing object's text must carry no instant of its own.
+"$CLI" --port "$PORT" --objs 10 --jd 2597700.5 --count 1 --meta --quiet > "$S/far.txt" ||
+  fail "the out-of-coverage request was not answered"
+grep -q 'rowsOk=0' "$S/far.txt" || fail "an instant past the files answered anyway: $(cat "$S/far.txt")"
+grep -qE '2597|[0-9]{7}' "$S/far.txt" &&
+  fail "the per-object error text names the instant: $(cat "$S/far.txt")"
+echo "  privacy the log names no request's instant or bodies, and neither does an object's error"
 kill "$SRV_PID"; waitexit "$SRV_PID" 15 || true
 
 # -- log -------------------------------------------------------------------
@@ -132,9 +141,13 @@ import re, sys
 lines = open(sys.argv[1]).read().splitlines()
 def kv(l): return dict((k, v.strip('"')) for k, v in re.findall(r'([a-z_]+)=("(?:[^"\\]|\\.)*"|\S+)', l))
 ev = [kv(l) for l in lines]
-reqs = [e for e in ev if e["evt"] == "req"]
-assert len(reqs) == 2 and reqs[0]["conn"] == reqs[1]["conn"], "two requests on one connection"
-conn = reqs[0]["conn"]
+# The connection the repeat was made on: the two requests of the miss and
+# the hit. Other connections in this log (the refused one, the object whose
+# instant is past the files) have their own stories.
+allreqs = [e for e in ev if e["evt"] == "req"]
+conn = allreqs[0]["conn"]
+reqs = [e for e in allreqs if e["conn"] == conn]
+assert len(reqs) == 2, "two requests on one connection"
 mine = [e["evt"] for e in ev if e.get("conn") == conn]
 assert mine == ["conn.open", "hello", "req", "req", "conn.close"], mine
 assert [r["cache"] for r in reqs] == ["miss", "hit"], reqs
@@ -150,12 +163,14 @@ PY
 echo "  log     logfmt throughout; one connection's open, HELLO, miss, hit and close"
 
 start "$PORT" "$S/g.log" --ephe "$EPH" --log-contents || fail "the --log-contents server did not start"
-"$CLI" --port "$PORT" --objs 0,1,2 --jd 2451545.0 --count 7 --quiet || fail "the contents request failed"
+"$CLI" --port "$PORT" --objs 10,301,199 --jd 2451545.0 --count 7 --quiet || fail "the contents request failed"
 kill "$SRV_PID"; waitexit "$SRV_PID" 15 || true
 logfmt "$S/g.log"
 grep -q "level=warn evt=log.contents " "$S/g.log" || fail "--log-contents did not warn at startup"
-grep " evt=req " "$S/g.log" | grep -q " jd=2451545.000000 .* bodies=0,1,2" ||
+grep " evt=req " "$S/g.log" | grep -q " jd=2451545.000000 .* bodies=10,301,199" ||
   fail "--log-contents did not log what was asked"
+grep " evt=req " "$S/g.log" | grep -q " profile_spec=geo/0/0/0/c7/s1" ||
+  fail "--log-contents did not log the profiles"
 grep -q " level=debug " "$S/g.log" && fail "info logged a debug line"
 echo "  log     --log-contents names the instant and bodies, and warns"
 
@@ -165,8 +180,9 @@ SRV_PID=$!; PIDS+=("$SRV_PID")
 for _ in $(seq 1 50); do
   [ "$(curl -s "http://127.0.0.1:$PORT/healthz")" = ok ] && break; sleep 0.1
 done
-"$CLI" --port "$PORT" --objs 0,1,2 --jd 2451545.0 --count 7 --quiet || fail "the warn-level request failed"
-"$CLI" --port "$PORT" --objs 0,1,2,3,4,5,6 --count 20000 --quiet 2> /dev/null && fail "140000 cells were not refused"
+"$CLI" --port "$PORT" --objs 10,301,199 --jd 2451545.0 --count 7 --quiet || fail "the warn-level request failed"
+"$CLI" --port "$PORT" --objs 10,301,199,299,4,5,6 --count 20000 --quiet 2> /dev/null &&
+  fail "140000 cells were not refused"
 kill "$SRV_PID"; waitexit "$SRV_PID" 15 || true
 grep -v " level=warn \| level=error " "$S/h.log" && fail "--log-level warn logged a line below warn"
 grep -q " level=warn evt=error .* code=2 " "$S/h.log" || fail "--log-level warn lost the ERROR 2"
@@ -201,13 +217,13 @@ P3=$((PORT + 3))
 start "$P3" "$S/d.log" --ephe "$EPH" || fail "the drain server did not start"
 # 100000 cells of f64 is ~4.8 MB, past the 4 MB a stream may buffer before it
 # waits: a reader asleep 1.5 s leaves the answer half sent when SIGTERM lands.
-"$CLI" --port "$P3" --objs 0,1,2,3,4 --count 20000 --step 600 --sleep-ms 1500 \
+"$CLI" --port "$P3" --objs 10,301,199,299,4 --count 20000 --step 600 --sleep-ms 1500 \
   --quiet --out "$S/long.txt" 2> "$S/long.err" &
 LONG=$!
 sleep 0.8
 kill -TERM "$SRV_PID"
 sleep 0.3
-"$CLI" --port "$P3" --objs 0 --count 1 --quiet 2> /dev/null && fail "a new connection was accepted while draining"
+"$CLI" --port "$P3" --objs 10 --count 1 --quiet 2> /dev/null && fail "a new connection was accepted while draining"
 wait "$LONG" || fail "the slow reader failed during the drain: $(cat "$S/long.err")"
 [ "$(wc -l < "$S/long.txt")" = 100000 ] || fail "the slow reader got $(wc -l < "$S/long.txt") of 100000 rows"
 waitexit "$SRV_PID" 15 || fail "the drained server exited nonzero"
@@ -215,7 +231,7 @@ grep -q "drained; exiting" "$S/d.log" || fail "the drain did not say it finished
 echo "  drain   new connections refused, the answer in flight delivered whole, exit 0"
 
 start "$P3" "$S/e.log" --ephe "$EPH" --drain-seconds 1 || fail "the deadline server did not start"
-"$CLI" --port "$P3" --objs 0,1,2,3,4 --count 20000 --step 600 --sleep-ms 20000 \
+"$CLI" --port "$P3" --objs 10,301,199,299,4 --count 20000 --step 600 --sleep-ms 20000 \
   --quiet > /dev/null 2>&1 &
 PIDS+=($!)
 sleep 0.8
@@ -225,7 +241,7 @@ grep -q "still had answers unsent" "$S/e.log" || fail "the deadline drain did no
 echo "  drain   a reader that never reads is cut off at --drain-seconds, exit 0"
 
 start "$P3" "$S/f.log" --ephe "$EPH" --drain-seconds 60 || fail "the second-signal server did not start"
-"$CLI" --port "$P3" --objs 0,1,2,3,4 --count 20000 --step 600 --sleep-ms 20000 \
+"$CLI" --port "$P3" --objs 10,301,199,299,4 --count 20000 --step 600 --sleep-ms 20000 \
   --quiet > /dev/null 2>&1 &
 PIDS+=($!)
 sleep 0.8

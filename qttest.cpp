@@ -105,11 +105,40 @@
 #include "astrolog.h"
 #include "extern.h"
 #include "qtdriver.h"
+// ephreq.h names both sides -- EPHQUERY and eph::Request -- so it follows
+// astrolog.h and extern.h rather than leading them.
+#include "ephreq.h"
+// The Prometheia source plugin (phase 7). The header is empty without
+// -DPROMETHEIA, so including it is free in the default build and the
+// group below says so rather than failing.
+#include "ephprom.h"
 // Every scalar member of US and GS by name, generated from astrolog.h, so
 // the settings round trip can ask about all of them rather than one at a
 // time. See tools/gen_settings_fields.py.
 #include <stddef.h>
 #include "settingsfields.h"
+
+// Borrow the ephemeris selection for the current scope: sets the chain
+// at construction, restores it at the closing brace. The engine-
+// selection idiom the oracle and dialog groups use -- the old
+// Borrow(us.fEphemFiles/nSwissEph/fMatrixPla) trio, which named three
+// fields for what is one chain now.
+class EphSelBorrow {
+private:
+  char *szSav;
+public:
+  EphSelBorrow(CONST char *szChain) {
+    szSav = NULL;
+    FCloneSz(SzSet(us.szEphemSource), &szSav);
+    EphSourceSet(szChain);
+  }
+  ~EphSelBorrow() {
+    EphSourceSet(szSav);
+    DeallocatePIf(szSav);
+  }
+  EphSelBorrow(const EphSelBorrow &) = delete;
+  EphSelBorrow &operator=(const EphSelBorrow &) = delete;
+};
 
 // This file needs the Swiss Ephemeris. The core still builds without it --
 // astrolog.h's "#define SWISS" can be commented out -- but this file does
@@ -183,14 +212,9 @@ extern void SetChunkRowsSrvTestQt(int);
 extern int CRecastSrvTestQt();
 extern void SetWelcMaxObjsSrvTestQt(uint32_t);
 extern void SetWelcMaxCellsSrvTestQt(uint32_t);
-extern flag FEphSrvRequiredQt();
-extern void SetRequiredEphSrvTestQt(int, int, int);
-extern void SetRequiredNoExitSrvTestQt(flag);
-extern void ResetRequiredSrvTestQt();
-extern flag FRequiredShownSrvTestQt();
-extern int CRequiredTriesSrvTestQt();
 extern void SzEphSrvStatusQt(char *, int);
 extern int NChunkProbeSrvTestQt(int);
+extern CONST char *SzObjNameProbeSrvTestQt(int);
 extern flag FSendEphSrvQt(eph::Request *);
 extern void ClampEphSrvReqQt(eph::Request *);
 extern void EphSrvFinalizeQt();
@@ -513,6 +537,7 @@ static CONST DLGTEST rgdlgQt[] = {
     {ShowProgressDialogQt,         "Progressions"},
     {ShowChartSettingsDialogQt,    "Chart Settings"},
     {ShowCalcDialogQt,             "Calculation Settings"},
+    {ShowEphemDialogQt,            "Ephemeris Settings"},
     {ShowDisplayDialogQt,          "Display Settings"},
     {ShowCommandLineDialogQt,      "Enter Command Line"},
     {ShowAboutDialogQt,            "About Astrolog"} };
@@ -2966,6 +2991,7 @@ static CONST PARITYITEM rgparityQt[] = {
   {"Setting",     "Include D&warfs",                             fFalse},
   {"Setting",     "Include &Fixed Stars",                        fFalse},
   {"Setting",     "Calculation Settin&gs...",                    fFalse},
+  {"Setting",     "E&phemeris Settings...",                      fFalse},
   {"Setting",     "&Display Settings...",                        fFalse},
   {"Chart",       "Standard Radi&x",                             fFalse},
   {"Chart",       "House &Wheel",                                fFalse},
@@ -10512,40 +10538,6 @@ static void TestObjSelParseQt()
 
 
 
-// Capture the ephemeris dropdown's contents from the Calculation Settings
-// dialog, then close it. The dialog blocks in exec(), so as everywhere
-// else here the inspection has to be queued before it opens.
-static QString StrEphemListQt(QString *pstrWin, QString *pstrEdit = NULL)
-{
-  QString strCombo, strWin, strEdit;
-
-  DriveModalQt(ShowCalcDialogQt, [&strCombo, &strWin, &strEdit](QWidget *pw) {
-    strWin = pw->windowTitle();
-    QList<QComboBox *> rg = pw->findChildren<QComboBox *>();
-    for (int i = 0; i < rg.size(); i++) {
-      QStringList items;
-      for (int j = 0; j < rg[i]->count(); j++)
-        items << rg[i]->itemText(j);
-      if (items.join(",").contains("Swiss")) {
-        strCombo = items.join(" | ");
-        strEdit = rg[i]->currentText();
-        break;
-      }
-    }
-    pw->close();
-  });
-  if (pstrWin != NULL)
-    *pstrWin = strWin;
-  if (pstrEdit != NULL)
-    *pstrEdit = strEdit;
-  return strCombo;
-}
-
-
-// The time as the Set Chart Info dialog puts it in its own field, which
-// is a different question from what SzTim() returns: the field is what
-// the user reads.
-
 static QString StrChartInfoTimeQt()
 {
   QString strTim;
@@ -11028,63 +11020,6 @@ static void TestChartListFilterQt()
   pinList.Restore();
   seedList.Verify("chart-list");
   printf("  the chart list honours its AstroExpression filter\n");
-}
-
-
-// Windows leaves an ephemeris out of this list when the user has switched
-// it off; see plan item 41. The maintainer's own settings file sets both
-// restrictions, so this is the list they actually get.
-static void TestEphemerisListQt()
-{
-  flag fNetSav = us.fNoNetwork, fOldSav = us.fNoOldCalc;
-  QString str, strWin;
-
-  Group("Ephemeris list");
-
-  us.fNoNetwork = us.fNoOldCalc = fTrue;
-  str = StrEphemListQt(&strWin);
-  Check(!str.isEmpty(), "the ephemeris list was found at all (modal seen: \"%s\")",
-    strWin.toLocal8Bit().constData());
-  Check(!str.contains("Web"),
-    "no web query offered when web queries are off: %s",
-    str.toLocal8Bit().constData());
-  Check(!str.contains("Matrix"),
-    "no Matrix offered when it is off: %s",
-    str.toLocal8Bit().constData());
-  Check(str.contains("Swiss"), "Swiss Ephemeris is still offered");
-
-  us.fNoNetwork = us.fNoOldCalc = fFalse;
-  str = StrEphemListQt(NULL);
-  Check(str.contains("Web"), "the web query is offered when allowed");
-  Check(str.contains("Matrix"), "Matrix is offered when allowed");
-  Check(!str.contains("Placalc"),
-    "Placalc is never offered: the backend was removed on 2026-09-04");
-
-  // The dialog shows the method in use. Horizons is nSwissEph 3, and
-  // indexing szEphem[] by that number showed row 3 -- "Matrix Formulas"
-  // -- so OK switched a Horizons user to Matrix (EPHEMERIS_REVIEW.md C15).
-  {
-    flag fEphSav = us.fEphemFiles, fMatSav = us.fMatrixPla;
-    int nSwSav = us.nSwissEph;
-    QString strEdit;
-    us.fEphemFiles = fTrue;
-    us.nSwissEph = 3;
-    StrEphemListQt(NULL, &strEdit);
-    Check(strEdit == QString(szEphem[cmJPLWeb]), "a Horizons selection "
-      "shows as Horizons (\"%s\")", strEdit.toLocal8Bit().constData());
-    us.nSwissEph = 5;
-    StrEphemListQt(NULL, &strEdit);
-    Check(strEdit == QString(szEphem[cmEphSrv]), "the Ephemeris Server "
-      "shows as itself (\"%s\")", strEdit.toLocal8Bit().constData());
-    us.fEphemFiles = fFalse; us.fMatrixPla = fTrue;
-    StrEphemListQt(NULL, &strEdit);
-    Check(strEdit == QString(szEphem[cmMatrix]), "and Matrix as Matrix "
-      "(\"%s\")", strEdit.toLocal8Bit().constData());
-    us.fEphemFiles = fEphSav; us.fMatrixPla = fMatSav; us.nSwissEph = nSwSav;
-  }
-
-  us.fNoNetwork = fNetSav; us.fNoOldCalc = fOldSav;
-  printf("  the ephemeris list omits what the user switched off\n");
 }
 
 
@@ -11702,6 +11637,14 @@ static CONST SETFIELDSKIP rgsetnopoison[] = {
   {"us.fLoopInit",   "-Q0, the same"},
   {"us.fNoSwitches", "whether a command line was given at all"},
   {"us.fSzPersist",  "an allocation discipline, not a setting"},
+  {"us.szEphemSource",
+                     "its value is a chain of source keys, and -bE refuses "
+                     "a key no source defines -- an accepted typo would "
+                     "cast from Swiss while writing itself back into the "
+                     "settings -- so no marker can be a valid value. Its "
+                     "round trip is pinned over the real domain instead, "
+                     "by the -bE assertions of the ephemeris-registry "
+                     "group"},
   {"gs.ft",          "which file a render would be written to, chosen per "
                      "invocation; and every \"-Xb\"/\":Xp\" line in the "
                      "file writes it, so a poisoned value is overwritten "
@@ -11858,8 +11801,6 @@ static void TestSettingsFieldsQt()
       // language: 4 is no backend, and no spelling writes it back. With
       // the Ephemeris Server selected (5) the ^=1 below poisons into it,
       // so poison toward Moshier instead, which -bs carries.
-      if (FEqSz(psf->szName, "us.nSwissEph") && *(int *)pb == 4)
-        *(int *)pb = 1;
       break;
     case 'l':           *(long *)pb ^= 1L;          break;
     case 'r':           *(real *)pb += 1.0;         break;
@@ -13078,8 +13019,9 @@ static void ConsoleShotCaptureQt(CONST char *szDir)
 static void ProbeQt()
 {
   printf("gi.nMode=%d (gWheel=%d gHouse=%d)\n", gi.nMode, gWheel, gHouse);
-  printf("us.nHouseSystem=%d (%s)  fEphemFiles=%d\n",
-    us.nHouseSystem, szSystem[us.nHouseSystem], us.fEphemFiles);
+  printf("us.nHouseSystem=%d (%s)  chain=%s\n",
+    us.nHouseSystem, szSystem[us.nHouseSystem],
+    SzSet(us.szEphemSource));
 }
 
 
@@ -13252,9 +13194,8 @@ static void TestNumericOracleQt()
   {
     // The same borrow list TestCastCookingQt's pinned-cusp check uses,
     // plus the backend, since this group is about which engine answers.
-    Borrow bEphem(us.fEphemFiles, fTrue), bSid(us.fSidereal, fFalse);
-    Borrow bMat(us.fMatrixPla, fFalse);
-    Borrow bSwiss(us.nSwissEph, 0), bNoOld(us.fNoOldCalc, fFalse);
+    EphSelBorrow bChain("swiss");
+    Borrow bSid(us.fSidereal, fFalse);
     Borrow b3D(us.fHouse3D, fFalse), bProg(us.fProgress, fFalse);
     Borrow bEqu(us.fEquator, fFalse), bEqu2(us.fEquator2, fFalse);
     Borrow bFlip(us.fFlip, fFalse), bGeo(us.fGeodetic, fFalse);
@@ -13302,6 +13243,78 @@ static void TestNumericOracleQt()
       }
     }
 
+    // ---- Leg 1b: Delta-T belongs to the ephemeris path that set it ----
+    // Leg 1 asks its question after a run's worth of casts have opened
+    // every file. Asked the way a fresh process asks it, it used to get a
+    // different answer. The library reads its tidal acceleration from the
+    // moon file's DE number, so with no file open it answers on
+    // SE_TIDAL_DEFAULT (DE431) rather than the file's own (DE441 in the
+    // bundled ephem/). Astrolog caches Delta-T in is.rDeltaT keyed on the
+    // DATE ALONE, so a value computed before the path was set outlived
+    // the path change and the bodies reused it, while swe_calc_ut()
+    // recomputed on DE441. The terms are tidal accelerations in
+    // arcsec/cy^2, differing by 0.136, whose consequence at 1900 is 0.037 s of
+    // Delta-T at 1900: every body out by its own motion over 0.037 s,
+    // 0.018" for the Moon and 0.00003" for Mercury. In the full suite it
+    // read as the whole 1900 epoch failing, and only in the group orders
+    // that left the library with its files closed.
+    //
+    // Two fixes, each sufficient for the bodies and neither redundant:
+    // SwissEnsurePath() drops the cached offset when it sets the path,
+    // and SwissHouse() -- the one Delta-T site of the four that did not
+    // ensure the path first -- now does. The second is what keeps the
+    // CUSPS right, which nothing above this line looks at. So each is
+    // pinned by its own assertion rather than both by the cast, which
+    // would pass with either one present.
+    {
+      flag fPathSav = is.fSwissPathSet;
+      real rAsc, rMC, rRA, rVtx, rEP, rOb, rOff, rNut;
+      real jdHou;
+
+      // The observable end of it: a cast that starts where a process
+      // starts -- no file open, no path set, nothing cached.
+      swe_close();
+      is.fSwissPathSet = fFalse;
+      is.jdDeltaT = rLarge;
+      OraclePinChartQt(1900);
+      CastChart(1);
+      jd = JulianDayFromTime(is.T);
+      for (i = 0; i < coracle; i++) {
+        if (swe_calc_ut(jd, rgoracle[i].se, SEFLG_SWIEPH | SEFLG_SPEED,
+          xx, serr) < 0)
+          continue;
+        rD = RAbs(planet[rgoracle[i].obj] - xx[0]);
+        if (rD > rDegHalf)
+          rD = rDegMax - rD;
+        Check(rD < rEpsSwiss, "%s on a path set mid-run matches "
+          "swe_calc_ut (%.6f\")", szObjName[rgoracle[i].obj], rD * 3600.0);
+      }
+
+      // Setting the path drops the offset cached against the old one.
+      // Without this the sentinel survives, which is the whole defect.
+      is.fSwissPathSet = fFalse;
+      is.jdDeltaT = jd;
+      is.rDeltaT = rLarge;
+      SwissEnsurePath();
+      Check(is.jdDeltaT != jd, "setting the ephemeris path drops the "
+        "Delta-T cached against the old one (%.6f)", is.jdDeltaT);
+
+      // And the houses ensure the path before they ask for Delta-T, so
+      // the cusps are computed on the ephemeris's own tidal term too.
+      // Asked of SwissHouse() directly: a cast reaches the bodies first
+      // and they would set the flag on their own way past.
+      swe_close();
+      is.fSwissPathSet = fFalse;
+      is.jdDeltaT = rLarge;
+      jdHou = jd;
+      SwissHouse(jdHou, 0.0, 45.0, hsPlacidus, &rAsc, &rMC, &rRA, &rVtx,
+        &rEP, &rOb, &rOff, &rNut);
+      Check(is.fSwissPathSet, "the houses set the ephemeris path before "
+        "asking the library for Delta-T");
+
+      is.fSwissPathSet = fPathSav;
+    }
+
     // ---- Leg 2: the sidereal offset is applied once, not twice ----
     // is.rSid is added in ProcessPlanet() and SEFLG_SIDEREAL subtracts the
     // ayanamsa inside the library, which reads like a double application
@@ -13331,11 +13344,11 @@ static void TestNumericOracleQt()
     // that fails loudly if a backend stops computing: an all-zero chart
     // puts every body up to 180 degrees from the truth.
     {
-      Borrow bEph2(us.fEphemFiles, fFalse), bMat2(us.fMatrixPla, fTrue);
+      EphSelBorrow bChain2("matrix");
       for (iy = 0; iy < 7; iy++) {
         OraclePinChartQt(rgyea[iy]);
         {
-          Borrow bEph3(us.fEphemFiles, fTrue), bMat3(us.fMatrixPla, fFalse);
+          EphSelBorrow bChain3("swiss");
           CastChart(1);
           jd = JulianDayFromTime(is.T);
           for (i = 0; i < coracle; i++)
@@ -13463,7 +13476,7 @@ static void TestNumericOracleQt()
       flag fExpectBad, fIsBad;
 
       for (iEngine = 0; iEngine <= 1; iEngine++) {
-        Borrow bEngine(us.fEphemFiles, iEngine ? fTrue : fFalse);
+        EphSelBorrow bEngine(iEngine ? "swiss" : "matrix");
         for (i = 0; i < cSystem; i++) {
           Borrow bHouseH(us.nHouseSystem, i);
           for (iLatH = 0; iLatH < 5; iLatH++)
@@ -14521,9 +14534,8 @@ static void TestProgressionsQt()
     rgfIgnoreSav[i] = ignore[i];
   {
     // The oracle's borrow list: one engine, no chart transformations.
-    Borrow bEphem(us.fEphemFiles, fTrue), bSid(us.fSidereal, fFalse);
-    Borrow bMat(us.fMatrixPla, fFalse);
-    Borrow bSwiss(us.nSwissEph, 0), bNoOld(us.fNoOldCalc, fFalse);
+    EphSelBorrow bChain("swiss");
+    Borrow bSid(us.fSidereal, fFalse);
     Borrow b3D(us.fHouse3D, fFalse), bProg(us.fProgress, fTrue);
     Borrow bEqu(us.fEquator, fFalse), bEqu2(us.fEquator2, fFalse);
     Borrow bFlip(us.fFlip, fFalse), bGeo(us.fGeodetic, fFalse);
@@ -16560,7 +16572,8 @@ static void TestCastCookingQt()
   // these dirty (found the hard way: the pin held alone and failed in
   // the full suite).
   {
-    Borrow bEphem(us.fEphemFiles, fFalse), bSid(us.fSidereal, fFalse);
+    EphSelBorrow bChain("matrix");
+    Borrow bSid(us.fSidereal, fFalse);
     Borrow b3D(us.fHouse3D, fFalse), bProg(us.fProgress, fFalse);
     Borrow bEqu(us.fEquator, fFalse), bEqu2(us.fEquator2, fFalse);
     Borrow bFlip(us.fFlip, fFalse), bGeo(us.fGeodetic, fFalse);
@@ -17670,41 +17683,73 @@ static void WireEphLoopbackQt(QWebSocketServer *psrv, byte *pbProto,
         QObject::connect(pconn, &QWebSocket::binaryMessageReceived, pconn,
           [pbProto, pdwCaps, szVer, pbaReq, pconn](CONST QByteArray &ba) {
             eph::Envelope env;
-            const byte *rgb = (const byte *)ba.constData();
-            if (ba.size() < (int)eph::kEnvelopeSize ||
-              !eph::parseEnvelope(rgb, &env))
+            std::string strWhy;
+            std::vector<uint8_t> pay, msg;
+            CONST byte *rgb = (CONST byte *)ba.constData();
+            if (eph::ParseEnvelope(rgb, (size_t)ba.size(), &env, &strWhy) != eph::kOk)
               return;
-            rgb += eph::kEnvelopeSize;
             if (env.type == eph::kMsgHello) {
               eph::Hello hello;
-              if (eph::parseHello(rgb, env.payloadLen, &hello))
+              if (eph::ParseHello(rgb + eph::kEnvelopeSize, env.payloadLen, &hello,
+                &strWhy) == eph::kOk)
                 s_baHelloTokenQt = QByteArray(hello.token.c_str());
             }
             if (env.type == eph::kMsgHello && *pbProto == 0) {
               // 0: a server for which this client is too old -- ERROR 8,
               // then the close, as astrolog-ephd answers it.
-              std::vector<uint8_t> msg;
-              byte rgbE[256];
-              eph::putU32(rgbE, 0);
-              eph::putU32(rgbE + 4, (uint32_t)eph::kErrVersion);
-              sprintf2((char *)rgbE + 8, 240, "this client speaks protocol 3; "
-                "this server needs 4 to 4 -- update Astrolog");
-              msg = eph::makeMessage(eph::kMsgError, 0, rgbE,
-                8 + strlen((char *)rgbE + 8) + 1);
-              pconn->sendBinaryMessage(QByteArray(
-                (const char *)msg.data(), (int)msg.size()));
+              eph::Error err;
+              err.code = eph::kErrVersion;
+              err.flags = eph::kErrFlagClosing;
+              err.text = "this client needs protocol 5 or newer; this server "
+                "speaks 4 to 4 -- update Astrolog";
+              eph::EncodeError(&pay, err);
+              eph::WriteEnvelope(&msg, eph::kMsgError, 0, pay.size());
+              msg.insert(msg.end(), pay.begin(), pay.end());
+              pconn->sendBinaryMessage(QByteArray((CONST char *)msg.data(),
+                (int)msg.size()));
               pconn->close();
+            } else if (env.type == eph::kMsgHello && *pbProto < eph::kProtoMin) {
+              // A server too old to speak version 4 at all: its refusal in
+              // its own layout and envelope version (3.3 step 5).
+              eph::LegacyError le;
+              le.code = 1;
+              le.text = "bad magic or protocol version";
+              eph::EncodeLegacyError(&pay, le);
+              eph::WriteEnvelope(&msg, eph::kMsgError, 0, pay.size(), *pbProto);
+              msg.insert(msg.end(), pay.begin(), pay.end());
+              pconn->sendBinaryMessage(QByteArray((CONST char *)msg.data(),
+                (int)msg.size()));
             } else if (env.type == eph::kMsgHello) {
-              byte rgbW[sizeof(eph::WelcomeWire) + 256];
-              uint32_t dwLen;
-              std::vector<uint8_t> msg;
-              eph::buildWelcome(rgbW, *pdwCaps, 21003,
-                eph::kMaxCellsDefault, szVer, &dwLen);
-              if (*pbProto != eph::kProtoVersion)
-                eph::putU32(rgbW, *pbProto);
-              msg = eph::makeMessage(eph::kMsgWelcome, 0, rgbW, dwLen);
-              pconn->sendBinaryMessage(QByteArray(
-                (const char *)msg.data(), (int)msg.size()));
+              eph::Welcome w;
+              eph::Capabilities caps;
+              w.protoSession = *pbProto;
+              w.caps = *pdwCaps;
+              w.serverName = szVer;
+              w.engine = "loopback";
+              w.datasetId = "loopback/test/0#00000000";
+              // The capability TLVs WELCOME must carry (3.4), saying this
+              // loopback serves what the client asks of it.
+              caps.kinds = (1u << eph::kObjBody) | (1u << eph::kObjOrbitPoint) |
+                (1u << eph::kObjStar) | (1u << eph::kObjHypothetical) |
+                (1u << eph::kObjDesignation);
+              caps.observers = 0x1F;
+              caps.planes = 3; caps.forms = 3; caps.frames = 0xF;
+              caps.corrMasks = {{0x1F, eph::kCorrMask}, {0x1F, 0},
+                {0x1F, eph::kCorrLightTime}};
+              caps.orbitPoints = 0xF;
+              caps.orbitMethods = 0x17;
+              caps.columns = eph::kColAyanamsa | eph::kColDeltaT;
+              for (int i = 0; i < eph::kZodiacTokenCount; i++)
+                caps.zodiacs.push_back(eph::kZodiacTokens[i]);
+              caps.siderealPlanes = 7;
+              caps.timeScales = 3;
+              caps.deltaTModel = "loopback";
+              eph::EncodeCapabilities(caps, &w.caps_);
+              eph::EncodeWelcome(&pay, w);
+              eph::WriteEnvelope(&msg, eph::kMsgWelcome, 0, pay.size());
+              msg.insert(msg.end(), pay.begin(), pay.end());
+              pconn->sendBinaryMessage(QByteArray((CONST char *)msg.data(),
+                (int)msg.size()));
             } else if (env.type == eph::kMsgRequest)
               *pbaReq = ba;
           });
@@ -17741,23 +17786,355 @@ static flag FWaitDataQt(CONST QByteArray *pba, int msMax)
 // backend spelling, the address, and the =b line that settles
 // fEphemFiles last -- not the display toggles (-b0/-b1/-b2) or the
 // Matrix spellings a full-file replay would drag in.
+static flag FWantEphSrcQt(CONST char *sz)
+{
+  return FEqSzPrefixQt(sz, "-bE") || FEqSzPrefixQt(sz, "-bP");
+}
+
+
 static flag FWantEphSrvQt(CONST char *sz)
 {
-  return FEqSzPrefixQt(sz, "=bS") || FEqSzPrefixQt(sz, "_bS") ||
-    FEqSzPrefixQt(sz, "-bW") || FEqSzPrefixQt(sz, "-bT") ||
-    FEqSzPrefixQt(sz, "=b ");
+  return FEqSzPrefixQt(sz, "-bE") || FEqSzPrefixQt(sz, "-bP");
+}
+
+#ifdef JPLWEB
+/*
+******************************************************************************
+** JPL Horizons: the question, the reply, and the recorded corpus.
+******************************************************************************
+*/
+
+// Astrolog's Horizons path is the one ephemeris source that cannot be
+// tested here, because it only answers over the network -- so phase 6h sat
+// blocked on "a rewrite cannot be verified from here". This corpus is the
+// answer to that: JPL's replies are recorded ONCE, politely, by
+// tools/horizons-fetch.py, committed, and replayed offline forever after.
+//
+// The hazard a recorded corpus has, and the one this is built to avoid: a
+// fixture that answers a question the client never asks proves nothing. So
+// the fetcher does NOT compose URLs of its own. It asks THIS BINARY what
+// the client would send -- PrintHorizonsUrlsQt() below, built with
+// SzUrlJPLHorizons(), the same function GetJPLHorizons() calls -- and the
+// group then asserts that every committed URL is still the one the builder
+// produces today. Change the query shape and the manifest goes red rather
+// than the fixtures going quietly stale.
+
+typedef struct _HorizonsCase {
+  CONST char *szName;   // Fixture stem, and the manifest's key.
+  int id;               // Horizons COMMAND; nMillion+n is a small body.
+  int yea, mon, day;    // The instant, UT.
+  real tim;
+  flag fTopo;
+  flag fErr;            // JPL REFUSES this one, and that is the fixture.
+  CONST char *szWhy;    // Why this case is in the corpus at all.
+} HORIZONSCASE;
+
+// Sixteen bodies and shapes, two deliberate failures. The epochs are the
+// project's own: 1990-06-15, which the numeric oracle uses, and 1500, far
+// enough out that a date-dependent defect cannot hide behind a modern one.
+static CONST HORIZONSCASE rghorizonsQt[] = {
+  {"sun-1990",     10,  1990, 6, 15, 12.0, fFalse, fFalse, "the Sun, geocentric"},
+  {"moon-1990",   301,  1990, 6, 15, 12.0, fFalse, fFalse, "the Moon, the fastest body"},
+  {"mercury-1990",199,  1990, 6, 15, 12.0, fFalse, fFalse, "Mercury"},
+  {"venus-1990",  299,  1990, 6, 15, 12.0, fFalse, fFalse, "Venus"},
+  {"mars-1990",   499,  1990, 6, 15, 12.0, fFalse, fFalse, "Mars"},
+  {"jupiter-1990",599,  1990, 6, 15, 12.0, fFalse, fFalse,
+     "Jupiter. 599 is the BODY CENTRE, not the 5 barycentre -- rgObjJPL[] "
+     "asks for x99 throughout, which matters more than it looks: see "
+     "pluto-1700 below"},
+  {"saturn-1990", 699,  1990, 6, 15, 12.0, fFalse, fFalse, "Saturn"},
+  {"uranus-1990", 799,  1990, 6, 15, 12.0, fFalse, fFalse, "Uranus"},
+  {"neptune-1990",899,  1990, 6, 15, 12.0, fFalse, fFalse, "Neptune"},
+  {"pluto-1990",  999,  1990, 6, 15, 12.0, fFalse, fFalse, "Pluto"},
+  {"sun-1500",     10,  1500, 1,  1, 12.0, fFalse, fFalse,
+     "the Sun four centuries earlier. It answers, where Mars and Pluto at "
+     "the same instant do not -- the Sun's coverage runs further back than "
+     "the planets'"},
+  {"mars-1700",   499,  1700, 1,  1, 12.0, fFalse, fFalse,
+     "Mars, far-dated but inside coverage: a date-dependent defect cannot "
+     "hide behind a modern epoch"},
+
+  {"sun-topo",     10,  1990, 6, 15, 12.0, fTrue,  fFalse,
+     "the topocentric URL shape: COORD_TYPE and SITE_COORD, a different "
+     "branch of the builder that no geocentric case exercises"},
+  // The same two bodies asked for as BARYCENTRES rather than body centres,
+  // to settle by measurement a thing the code only implies. ephswiss.h
+  // maps NAIF 4..9 to a plain SE_MARS+n and NAIF x99 to the same body
+  // PLUS SEFLG_CENTER_BODY out of the planetary-moon files -- explicitly
+  // different questions -- and rgObjJPL[] sends x99. So the horizons
+  // source and the swiss source in one chain are asking about different
+  // POINTS. These two fixtures are the evidence either way.
+  {"jupiter-bary-1990", 5, 1990, 6, 15, 12.0, fFalse, fFalse,
+     "Jupiter's system barycentre, against jupiter-1990's body centre"},
+  {"pluto-bary-1990",   9, 1990, 6, 15, 12.0, fFalse, fFalse,
+     "and the same pair at a modern instant, where both answer, so the "
+     "SIZE of the disagreement can be measured. Pluto is where it should "
+     "matter: Charon is massive enough that the system barycentre sits "
+     "well outside Pluto itself"},
+  {"pluto-bary-1700",   9, 1700, 1,  1, 12.0, fFalse, fFalse,
+     "Pluto's system barycentre at the instant its BODY CENTRE is refused: "
+     "if this answers, the coverage boundary is per target id, because a "
+     "body centre also needs the satellite solution"},
+  {"chiron-1990", nMillion + 2060, 1990, 6, 15, 12.0, fFalse, fFalse,
+     "a small body: the id carries nMillion and the query grows a trailing "
+     "semicolon, which is then percent-encoded"},
+
+  // The refusals, recorded on purpose. The error paths need fixtures as
+  // much as the happy one does, and a plausible-looking error page written
+  // by hand would be an invention rather than evidence. Each of these was
+  // EXPECTED TO SUCCEED when the corpus was first recorded; JPL said
+  // otherwise, and what it said is now the fixture.
+  {"earth-1990",  399,  1990, 6, 15, 12.0, fFalse, fTrue,
+     "Earth, asked for from Earth's own geocentre -- degenerate, and JPL "
+     "refuses it. This is WHY ComputeEphem() synthesises Earth from the Sun "
+     "instead of fetching it, and the corpus now carries the proof"},
+  {"mars-1500",   499,  1500, 1,  1, 12.0, fFalse, fTrue,
+     "outside coverage: \"No ephemeris for target Mars prior to A.D. "
+     "1600-JAN-01\". The observer tables start at 1600 for the planets, "
+     "which is a real limit the plugin has to report rather than discover"},
+  {"pluto-1500",  999,  1500, 1,  1, 12.0, fFalse, fTrue,
+     "Pluto outside coverage too"},
+  {"pluto-1700",  999,  1700, 1,  1, 12.0, fFalse, fTrue,
+     "and the reason this one is here rather than as a success: Pluto's "
+     "boundary is \"prior to A.D. 1800-JAN-02\", two centuries later than "
+     "Mars's. The limits are per TARGET ID, not per planet -- this is the "
+     "BODY CENTRE 999, and the Prometheia project got an answer for the "
+     "same date from the 9 barycentre. A body centre needs the satellite "
+     "solution on top of the planetary ephemeris, and that starts later; "
+     "these replies name theirs (plu060_merged, jup365_merged, mar099). So "
+     "a plugin cannot carry one coverage range for the source, nor even "
+     "one per planet: it reports ephErrOutsideCover per object"},
+  {"err-unknown",  9999999, 1990, 6, 15, 12.0, fFalse, fTrue,
+     "a body id JPL does not know"},
+  {"err-range",    999, 3500, 1,  1, 12.0, fFalse, fTrue,
+     "an instant beyond the far end of coverage"},
+};
+
+#define chHorTabQt '\t'
+#define szHorDirQt "ephsrv/horizons"
+
+// The site the topocentric case is recorded for. Pinned here rather than
+// taken from whatever settings the suite is running under, or the manifest
+// would not reproduce.
+// Astrolog stores longitude WEST-positive, and the builder negates it to
+// give Horizons the east-positive value it wants. So this is +71 for a
+// site at 71 west, and the URL must come out with -71.
+#define rHorLonQt 71.0598
+#define rHorLatQt 42.3584
+#define rHorElvQt 10.0
+
+static void SzUrlHorizonsCaseQt(CONST HORIZONSCASE *phc, char *szUrl, int cch)
+{
+  CI ci;
+
+  ClearB((pbyte)&ci, sizeof(CI));
+  ci.mon = phc->mon; ci.day = phc->day; ci.yea = phc->yea; ci.tim = phc->tim;
+  ci.lon = rHorLonQt; ci.lat = rHorLatQt;
+  SzUrlJPLHorizons(phc->id, &ci, phc->fTopo, rHorLonQt, rHorLatQt,
+    rHorElvQt, szUrl, cch);
+}
+
+
+// Print the corpus as TSV for tools/horizons-fetch.py: stem, expectation,
+// and the URL the client itself would send. Nothing here touches the
+// network -- this only says what WOULD be asked.
+void PrintHorizonsUrlsQt()
+{
+  char szUrl[cchSzLine*2];
+  int i;
+
+  for (i = 0; i < (int)(sizeof(rghorizonsQt)/sizeof(HORIZONSCASE)); i++) {
+    SzUrlHorizonsCaseQt(&rghorizonsQt[i], S(szUrl));
+    printf("%s%c%s%c%s\n", rghorizonsQt[i].szName, chHorTabQt,
+      rghorizonsQt[i].fErr ? "error" : "ok",
+      chHorTabQt, szUrl);
+  }
+}
+
+
+static void TestHorizonsQt()
+{
+  char szUrl[cchSzLine*2], szPath[cchSzMax], szName[cchSzMax], szLine[cchSzLine];
+  PT3R pt[3];
+  FILE *file;
+  int i, cCase = (int)(sizeof(rghorizonsQt)/sizeof(HORIZONSCASE)), cFix = 0;
+
+  // The builder is deterministic and takes no globals, so this half runs
+  // with or without a recorded corpus: the same case must give the same
+  // URL twice, and the two shapes that differ must actually differ.
+  SzUrlHorizonsCaseQt(&rghorizonsQt[0], S(szUrl));
+  if (getenv("ASTROLOG_HORIZONS_URLS") != NULL) {
+    PrintHorizonsUrlsQt();
+    return;
+  }
+  Check(strstr(szUrl, "CENTER=%27500%27") != NULL,
+    "the geocentric query asks Horizons for the geocentre");
+  Check(strstr(szUrl, "QUANTITIES=%2721,31%27") != NULL,
+    "the query asks for light time and ecliptic longitude/latitude, the "
+    "three fields the parser reads by position");
+  Check(strstr(szUrl, "STEP_SIZE=%275%20min%27") != NULL,
+    "one request spans three instants, which is where the rates come from");
+  // The window is centred on the chart's own instant. It was not: the
+  // minute was truncated from one rounding of the time and the second
+  // taken from another, so 12:00 minus five minutes went out as 11:54
+  // rather than 11:55 -- both ends a minute early, the span still 11
+  // minutes, and the middle row, which IS the reported position, a minute
+  // before the chart. See io.cpp's note at the fix.
+  Check(strstr(szUrl, "START_TIME=%271990-JUN-15%2011:55:") != NULL,
+    "the Horizons window starts five minutes before the chart's instant, "
+    "not six");
+  Check(strstr(szUrl, "STOP_TIME=%271990-JUN-15%2012:06:") != NULL,
+    "and ends six minutes after it, so the middle of the three rows is the "
+    "chart's own instant");
+  for (i = 0; i < cCase; i++)
+    if (rghorizonsQt[i].fTopo)
+      break;
+  Check(i < cCase, "the corpus covers the topocentric branch");
+  SzUrlHorizonsCaseQt(&rghorizonsQt[i], S(szUrl));
+  Check(strstr(szUrl, "coord@399") != NULL &&
+    strstr(szUrl, "SITE_COORD") != NULL,
+    "the topocentric query names a site rather than the geocentre");
+  Check(strstr(szUrl, "SITE_COORD=%27-71.0598") != NULL,
+    "a site 71 degrees WEST is sent to Horizons as -71, since Astrolog "
+    "stores longitude west-positive and Horizons wants east-positive");
+  Check(strstr(szUrl, " ") == NULL,
+    "no raw space survives into the query string: the hand encoder expands "
+    "only ' and ;, so a space in the format string went out unencoded");
+  for (i = 0; i < cCase; i++)
+    if (rghorizonsQt[i].id >= nMillion)
+      break;
+  Check(i < cCase, "the corpus covers a small body");
+  SzUrlHorizonsCaseQt(&rghorizonsQt[i], S(szUrl));
+  Check(strstr(szUrl, "%3B") != NULL,
+    "a small body's trailing semicolon is percent-encoded, not sent raw");
+
+  // The replay half. Absent a recorded corpus this SKIPS and says so
+  // rather than passing quietly -- a group that asserts nothing must not
+  // look like a group that asserted something.
+  for (i = 0; i < cCase; i++) {
+    sprintf2(S(szPath), "%s/%s.txt", szHorDirQt, rghorizonsQt[i].szName);
+    file = fopen(szPath, "r");
+    if (file == NULL)
+      continue;
+    cFix++;
+    // The very parser the client uses, over a reply JPL actually sent.
+    if (rghorizonsQt[i].fErr) {
+      Check(!FParseJPLHorizons(file, pt, S(szName)),
+        "a recorded Horizons refusal is reported as a failure, not parsed "
+        "into positions");
+    } else {
+      Check(FParseJPLHorizons(file, pt, S(szName)),
+        "a recorded Horizons reply parses into three rows");
+      Check(CchSz(szName) > 0,
+        "a recorded reply yields the target body name");
+      Check(pt[0].z > 0.0 && pt[1].z > 0.0 && pt[2].z > 0.0,
+        "every recorded row carries a positive light time");
+      Check(FBetween(pt[1].x, 0.0, 360.0) && FBetween(pt[1].y, -90.0, 90.0),
+        "the recorded middle row is a real ecliptic longitude and latitude");
+    }
+    fclose(file);
+  }
+
+  // Every committed URL is still the one the builder produces. This is the
+  // assertion that keeps the corpus honest: it goes red when the query
+  // shape moves, instead of the fixtures going quietly stale.
+  sprintf2(S(szPath), "%s/MANIFEST.tsv", szHorDirQt);
+  file = fopen(szPath, "r");
+  if (file == NULL) {
+    printf("  (skipped: no recorded corpus in %s; tools/horizons-fetch.py "
+      "records it, once, from JPL)\n", szHorDirQt);
+    return;
+  }
+  // fgets, not FReadSzLineSkip: the manifest is tab separated and that
+  // reader does not hand tabs back, so every row looked like one field.
+  while (fgets(szLine, cchSzLine, file) != NULL) {
+    char *pchName, *pchUrl;
+    if (szLine[0] == '#' || szLine[0] == chNull)
+      continue;
+    pchName = szLine;
+    pchUrl = (char *)strstr(szLine, "https://");
+    if (pchUrl == NULL)
+      continue;
+    for (i = 0; pchUrl[i] && pchUrl[i] != '\n' && pchUrl[i] != '\r'; i++)
+      ;
+    pchUrl[i] = chNull;
+    for (i = 0; szLine[i] && szLine[i] != chHorTabQt; i++)
+      ;
+    szLine[i] = chNull;
+    for (i = 0; i < cCase; i++)
+      if (FEqSz(rghorizonsQt[i].szName, pchName))
+        break;
+    Check(i < cCase, "every manifest row names a case the corpus defines");
+    if (i >= cCase)
+      continue;
+    SzUrlHorizonsCaseQt(&rghorizonsQt[i], S(szUrl));
+    Check(FEqSz(szUrl, pchUrl),
+      "a committed fixture's URL is still exactly what the client builds "
+      "for that case");
+  }
+  fclose(file);
+  Check(cFix > 0, "the recorded corpus has at least one reply in it");
+
+  // Body centre against system barycentre, measured rather than reasoned
+  // about. ephswiss.h maps NAIF x99 to SE_MARS+n PLUS SEFLG_CENTER_BODY
+  // and NAIF 4..9 to the plain body, so they are different questions, and
+  // rgObjJPL[] asks Horizons for x99 while Astrolog's own Swiss path uses
+  // the plain form. Two sources in one chain, answering about two points.
+  //
+  // Compared as an ANGULAR SEPARATION, not a longitude difference: a
+  // longitude difference is a projection and exaggerates near the poles.
+  {
+    PT3R ptBody[3], ptBary[3];
+    char szT[cchSzMax];
+    FILE *fileBody, *fileBary;
+
+    sprintf2(S(szPath), "%s/pluto-1990.txt", szHorDirQt);
+    fileBody = fopen(szPath, "r");
+    sprintf2(S(szPath), "%s/pluto-bary-1990.txt", szHorDirQt);
+    fileBary = fopen(szPath, "r");
+    if (fileBody != NULL && fileBary != NULL &&
+      FParseJPLHorizons(fileBody, ptBody, S(szT)) &&
+      FParseJPLHorizons(fileBary, ptBary, S(szT))) {
+      real rSep = SphDistance(ptBody[1].x, ptBody[1].y,
+        ptBary[1].x, ptBary[1].y) * 3600.0;
+      // They are not the same point...
+      Check(rSep > 0.005,
+        "Pluto's body centre and its system barycentre are different "
+        "points, so the horizons source and the swiss source are not "
+        "asking the same question");
+      // ...and the difference is small enough that the coverage cost of
+      // asking for the body centre -- two centuries of Pluto, since the
+      // satellite solution starts at 1800 where DE441 reaches 1700 and
+      // beyond -- buys nothing worth having.
+      Check(rSep < 0.5,
+        "and they differ by well under an arcsecond, so nothing "
+        "astrological hangs on which one is asked for");
+      printf("  Pluto body centre vs barycentre: %.4f arcsec\n", rSep);
+    }
+    if (fileBody != NULL) fclose(fileBody);
+    if (fileBary != NULL) fclose(fileBary);
+  }
+}
+#endif // JPLWEB
+
+
+// The ephemeris selection's own spellings, for the dialog group's round
+// trip: nothing else, so the replay cannot drag the legacy spellings
+// along behind the new ones.
+static flag FWantEphQt(CONST char *sz)
+{
+  return FEqSzPrefixQt(sz, "-bE") || FEqSzPrefixQt(sz, "-bP");
 }
 
 static void TestEphSrvQt()
 {
-  flag fEphemSav = us.fEphemFiles, fNoNetSav = us.fNoNetwork,
-    fNoEphFileSav = is.fNoEphFile, fPopSav = FNoPopupQt(),
-    fAddrSav = us.szEphSrv != NULL, fTokenSav = us.szEphSrvToken != NULL;
-  QByteArray baAddrSav(SzSet(us.szEphSrv));
-  QByteArray baTokenSav(SzSet(us.szEphSrvToken));
+  QByteArray baChainSav(SzSet(us.szEphemSource));
+  QByteArray baAddrSav(SzSet(us.rgszEphParam[epServerUrl]));
+  QByteArray baTokenSav(SzSet(us.rgszEphParam[epServerToken]));
+  flag fNoEphFileSav = is.fNoEphFile, fPopSav = FNoPopupQt();
   QByteArray baFileOutSav(SzSet(is.szFileOut));
   flag fFileOutSav = is.szFileOut != NULL;
-  int nSwissSav = us.nSwissEph, nWriteFormatSav = us.nWriteFormat;
+  int nWriteFormatSav = us.nWriteFormat;
   flag fNoWriteSav = us.fNoWrite;
   int cWarn, i;
   char sz[cchSzMax], szPath[cchSzMax];
@@ -17765,95 +18142,204 @@ static void TestEphSrvQt()
 
   Group("Ephemeris server");
   SetNoPopupQt(fTrue);   // The facade's warning below would otherwise pop.
-  us.fNoNetwork = fFalse;   // The maintainer's file runs "=0n"; the -0n
-                            // scenarios below set it back themselves.
 
-  // The backend slot: the -bs family reaches it like the other values.
+  // ---- The host question as a REQUEST (ephreq.h, phase 6) -----------
+  // The one translation every transport shares. What matters is not that
+  // it produces A request but that it produces the request whose answer
+  // is comparable with the local one -- so each object is mapped BACK
+  // through the protocol's own ephswiss.h and required to be the Swiss
+  // call FSwissPlanetSpec() would have made. A translation that dropped
+  // a flag, bound the wrong centre or lost a node's method would encode
+  // and parse perfectly and fail here.
+  {
+    EPHQUERY eqR;
+    eph::Request reqR;
+    EPHREQMAP rgmapR[objMax];
+    std::vector<uint8_t> rgbR;
+    eph::Request reqBack;
+    std::string strWhyR;
+    int cR, iR;
+    CONST int rgobjR[] = {oSun, oMoo, oMer, oJup, oNod, oChi, custLo};
+    int cobjR = (int)(sizeof(rgobjR)/sizeof(*rgobjR));
+    // The last one is an ORBIT POINT with a method -- a custom slot set
+    // to Jupiter's node. Without it nothing in this list exercises
+    // nNodMethod, and a translation that dropped the method passed.
+    Borrow bTypR(rgTypSwiss[0], 2), bObjR(rgObjSwiss[0], (int)oJup);
+    Borrow bPntR(rgPntSwiss[0], 1), bFlgR(rgFlgSwiss[0], 0);
+
+    EphQueryInit(&eqR, 2451545.0);
+    for (iR = 0; iR < cobjR; iR++)
+      FEphQueryAdd(&eqR, rgobjR[iR], 0, oEar, NULL);
+    cR = CEphRequestFromQuery(&eqR, 69.184, &reqR, rgmapR);
+    // EVERY one of them, not merely some. The builder skips an object it
+    // cannot express, which is right -- the chain walk then offers it to
+    // the next source -- but it makes a translation BUG look exactly like
+    // "this source cannot do that object". These seven all have a version
+    // 4 form, so a count short of seven is the builder losing one, and
+    // that is the failure this leg exists for: sabotaging the node method
+    // does not corrupt the orbit point, it DROPS it, and every per-object
+    // check below then passes by never running.
+    Check(cR == cobjR,
+      "the request carries every object the query asked for (%d of %d)",
+      cR, cobjR);
+    Check(!reqR.profiles.empty() &&
+      reqR.profiles.size() <= reqR.objs.size(),
+      "with its profiles deduplicated (%d profiles, %d objects)",
+      (int)reqR.profiles.size(), (int)reqR.objs.size());
+
+    // The instant is TT and the Delta-T that got there is stated, so a
+    // server's own model cannot quietly become part of the answer.
+    Check(reqR.timeScale == eph::kTimeTT &&
+      RAbs(reqR.start.Sum() - (2451545.0 + 69.184/86400.0)) < 1.0e-9 &&
+      RAbs(reqR.deltaTSec - 69.184) < 1.0e-9,
+      "the instant is TT with the host's own Delta-T stated (%.6f)",
+      reqR.deltaTSec);
+
+    // It survives its own codec.
+    eph::EncodeRequest(&rgbR, reqR);
+    Check(eph::ParseRequest(rgbR.data(), rgbR.size(), &reqBack, &strWhyR)
+      == eph::kOk, "and encodes to a REQUEST that parses (%s)",
+      strWhyR.c_str());
+    Check(reqBack.objs.size() == reqR.objs.size() &&
+      reqBack.profiles.size() == reqR.profiles.size(),
+      "with its objects and profiles intact");
+
+    // And every object is the call Astrolog would have made itself.
+    for (iR = 0; iR < cR; iR++) {
+      SWISSSPEC ssR;
+      eph::swiss::SwissCall cCall;
+      int iq = rgmapR[iR].iObjQuery;
+      CONST eph::Object &objR = reqBack.objs[rgmapR[iR].iObjReq];
+
+      if (!FSwissPlanetSpec(eqR.rgobj[iq], eqR.rgcent[iq], &ssR))
+        continue;
+      {
+        uint16_t errMap = eph::swiss::MapObject(objR, 0,
+          reqBack.profiles[objR.profile], reqBack.timeScale,
+          reqBack.deltaTSec, SEFLG_SWIEPH, &cCall, &strWhyR);
+        Check(errMap == 0, "%s maps back to a Swiss call (%s)",
+          szObjName[eqR.rgobj[iq]], strWhyR.c_str());
+        if (errMap != 0)
+          continue;
+      }
+      Check(cCall.ipl == ssR.iobj,
+        "%s asks the server for the body Astrolog asks Swiss for "
+        "(%d, not %d)", szObjName[eqR.rgobj[iq]], (int)cCall.ipl,
+        (int)ssR.iobj);
+      Check(cCall.point == (ssR.nPnt > 0 ? ssR.nPnt - 1 : 0),
+        "%s keeps its orbit point (%d)", szObjName[eqR.rgobj[iq]],
+        cCall.point);
+      // Only where it means anything. FSwissPlanetSpec() fills
+      // nNodMethod for every object from the global setting, but it
+      // selects nothing unless the object IS an orbit point, and the
+      // wire carries it only for kind 1. Asserting it on a plain body
+      // asks the translation to carry a field the protocol has no place
+      // for -- which this check did on its first run, and six bodies
+      // failed a rule that was the test's invention.
+      if (ssR.nPnt > 0)
+        Check(cCall.nodMethod == ssR.nNodMethod,
+          "%s keeps the method its node is computed by (%d, not %d)",
+          szObjName[eqR.rgobj[iq]], (int)cCall.nodMethod,
+          (int)ssR.nNodMethod);
+      // The ephemeris bits are deliberately NOT carried -- which
+      // ephemeris answers is the server's business -- so compare what
+      // remains.
+      Check((cCall.iflag & ~(SEFLG_SWIEPH | SEFLG_JPLEPH | SEFLG_MOSEPH)) ==
+        (ssR.iflag & ~(SEFLG_SWIEPH | SEFLG_JPLEPH | SEFLG_MOSEPH)),
+        "%s keeps every flag but the ephemeris bits (%08x vs %08x)",
+        szObjName[eqR.rgobj[iq]], (unsigned)(cCall.iflag & ~(SEFLG_SWIEPH | SEFLG_JPLEPH | SEFLG_MOSEPH)),
+        (unsigned)(ssR.iflag & ~(SEFLG_SWIEPH | SEFLG_JPLEPH | SEFLG_MOSEPH)));
+    }
+  }
+  EphSrvFinalizeQt();    // This group sets the adapter's state itself
+  ClearWinSrvTestQt();   // rather than inheriting whatever ran before.
+
+  // The backend slot: the -bs family reaches it like the other values,
+  // and the chain it leaves is the selection.
   FProcessCommandLine("=bs");
-  Check(us.nSwissEph == 1 && us.fEphemFiles, "\"=bs\" is Moshier");
+  Check(FEqSz(us.szEphemSource, "moshier"), "\"=bs\" is Moshier");
   FProcessCommandLine("=bj");
-  Check(us.nSwissEph == 2, "\"=bj\" is JPL");
+  Check(FEqSz(us.szEphemSource, "jpl"), "\"=bj\" is JPL");
   FProcessCommandLine("=bJ");
-  Check(us.nSwissEph == 3, "\"=bJ\" is Horizons");
+  Check(FEqSz(us.szEphemSource, "horizons,jpl"), "\"=bJ\" is Horizons");
   FProcessCommandLine("=bS");
-  Check(us.nSwissEph == 5 && us.fEphemFiles, "\"=bS\" is the Ephemeris Server");
+  Check(FEqSz(us.szEphemSource, "server,swiss"),
+    "\"=bS\" is the Ephemeris Server, with the Swiss files behind it for "
+    "the side calls");
   FProcessCommandLine("_bS");
-  Check(us.nSwissEph == 0, "\"_bS\" is off it");
-  // The plain toggle, from the state a settings file leaves: files already
-  // on. It used to toggle them OFF while selecting the server, so the
-  // backend sat selected and never connected.
-  us.fEphemFiles = fTrue;
+  Check(FEqSz(us.szEphemSource, "none"), "\"_bS\" is off it -- the "
+    "toggle-off falls through to the files toggle, as it always has");
+  // The plain toggle, from the state a settings file leaves: files
+  // already on. It used to toggle them OFF while selecting the server,
+  // so the backend sat selected and never connected. The shadow now
+  // carries that state, so the toggle does what it always meant.
+  FProcessCommandLine("=b");
   FProcessCommandLine("-bS");
-  Check(us.nSwissEph == 5 && us.fEphemFiles,
+  Check(FEqSz(us.szEphemSource, "server,swiss"),
     "\"-bS\" with ephemeris files on selects the server and keeps them on");
   FProcessCommandLine("-bS");
-  Check(us.nSwissEph == 0, "a second \"-bS\" turns the server off");
-  us.fEphemFiles = fFalse;
+  Check(FEqSz(us.szEphemSource, "none"),
+    "a second \"-bS\" turns the server off, files toggling with it as "
+    "they always did");
+  FProcessCommandLine("_b");
   FProcessCommandLine("-bS");
-  Check(us.nSwissEph == 5 && us.fEphemFiles,
+  Check(FEqSz(us.szEphemSource, "server,swiss"),
     "and \"-bS\" with files off turns them on");
   FProcessCommandLine("=bS");
   FProcessCommandLine("-bW example.com:1234");
-  Check(FEqSz(us.szEphSrv, "example.com:1234"), "-bW stores the address");
+  Check(FEqSz(us.rgszEphParam[epServerUrl], "example.com:1234"),
+    "-bW stores the address, as -bP server.url spells it");
   Check(!FProcessCommandLine("-bW"), "an address-less -bW is refused");
   FProcessCommandLine("-bT \"tok en-1\"");
-  Check(FEqSz(us.szEphSrvToken, "tok en-1"), "-bT stores the token");
+  Check(FEqSz(us.rgszEphParam[epServerToken], "tok en-1"),
+    "-bT stores the token, as -bP server.token spells it");
   Check(!FProcessCommandLine("-bT"), "a token-less -bT is refused");
 
-  // The settings writer carries both, and only the one backend spelling,
-  // and they replay.
+  // The settings writer carries the chain and the parameters, and they
+  // replay. -0n is inert now, so there is no lock leg: a chain that
+  // names the server is used if the server is reachable, and a failure
+  // is reported when it happens (section 2).
   SzScratchPathQt(S(szPath), "ephsrv", ".as");
   us.fNoWrite = fFalse;
   us.nWriteFormat = 'd';
   FCloneSz(szPath, &is.szFileOut);
-  us.fEphemFiles = fTrue;
+  EphSourceSet("server,swiss");
+  FEphParamSet(epServerUrl, "example.com:1234");
+  FEphParamSet(epServerToken, "tok en-1");
   Check(FOutputSettings(), "the settings writer wrote a file");
   {
     char szLine[cchSzLine];
-    flag fSawB = fFalse, fSawW = fFalse, fSawT = fFalse;
+    flag fSawE = fFalse, fSawP = fFalse, fSawT = fFalse;
     FILE *file = FileOpen(szPath, 1, NULL, 0);
     Check(file != NULL, "and it can be read back");
     while (file != NULL && FReadSzLineSkip(file, szLine, cchSzLine)) {
-      if (FEqSzPrefixQt(szLine, "=bS"))
-        fSawB = fTrue;
-      if (FEqSz(szLine, "-bW \"example.com:1234\""))
-        fSawW = fTrue;
-      if (FEqSz(szLine, "-bT \"tok en-1\""))
+      if (FEqSz(szLine, "-bE \"server,swiss\""))
+        fSawE = fTrue;
+      if (FEqSz(szLine, "-bP server.url \"example.com:1234\""))
+        fSawP = fTrue;
+      if (FEqSz(szLine, "-bP server.token \"tok en-1\""))
         fSawT = fTrue;
     }
     if (file != NULL)
       fclose(file);
-    Check(fSawB, "the file carries \"=bS\" for the server backend");
-    Check(fSawW, "and \"-bW\" with the quoted address");
-    Check(fSawT, "and \"-bT\" with the quoted token");
+    Check(fSawE, "the file carries the chain");
+    Check(fSawP, "and \"-bP server.url\" with the quoted address");
+    Check(fSawT, "and \"-bP server.token\" with the quoted token");
   }
-  us.nSwissEph = 0;
-  us.fEphemFiles = fFalse;
-  FCloneSz("other.host:9", &us.szEphSrv);
-  FCloneSz(NULL, &us.szEphSrvToken);
+  EphSourceSet("swiss");
+  FEphParamSet(epServerUrl, "other.host:9");
+  FEphParamSet(epServerToken, NULL);
   i = CReplaySettingsQt(szPath, FWantEphSrvQt);
   Check(i > 0, "the -b lines replay (%d)", i);
-  Check(us.nSwissEph == 5 && us.fEphemFiles,
-    "\"=bS\" replays to the server backend");
-  Check(FEqSz(us.szEphSrv, "example.com:1234"),
-    "\"-bW\" replays the address");
-  Check(FEqSz(us.szEphSrvToken, "tok en-1"), "\"-bT\" replays the token");
+  Check(FEqSz(us.szEphemSource, "server,swiss"),
+    "the chain replays to the server backend");
+  Check(FEqSz(us.rgszEphParam[epServerUrl], "example.com:1234"),
+    "\"-bP server.url\" replays the address");
+  Check(FEqSz(us.rgszEphParam[epServerToken], "tok en-1"),
+    "\"-bP server.token\" replays the token");
   FCloneSz(fFileOutSav ? baFileOutSav.constData() : NULL, &is.szFileOut);
   us.nWriteFormat = nWriteFormatSav;
   us.fNoWrite = fNoWriteSav;
-
-  // -0n refuses selecting the backend, changing nothing.
-  us.fNoNetwork = fTrue;
-  ClearPopupSuppressedTestQt();
-  Check(!FProcessCommandLine("=bS"), "\"=bS\" is refused under -0n");
-  Check(us.nSwissEph == 5, "and the backend is unchanged");
-  // -0n cannot be lifted by any switch, so "not allowed now" was a dead
-  // end: the refusal has to name the line and the remedy.
-  Check(strstr(SzPopupSuppressedTestQt(), "\"=0n\"") != NULL &&
-    strstr(SzPopupSuppressedTestQt(), "\"_0n\"") != NULL,
-    "and the refusal names \"=0n\" and how to allow it (\"%.70s\")",
-    SzPopupSuppressedTestQt());
-  us.fNoNetwork = fFalse;
 
   // The address setting: default, bare host, host:port, URL, refusal.
   Check(FUrlEphSrvTestQt(NULL, S(sz)) && FEqSz(sz, "ws://localhost:47190"),
@@ -17873,128 +18359,140 @@ static void TestEphSrvQt()
     "when none is given");
   Check(!FUrlEphSrvTestQt(":", S(sz)), "a hostless spelling is refused");
 
-  // Protocol round trips, straight against ephproto.h.
+  // Protocol round trips, straight against ephproto.h. The codec has its own
+  // conformance test against the fixtures (ephsrv/ephproto_test.cpp); what
+  // this asks is that the client's compiled copy encodes and parses the
+  // messages this client sends and reads.
   {
-    byte rgbP[5] = {1, 2, 3, 4, 5};
-    std::vector<uint8_t> msg, rgb;
+    std::vector<uint8_t> pay, msg;
     eph::Envelope env;
+    std::string strWhy;
     eph::Request rq, rq2;
-    eph::ErrorMsg err;
-    byte rgbE[32];
+    eph::Error err, err2;
 
-    msg = eph::makeMessage(eph::kMsgRequest, 9, rgbP, 5);
+    eph::WriteEnvelope(&msg, eph::kMsgRequest, 9, 5);
+    msg.insert(msg.end(), 5, (uint8_t)7);
     Check(msg.size() == eph::kEnvelopeSize + 5, "an envelope wraps its payload");
-    Check(eph::parseEnvelope(msg.data(), &env) &&
+    Check(eph::ParseEnvelope(msg.data(), msg.size(), &env, &strWhy) == eph::kOk &&
       env.type == eph::kMsgRequest && env.requestId == 9 &&
-      env.payloadLen == 5 && env.flags == 0, "and round trips");
+      env.payloadLen == 5 && env.flags == 0 && env.version == eph::kProtoVersion,
+      "and round trips");
     msg[0] = 0;
-    Check(!eph::parseEnvelope(msg.data(), &env), "a broken magic refuses");
+    Check(eph::ParseEnvelope(msg.data(), msg.size(), &env, &strWhy) != eph::kOk,
+      "a broken magic refuses");
 
-    rq.objs.resize(3);
-    rq.objs[0].kind = eph::kObjBody; rq.objs[0].id = 2;
-    rq.objs[1].kind = eph::kObjStar;
-    sprintf2(S(sz), "Regulus");
-    strcpy(rq.objs[1].name, sz);
-    rq.objs[2].kind = eph::kObjBody; rq.objs[2].id = nMillion + 1;
-    rq.center = 10;
-    rq.iflag = 256|2|65536;
-    rq.sidMode = 1; rq.sidAyanOff = 0.883208;
-    rq.topoLon = -122.4194; rq.topoLat = 47.6062; rq.topoElv = 12.0;
-    rq.jdStart = 2459010.5; rq.stepSeconds = 600; rq.nTime = 3;
-    rq.precision = eph::kPrecF64; rq.chunkRows = 100;
-    eph::buildRequest(&rgb, rq);
-    Check(rgb.size() == 4 + eph::kObjRecordBodySize*2 +
-      (1 + CchSz("Regulus") + 1) + sizeof(eph::RequestFixed),
-      "a mixed kind-0/kind-1 REQUEST is its parts' size");
-    Check(eph::parseRequest(rgb.data(), rgb.size(), &rq2) == eph::kParseOk,
-      "REQUEST parses");
-    Check(rq2.objs.size() == 3 && rq2.objs[0].id == 2 &&
-      rq2.objs[1].kind == eph::kObjStar &&
-      FEqSz(rq2.objs[1].name, "Regulus") && rq2.objs[2].id == nMillion + 1,
+    // One cast: two profiles (geocentric, and topocentric sidereal on the
+    // invariable plane) over the six kinds of object this client sends.
+    rq.profiles.resize(2);
+    rq.profiles[1].observer = eph::kObsTopo;
+    rq.profiles[1].siteLonEastDeg = -122.4194;
+    rq.profiles[1].siteLatDeg = 47.6062;
+    rq.profiles[1].siteHeightM = 12.0;
+    rq.profiles[1].zodiac = "fagan-bradley";
+    rq.profiles[1].siderealPlane = eph::kSidPlaneInvariable;
+    rq.objs.resize(4);
+    rq.objs[0].kind = eph::kObjBody; rq.objs[0].naif = 199;
+    rq.objs[1].kind = eph::kObjStar; rq.objs[1].name = "Regulus";
+    rq.objs[1].profile = 1;
+    rq.objs[2].kind = eph::kObjOrbitPoint; rq.objs[2].naif = 301;
+    rq.objs[2].point = eph::kPtApo; rq.objs[2].method = eph::kMethOsculating;
+    rq.objs[3].kind = eph::kObjBody; rq.objs[3].naif = 20000001;
+    rq.start = eph::Time{2459010.5, 0.0};
+    rq.stepNs = 600LL * 1000000000LL;
+    rq.nTime = 3;
+    rq.deltaTSec = 69.2;
+    rq.precision = eph::kPrecF64;
+    rq.chunkRows = 100;
+    eph::EncodeRequest(&pay, rq);
+    Check(eph::ParseRequest(pay.data(), pay.size(), &rq2, &strWhy) == eph::kOk,
+      "a REQUEST of two profiles and four objects parses (%s)", strWhy.c_str());
+    Check(rq2.objs.size() == 4 && rq2.objs[0].naif == 199 &&
+      rq2.objs[1].kind == eph::kObjStar && rq2.objs[1].profile == 1 &&
+      FEqSz(rq2.objs[1].name.c_str(), "Regulus") &&
+      rq2.objs[2].point == eph::kPtApo && rq2.objs[3].naif == 20000001,
       "its object records round trip");
-    Check(rq2.center == 10 && rq2.iflag == rq.iflag && rq2.sidMode == 1 &&
-      rq2.sidAyanOff == 0.883208 && rq2.topoLon == -122.4194 &&
-      rq2.topoLat == 47.6062 && rq2.topoElv == 12.0 &&
-      rq2.jdStart == 2459010.5 && rq2.stepSeconds == 600 &&
-      rq2.nTime == 3 && rq2.precision == eph::kPrecF64 &&
-      rq2.chunkRows == 100, "and its fixed fields round trip");
+    Check(rq2.profiles.size() == 2 && rq2.profiles[1].observer == eph::kObsTopo &&
+      rq2.profiles[1].siteLonEastDeg == -122.4194 &&
+      rq2.profiles[1].siteLatDeg == 47.6062 &&
+      FEqSz(rq2.profiles[1].zodiac.c_str(), "fagan-bradley") &&
+      rq2.profiles[1].siderealPlane == eph::kSidPlaneInvariable,
+      "and its profiles");
+    Check(rq2.start.Sum() == 2459010.5 && rq2.stepNs == 600LL * 1000000000LL &&
+      rq2.nTime == 3 && rq2.deltaTSec == 69.2 &&
+      rq2.precision == eph::kPrecF64 && rq2.chunkRows == 100,
+      "and its time and delivery fields");
+    Check(rq2.RowTime(2).Sum() == 2459010.5 + 1200.0 / 86400.0,
+      "and row 2 is the instant the server will compute");
 
-    // A DATA chunk: header, per-object metadata (one ok, one failed),
-    // and the value block.
+    // A DATA chunk: header, metadata for two objects (one failed), values.
     {
-      byte rgbMeta[2 * eph::kDataMetaSize];
-      double rgcols[2 * 6] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
-      size_t cb, ncb = 0;   // strZ() leaves ncb alone on a bad read.
-      char serr[eph::kSerrMax], szName[eph::kMetaNameMax];
-      const char *szN;
-
-      eph::writeDataMeta(rgbMeta, 2, 9876, "", "Mercury");
-      eph::writeDataMeta(rgbMeta + eph::kDataMetaSize, -1, 0,
-        "swe_calc_ut_r: bad input", "Sedna");
-      rgb.resize(eph::dataPayloadSize(2, 1, eph::kPrecF64));
-      eph::writeDataChunk(rgb.data(), rgb.size(), 0, 0, 1, 1, 2,
-        eph::kPrecF64, rgbMeta, rgcols, &cb);
-      Check(cb == rgb.size(), "DATA fills exactly its payload size");
-      eph::Reader r(rgb.data(), rgb.size());
-      Check(r.u32() == 0 && r.u32() == 0 && r.u32() == 1 &&
-        r.u8() == eph::kPrecF64 && r.u32() == 2,
-        "its header round trips");
-      Check(r.i32() == 2 && r.i32() == 9876,
-        "the first object's retFlag/flagsUsed");
-      r.raw(serr, eph::kSerrMax);
-      // The name is strZ read out of a fixed 56-byte field: skip the
-      // padding after its NUL, or the next record reads from the middle
-      // of this one.
-      szN = r.strZ(&ncb);
-      Check(szN != NULL && FEqSz(szN, "Mercury"), "and its name");
-      r.raw(szName, eph::kMetaNameMax - (ncb + 1));
-      Check(r.i32() < 0 && r.i32() == 0, "the failed object's retFlag");
-      r.raw(serr, eph::kSerrMax);
-      Check(FEqSz(serr, "swe_calc_ut_r: bad input"), "carries its serr text");
-      szN = r.strZ(&ncb);
-      Check(szN != NULL && FEqSz(szN, "Sedna"), "and its name");
-      r.raw(szName, eph::kMetaNameMax - (ncb + 1));
-      Check(r.f64() == 1.0, "the value block starts with obj0's first column");
-      r.f64(); r.f64(); r.f64(); r.f64();   // obj0's columns 2 through 5.
-      Check(r.f64() == 6.0 && r.f64() == 7.0,
-        "obj0's last column, then obj1's first, object-major");
+      eph::DataChunk d, d2;
+      d.chunkIndex = 0; d.iTime = 0; d.nRows = 1; d.totalRows = 1;
+      d.precision = eph::kPrecF64;
+      d.flags = eph::kChunkLast | eph::kChunkMeta;
+      d.nObj = 2;
+      d.sources.push_back("astrolog-ephd 2.0 | Swiss Ephemeris | files");
+      d.meta.resize(2);
+      d.meta[0].rowsOk = 1; d.meta[0].name = "Mercury"; d.meta[0].resolvedNaif = 199;
+      d.meta[1].rowsOk = 0; d.meta[1].errCode = eph::kOErrDataMissing;
+      d.meta[1].errText = "the ephemeris file for this body is not on the "
+        "server's path";
+      d.meta[1].firstFailedRow = 0;
+      d.values = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
+      pay.clear();
+      eph::EncodeData(&pay, d);
+      Check(eph::ParseData(pay.data(), pay.size(), &d2, &strWhy) == eph::kOk &&
+        d2.nObj == 2 && d2.Cols() == 6 && d2.meta[0].rowsOk == 1 &&
+        FEqSz(d2.meta[0].name.c_str(), "Mercury") && d2.meta[1].rowsOk == 0 &&
+        d2.meta[1].errCode == eph::kOErrDataMissing,
+        "a DATA chunk and its metadata round trip (%s)", strWhy.c_str());
+      Check(d2.values[0] == 1.0 && d2.values[6] == 7.0,
+        "its values are object-major");
     }
 
-    eph::putU32(rgbE, 4);
-    eph::putI32(rgbE + 4, eph::kErrLimits);
-    sprintf2(S(sz), "too big");
-    strcpy((char *)rgbE + 8, sz);
-    msg = eph::makeMessage(eph::kMsgError, 0, rgbE, 8 + CchSz(sz) + 1);
-    Check(eph::parseError(msg.data() + eph::kEnvelopeSize, msg.size() -
-      eph::kEnvelopeSize, &err) && err.requestId == 4 &&
-      err.code == eph::kErrLimits && FEqSz(err.text.c_str(), "too big"),
+    err.code = eph::kErrLimits;
+    err.text = "too big";
+    pay.clear();
+    eph::EncodeError(&pay, err);
+    Check(eph::ParseError(pay.data(), pay.size(), &err2, &strWhy) == eph::kOk &&
+      err2.code == eph::kErrLimits && FEqSz(err2.text.c_str(), "too big"),
       "an ERROR round trips");
   }
 
-  // REQUEST clamping, with no WELCOME stored: the protocol's constants.
+  // REQUEST clamping, with no WELCOME stored: the protocol's own defaults.
   EphSrvFinalizeQt();
   {
     eph::Request rq;
-    rq.objs.resize(eph::kMaxObjs + 6);
-    rq.nTime = 999999; rq.chunkRows = 9999;
+    eph::Welcome w;   // the defaults a client assumes before a WELCOME
+    rq.profiles.push_back(eph::Profile());
+    rq.objs.resize(w.maxObjs + 6);
+    for (eph::Object &o : rq.objs) o.naif = 10;
+    rq.nTime = 999999;
+    rq.stepNs = 60LL * 1000000000LL;
+    rq.chunkRows = 9999;
     rq.precision = eph::kPrecF32;
+    rq.priority = 1;
     ClampEphSrvReqQt(&rq);
-    Check(rq.objs.size() == eph::kMaxObjs,
+    Check(rq.objs.size() == w.maxObjs,
       "nObj clamps to WELCOME maxObjs (%d)", (int)rq.objs.size());
-    Check(rq.chunkRows == eph::kMaxChunkRows,
+    Check(rq.chunkRows == w.maxChunkRows,
       "the chunk hint clamps to WELCOME's limit");
     Check(rq.precision == eph::kPrecF64,
       "f32 without a caps bit falls back to f64");
-    // The work bound clamps the rows (protocol 2, S4): 64 objects at the
-    // default 100000 cells is 1562 rows, not the 20000 rows limit -- and
-    // the rows limit still governs when the bound does not bind.
-    Check(rq.nTime == eph::kMaxCellsDefault / eph::kMaxObjs,
+    Check(rq.priority == 0, "and prefetch priority without its caps bit");
+    // The work bound clamps the rows (3.5, S4): 64 objects at the default
+    // 100000 cells is 1562 rows, not the 20000 rows limit -- and the rows
+    // limit still governs when the bound does not bind.
+    Check(rq.nTime == w.maxCells / w.maxObjs,
       "rows clamp to the default work bound (%u)", rq.nTime);
     rq.objs.resize(2);
     rq.nTime = 999999;
     ClampEphSrvReqQt(&rq);
-    Check(rq.nTime == eph::kMaxRows,
+    Check(rq.nTime == w.maxRows,
       "rows clamp to WELCOME maxRows when the work bound allows it");
+    rq.nTime = 1;
+    ClampEphSrvReqQt(&rq);
+    Check(rq.stepNs == 0, "and a one-row window carries no step (3.5)");
   }
 
   // The state machine, against three loopback servers: welcomed, then a
@@ -18004,12 +18502,12 @@ static void TestEphSrvQt()
     QWebSocketServer srv1("eph-loopback-1", QWebSocketServer::NonSecureMode);
     QWebSocketServer srv2("eph-loopback-2", QWebSocketServer::NonSecureMode);
     QWebSocketServer srv3("eph-loopback-3", QWebSocketServer::NonSecureMode);
-    // srv2 is the server too old to talk to: one version below the oldest
-    // this client speaks (kProtoMin -- protocol 3 negotiates, so a version-2
-    // server is welcomed, not refused).
+    // srv2 is a server too old to speak version 4 at all: it answers the
+    // HELLO in protocol 3's layout, the only thing it knows (3.3 step 5 in
+    // reverse -- this is the client meeting an old server).
     byte bProto1 = eph::kProtoVersion, bProto2 = eph::kProtoMin - 1,
       bProto3 = eph::kProtoVersion;
-    uint32_t dwCaps1 = 0, dwCaps2 = 0, dwCaps3 = eph::kCapFloat32;
+    uint32_t dwCaps1 = 0, dwCaps2 = 0, dwCaps3 = eph::kCapF32;
     char szVer1[64], szVer2[64], szVer3[64];
     QByteArray baReq1, baReq2, baReq3;
     QWebSocket *pconn1 = NULL, *pconn2 = NULL, *pconn3 = NULL;
@@ -18032,23 +18530,29 @@ static void TestEphSrvQt()
     WireEphLoopbackQt(&srv3, &bProto3, &dwCaps3, szVer3, &baReq3, &pconn3);
 
     // Select the backend, pointed at the first.
-    us.fEphemFiles = fTrue; us.nSwissEph = 5; us.fNoNetwork = fFalse;
+    EphSourceSet("server,swiss");
     EphSrvFinalizeQt();
     sprintf2(S(sz), "localhost:%d", (int)srv1.serverPort());
-    FCloneSz(sz, &us.szEphSrv);
+    FEphParamSet(epServerUrl, sz);
     EphSrvStartupQt();
     Check(NEphSrvStateTestQt() == 1, "the startup hook begins connecting");
     Check(FWaitEstQt(2, 10000),
       "the client welcomes against the loopback server");
     Check(FWelcEphSrvTestQt(), "WELCOME stored");
     pw = PwelcEphSrvTestQt();
-    Check(pw->maxObjs == eph::kMaxObjs && pw->maxRows == eph::kMaxRows &&
-      pw->maxChunkRows == eph::kMaxChunkRows &&
-      pw->maxCells == eph::kMaxCellsDefault &&
-      pw->swissephVersion == 21003, "its limits and versions stored");
-    Check(FEqSz(pw->serverVersion.c_str(), szVer1),
-      "and the server's version string with them");
-    Check(s_baHelloTokenQt == QByteArray(SzSet(us.szEphSrvToken)) &&
+    {
+      eph::Welcome w;   // the protocol's defaults, which the loopback sends
+      Check(pw->protoSession == eph::kProtoVersion && pw->maxObjs == w.maxObjs &&
+        pw->maxRows == w.maxRows && pw->maxChunkRows == w.maxChunkRows &&
+        pw->maxCells == w.maxCells && pw->maxProfiles == w.maxProfiles,
+        "its limits stored");
+    }
+    Check(FEqSz(pw->serverName.c_str(), szVer1),
+      "and the server's name with them");
+    Check(FEqSz(pw->datasetId.c_str(), "loopback/test/0#00000000"),
+      "and its datasetId, which every window cache key carries (3.7)");
+    Check(s_baHelloTokenQt ==
+      QByteArray(SzSet(us.rgszEphParam[epServerToken])) &&
       !s_baHelloTokenQt.isEmpty(), "HELLO carried the -bT token (\"%s\")",
       s_baHelloTokenQt.constData());
     Check(NBackoffEphSrvTestQt() == 1000, "a session resets the ladder");
@@ -18063,28 +18567,33 @@ static void TestEphSrvQt()
       ClampEphSrvReqQt(&rqCells);
       Check(rqCells.nTime == 750, "rows clamp to WELCOME maxCells (%u)",
         rqCells.nTime);
-      SetWelcMaxCellsSrvTestQt(eph::kMaxCellsDefault);
+      SetWelcMaxCellsSrvTestQt(eph::Welcome().maxCells);
     }
 
     // One request, on the wire.
+    rq.profiles.push_back(eph::Profile());
     rq.objs.resize(3);
-    rq.objs[0].kind = eph::kObjBody; rq.objs[0].id = 2;
-    rq.objs[1].kind = eph::kObjBody; rq.objs[1].id = 17;
-    rq.objs[2].kind = eph::kObjStar;
-    sprintf2(S(sz), "Aldebaran");
-    strcpy(rq.objs[2].name, sz);
-    rq.jdStart = 2459010.5; rq.stepSeconds = 600; rq.nTime = 3;
+    rq.objs[0].kind = eph::kObjBody; rq.objs[0].naif = 199;
+    rq.objs[1].kind = eph::kObjBody; rq.objs[1].naif = 20000001;
+    rq.objs[2].kind = eph::kObjStar; rq.objs[2].name = "Aldebaran";
+    rq.start = eph::Time{2459010.5, 0.0};
+    rq.stepNs = 600LL * 1000000000LL; rq.nTime = 3;
     rq.chunkRows = 100; rq.precision = eph::kPrecF64;
     Check(FSendEphSrvQt(&rq), "a request sends while welcomed");
     dwReq = DwReqEphSrvTestQt();
     Check(dwReq != 0, "and takes an id");
     Check(FWaitDataQt(&baReq1, 5000), "the loopback server received it");
-    eph::buildRequest(&rgbExp, rq);
-    Check(eph::parseEnvelope((const byte *)baReq1.constData(), &env) &&
-      env.type == eph::kMsgRequest && env.requestId == dwReq &&
-      baReq1.size() == (int)(rgbExp.size() + eph::kEnvelopeSize) &&
-      memcmp(baReq1.constData() + eph::kEnvelopeSize, rgbExp.data(),
-        rgbExp.size()) == 0, "as exactly the bytes built");
+    eph::EncodeRequest(&rgbExp, rq);
+    {
+      std::string strWhy;
+      Check(eph::ParseEnvelope((CONST byte *)baReq1.constData(),
+        (size_t)baReq1.size(), &env, &strWhy) == eph::kOk &&
+        env.type == eph::kMsgRequest && env.requestId == dwReq &&
+        env.version == eph::kProtoVersion &&
+        baReq1.size() == (int)(rgbExp.size() + eph::kEnvelopeSize) &&
+        memcmp(baReq1.constData() + eph::kEnvelopeSize, rgbExp.data(),
+          rgbExp.size()) == 0, "as exactly the bytes built");
+    }
 
     // With caps 0 stored, f32 still falls back.
     rq2.precision = eph::kPrecF32; rq2.nTime = 10; rq2.chunkRows = 10;
@@ -18096,7 +18605,7 @@ static void TestEphSrvQt()
     // server only stops its listening; the client socket is what drops.
     SetBackoffEphSrvTestQt(100);   // Hurry the ladder.
     sprintf2(S(sz), "localhost:%d", (int)srv2.serverPort());
-    FCloneSz(sz, &us.szEphSrv);
+    FEphParamSet(epServerUrl, sz);
     if (pconn1 != NULL)
       pconn1->close();
     else
@@ -18114,24 +18623,24 @@ static void TestEphSrvQt()
       if (NRetryEphSrvTestQt() > 0)
         fSawRetry = fTrue;
       FErrEphSrvTestQt(sz, cchSzMax);
-      if (strstr(sz, "protocols 2 to 3") != NULL)
+      if (strstr(sz, "older than this client") != NULL)
         break;
     }
-    Check(strstr(sz, "protocols 2 to 3") != NULL && strstr(sz, szVer2) != NULL &&
-      strstr(sz, "protocol 1") != NULL,
-      "a version mismatch is refused with the server's version retained "
-      "(\"%.80s\")", sz);
+    Check(strstr(sz, "older than this client") != NULL &&
+      strstr(sz, "protocol 3") != NULL,
+      "a server too old to speak version 4 is refused, in words, from its "
+      "own layout (\"%.90s\")", sz);
     Check(NEphSrvStateTestQt() != 2, "the mismatched server never welcomes");
     Check(fSawRetry, "the retry ladder keeps going");
 
     // The third server tells the truth and carries the f32 caps bit; the
     // in-flight request is re-sent there verbatim.
     sprintf2(S(sz), "localhost:%d", (int)srv3.serverPort());
-    FCloneSz(sz, &us.szEphSrv);
+    FEphParamSet(epServerUrl, sz);
     Check(FWaitEstQt(2, 10000), "the client re-welcomes on the third server");
     pw = PwelcEphSrvTestQt();
-    Check((pw->caps & eph::kCapFloat32) != 0, "the caps bit arrived");
-    Check(FEqSz(pw->serverVersion.c_str(), szVer3), "from the right server");
+    Check((pw->caps & eph::kCapF32) != 0, "the caps bit arrived");
+    Check(FEqSz(pw->serverName.c_str(), szVer3), "from the right server");
     Check(FWaitDataQt(&baReq3, 5000),
       "the in-flight request was re-sent after the reconnect");
     Check(baReq3 == baReq1, "verbatim");
@@ -18140,7 +18649,7 @@ static void TestEphSrvQt()
     Check(rq2.precision == eph::kPrecF32,
       "and the caps bit admits f32");
 
-    // A server this client is too old for (protocol 3's ERROR 8): refused
+    // A server this client is too old for (ERROR 8): refused
     // for good -- the text says to update, and no retry is armed, since
     // asking again changes nothing. Starting the backend again clears it.
     {
@@ -18154,7 +18663,7 @@ static void TestEphSrvQt()
       WireEphLoopbackQt(&srv4, &bProto4, &dwCaps4, "too-new", &baReq4, &pconn4);
       EphSrvFinalizeQt();
       sprintf2(S(sz), "localhost:%d", (int)srv4.serverPort());
-      FCloneSz(sz, &us.szEphSrv);
+      FEphParamSet(epServerUrl, sz);
       EphSrvStartupQt();
       tim.start();
       while (!FTerminalEphSrvTestQt() && tim.elapsed() < 5000)
@@ -18176,31 +18685,44 @@ static void TestEphSrvQt()
 
   // ---- The review's client findings (EPHEMERIS_REVIEW.md, 2026-09-16) ----
 
-  // C5, C6: the chunk reader. A chunk delivered twice -- a request re-sent
-  // after a reconnect -- must not complete a window it only half filled;
-  // a row index that wraps 32 bits, or a chunk in the wrong precision,
-  // is a chunk this client cannot read.
-  Check(NChunkProbeSrvTestQt(0) == 0, "a chunk delivered twice does not "
-    "complete a window it half fills");
+  // C5, C6: the chunk reader. A chunk delivered twice in one session is a
+  // chunk out of order (3.4: a request's chunks are contiguous and
+  // ascending), so it is refused rather than counted -- it used to complete
+  // a window it had only half filled. A request re-sent into a NEW session
+  // is answered from chunk 0 again, and the window is told so.
+  // A row index that wraps 32 bits, or a chunk in the wrong precision, is a
+  // chunk this client cannot read.
+  Check(NChunkProbeSrvTestQt(0) == -1, "a chunk delivered twice is refused, "
+    "not counted into the window again");
   Check(NChunkProbeSrvTestQt(1) == -1, "a chunk whose rows wrap 32 bits is "
     "refused, not copied");
   Check(NChunkProbeSrvTestQt(2) == -1, "an f32 chunk for an f64 window is "
     "refused");
 
+  // M1: a per-object failure message names the body it is about, and a
+  // STAR's plan slot holds its catalogue number rather than an object
+  // index -- so naming it from szObjName[] gave an unrelated planet.
+  Check(CchSz(SzObjNameProbeSrvTestQt(0)) > 0 &&
+    FEqSz(SzObjNameProbeSrvTestQt(0), "Aldebaran"),
+    "a star's failure message names the star, not the planet whose object "
+    "index its catalogue number collides with");
+  Check(FEqSz(SzObjNameProbeSrvTestQt(1), szObjName[1]),
+    "an ordinary body's failure message still names it from szObjName[]");
+
   // C13: the Swiss calls Astrolog still makes locally under this backend
   // ask the Swiss files, as under the Swiss backend -- not a JPL file.
   {
+    // The C13 invariant: a local Swiss call under the server backend is
+    // the Swiss answer. The chain's first Swiss-family source names the
+    // bit (NSwissEphem), so the server tail is what the delegated calls
+    // ask through.
     real a1, a2, a3, a4, a5, a6, b1, b2, b3, b4, b5, b6;
-    int nSw = us.nSwissEph;
-    flag fE = us.fEphemFiles;
-    us.fEphemFiles = fTrue;
-    us.nSwissEph = 0;
+    EphSelBorrow bChainA("swiss");
     flag fA = FSwissPlanet(oMar, 2459010.5, fFalse, &a1, &a2, &a3, &a4, &a5,
       &a6);
-    us.nSwissEph = 5;
+    EphSelBorrow bChainB("server,swiss");
     flag fB = FSwissPlanet(oMar, 2459010.5, fFalse, &b1, &b2, &b3, &b4, &b5,
       &b6);
-    us.nSwissEph = nSw; us.fEphemFiles = fE;
     Check(fA && fB && a1 == b1 && a2 == b2 && a3 == b3 && a4 == b4,
       "a local Swiss call under the server backend is the Swiss answer "
       "(%a / %a)", a1, b1);
@@ -18224,10 +18746,10 @@ static void TestEphSrvQt()
         while ((pc = srvMute.nextPendingConnection()) != NULL)
           rgpconnMute.append(pc);
       });
-    us.nSwissEph = 5; us.fEphemFiles = fTrue; us.fNoNetwork = fFalse;
+    EphSourceSet("server,swiss");
     EphSrvFinalizeQt();
     sprintf2(S(sz), "localhost:%d", (int)srvMute.serverPort());
-    FCloneSz(sz, &us.szEphSrv);
+    FEphParamSet(epServerUrl, sz);
     SetHelloSrvTestQt(400);
     EphSrvStartupQt();
     Check(NEphSrvStateTestQt() == 1, "connecting to the mute server");
@@ -18251,7 +18773,7 @@ static void TestEphSrvQt()
       QByteArray baReqW;
       QWebSocket *pconnW = NULL;
       byte bProto = eph::kProtoVersion;
-      uint32_t dwCaps = eph::kCapFloat32;
+      uint32_t dwCaps = eph::kCapF32;
       QWebSocketServer srvWait(QString("wait"),
         QWebSocketServer::NonSecureMode);
       Check(srvWait.listen(QHostAddress::LocalHost, 0), "a silent loopback "
@@ -18260,7 +18782,7 @@ static void TestEphSrvQt()
         &pconnW);
       EphSrvFinalizeQt();
       sprintf2(S(sz), "localhost:%d", (int)srvWait.serverPort());
-      FCloneSz(sz, &us.szEphSrv);
+      FEphParamSet(epServerUrl, sz);
       EphSrvStartupQt();
       Check(FWaitEstQt(2, 5000), "welcomed by the silent server");
       SetWaitSrvTestQt(1500);
@@ -18268,7 +18790,7 @@ static void TestEphSrvQt()
         QElapsedTimer tim;
         std::clock_t c0 = std::clock();
         tim.start();
-        SrvPrefetchQt(0.905, oEar, oPlu);
+        SrvPrefetchQt(0.905, oEar, oPlu, NULL);
         double sCpu = (double)(std::clock() - c0) / CLOCKS_PER_SEC,
           sWall = tim.elapsed() / 1000.0;
         Check(sWall >= 1.4 && sWall < 3.0, "the cast waited its bound "
@@ -18293,17 +18815,28 @@ static void TestEphSrvQt()
           QObject::connect(pc, &QWebSocket::binaryMessageReceived, pc,
             [pc, &cReqDrop](CONST QByteArray &ba) {
               eph::Envelope env;
-              if (ba.size() < (int)eph::kEnvelopeSize ||
-                !eph::parseEnvelope((const byte *)ba.constData(), &env))
+              std::string strWhy;
+              if (eph::ParseEnvelope((CONST byte *)ba.constData(),
+                (size_t)ba.size(), &env, &strWhy) != eph::kOk)
                 return;
               if (env.type == eph::kMsgHello) {
-                byte rgbW[sizeof(eph::WelcomeWire) + 256];
-                uint32_t dwLen;
-                eph::buildWelcome(rgbW, 0, 21003, eph::kMaxCellsDefault,
-                  "dropper", &dwLen);
-                std::vector<uint8_t> msg = eph::makeMessage(
-                  eph::kMsgWelcome, 0, rgbW, dwLen);
-                pc->sendBinaryMessage(QByteArray((const char *)msg.data(),
+                eph::Welcome w;
+                eph::Capabilities caps;
+                std::vector<uint8_t> pay, msg;
+                w.serverName = "dropper";
+                w.datasetId = "dropper/test/0#00000000";
+                caps.kinds = 1u << eph::kObjBody;
+                caps.observers = 0x1F;
+                caps.planes = 3; caps.forms = 3; caps.frames = 0xF;
+                caps.corrMasks = {{0x1F, eph::kCorrMask}};
+                caps.orbitPoints = 0xF; caps.orbitMethods = 0x17;
+                caps.columns = 0;
+                caps.siderealPlanes = 7; caps.timeScales = 3;
+                eph::EncodeCapabilities(caps, &w.caps_);
+                eph::EncodeWelcome(&pay, w);
+                eph::WriteEnvelope(&msg, eph::kMsgWelcome, 0, pay.size());
+                msg.insert(msg.end(), pay.begin(), pay.end());
+                pc->sendBinaryMessage(QByteArray((CONST char *)msg.data(),
                   (int)msg.size()));
               } else if (env.type == eph::kMsgRequest) {
                 cReqDrop++;
@@ -18313,15 +18846,16 @@ static void TestEphSrvQt()
       });
     EphSrvFinalizeQt();
     sprintf2(S(sz), "localhost:%d", (int)srvDrop.serverPort());
-    FCloneSz(sz, &us.szEphSrv);
+    FEphParamSet(epServerUrl, sz);
     EphSrvStartupQt();
     Check(FWaitEstQt(2, 5000), "welcomed by the dropping server");
     SetBackoffEphSrvTestQt(50);
     {
       eph::Request rqD;
+      rqD.profiles.push_back(eph::Profile());
       rqD.objs.resize(1);
-      rqD.objs[0].kind = eph::kObjBody; rqD.objs[0].id = 0;
-      rqD.jdStart = 2459010.5; rqD.stepSeconds = 600; rqD.nTime = 1;
+      rqD.objs[0].kind = eph::kObjBody; rqD.objs[0].naif = 10;
+      rqD.start = eph::Time{2459010.5, 0.0}; rqD.stepNs = 0; rqD.nTime = 1;
       rqD.chunkRows = 1; rqD.precision = eph::kPrecF64;
       Check(FSendEphSrvQt(&rqD), "a request goes to the dropping server");
       QElapsedTimer tim;
@@ -18342,7 +18876,8 @@ static void TestEphSrvQt()
   // The synchronous facade, increment 1: fails soft, warns once per
   // cast, never latches. The backend is deselected so the connector the
   // facade prods stays out of the way of these assertions.
-  us.nSwissEph = 1;
+  EphSourceSet("swiss");
+  FEphParamSet(epServerUrl, NULL);
   cWarn = NCastWarnSrvTestQt();
   {
     real r1, r2, r3, r4, r5, r6;
@@ -18358,38 +18893,24 @@ static void TestEphSrvQt()
   }
   Check(is.fNoEphFile == fNoEphFileSav, "no fNoEphFile latch (lesson 3)");
 
-  // -0n fails fast, and the connector never runs. Through the prefetch,
-  // as a cast goes: the first form called the per-object read with no
-  // prefetch at all, so it warned "no request was made" whatever -0n said,
-  // and passed with the -0n guards removed (review T6).
-  us.nSwissEph = 5;
-  us.fNoNetwork = fTrue;
+  // The server deselected: the connector never runs -- not even when
+  // startup asks it to -- because a chart cast under another source is
+  // the local path's business entirely. (The old -0n lock that failed
+  // fast here is inert now; a selected source is used if it is
+  // reachable, and a failure is reported when it happens.)
+  EphSourceSet("swiss");
+  FEphParamSet(epServerUrl, NULL);
   EphSrvFinalizeQt();
-  cWarn = NCastWarnSrvTestQt();
-  {
-    real r1, r2, r3, r4, r5, r6;
-    int cReq0 = CReqSentEphSrvTestQt();
-    SrvPrefetchQt(0.9, oEar, oPlu);
-    Check(!FSrvPlanetQt(oSun, JulianDayFromTime(0.9), &r1, &r2, &r3, &r4,
-      &r5, &r6), "-0n fails the facade fast");
-    Check(NCastWarnSrvTestQt() == cWarn + 1 &&
-      strstr(SzWarnSrvTestQt(), "Internet features are disabled") != NULL &&
-      strstr(SzWarnSrvTestQt(), "\"_0n\"") != NULL,
-      "with the -0n warning, saying how to allow it (\"%.80s\")",
-      SzWarnSrvTestQt());
-    Check(CReqSentEphSrvTestQt() == cReq0, "and no request");
-  }
-  Check(NEphSrvStateTestQt() == 0 && NRetryEphSrvTestQt() < 0,
-    "and the connector never runs under -0n");
   EphSrvStartupQt();
-  Check(NEphSrvStateTestQt() == 0, "not even when startup asks it to");
+  Check(NEphSrvStateTestQt() == 0, "a deselected server never connects");
+  Check(NRetryEphSrvTestQt() < 0, "and no retry ladder is armed");
 
   EphSrvFinalizeQt();
-  us.fEphemFiles = fEphemSav;
-  us.nSwissEph = nSwissSav;
-  us.fNoNetwork = fNoNetSav;
-  FCloneSz(fAddrSav ? baAddrSav.constData() : NULL, &us.szEphSrv);
-  FCloneSz(fTokenSav ? baTokenSav.constData() : NULL, &us.szEphSrvToken);
+  EphSourceSet(baChainSav.constData());
+  FEphParamSet(epServerUrl, baAddrSav.isEmpty() ? NULL :
+    baAddrSav.constData());
+  FEphParamSet(epServerToken, baTokenSav.isEmpty() ? NULL :
+    baTokenSav.constData());
   is.fNoEphFile = fNoEphFileSav;
   SetNoPopupQt(fPopSav);
 }
@@ -18546,16 +19067,16 @@ static real RAnimRunSrvQt(int nAnim, int nDir, int nFrame, int *rgcReq,
     while (tim.elapsed() < 30)
       QApplication::processEvents(QEventLoop::AllEvents, 10);
     SetAnimTickBusyTestQt(fFalse);
-    us.nSwissEph = 5;
+    EphSourceSet("server,swiss");
     cReq = CReqSentEphSrvTestQt();
     AnimTickTestQt();
     rgcReq[iFrame] = CReqSentEphSrvTestQt() - cReq;
     SnapshotEphQt(&snSrv);
-    us.nSwissEph = 0;
+    EphSourceSet("swiss");
     ciCore = ciMain;
     CastChart(0);
     SnapshotEphQt(&snLocal);
-    us.nSwissEph = 5;
+    EphSourceSet("server,swiss");
     r = RMaxDiffEphQt(&snLocal, &snSrv, &iObj, &iField);
     if (r > rMax) {
       rMax = r;
@@ -18587,30 +19108,1456 @@ static flag FWaitEphdQt(QProcess *pproc, QByteArray *pbaLog, int msMax)
   return fFalse;
 }
 
+#ifdef PROMETHEIA
+
+// One plugin row at one instant, through the plugin's own question path:
+// the same code a cast would drive, at a question of one object.
+// The same question over SEVERAL rows, which is the shape no cast makes
+// and therefore the shape nothing here used to ask. Returns the whole
+// value block so a caller can look at each row's own slot.
+static flag FPromRowsQt(int nTs, double jd, double rStepDays, int cRow,
+  CONST eph::Profile *ppf, int kind, int naif, int point, int method,
+  double *rgVal, EPHPROMANSWER *pa)
+{
+  EPHPROMQ q;
+  eph::Object ob;
+
+  ob = eph::Object();
+  ob.kind = (uint8_t)kind;
+  ob.profile = 0;
+  ob.naif = naif;
+  ob.point = (uint8_t)point;
+  ob.method = (uint8_t)method;
+  pa->prgVal = rgVal;
+  q.nTs = nTs; q.fList = fFalse;
+  q.jd1 = jd; q.jd2 = 0.0;
+  q.stepNs = (int64_t)(rStepDays * 86400.0 * 1000000000.0);
+  q.cRow = cRow; q.prgJd = NULL;
+  q.rDeltaTSec = rInvalid;
+  q.cprof = 1; q.pargprof = ppf;
+  q.cobj = 1; q.pargobj = &ob;
+  return FEphPromCompute(&q, pa);
+}
+
+
+static flag FPromOneRowQt(int nTs, double jd, CONST eph::Profile *ppf,
+  int kind, int naif, int point, int method, CONST char *szName,
+  real *pLon, real *pLat, real *pAyan, real *pDeltaT)
+{
+  EPHPROMQ q;
+  EPHPROMANSWER a;
+  eph::Object ob;
+  double rgVal[kEphPromStride];
+
+  ob = eph::Object();
+  ob.kind = (uint8_t)kind;
+  ob.profile = 0;
+  ob.naif = naif;
+  ob.point = (uint8_t)point;
+  ob.method = (uint8_t)method;
+  if (szName != NULL)
+    ob.name = szName;
+  a.prgVal = rgVal;
+  q.nTs = nTs; q.fList = fFalse;
+  q.jd1 = jd; q.jd2 = 0.0; q.stepNs = 0; q.cRow = 1; q.prgJd = NULL;
+  q.rDeltaTSec = rInvalid;
+  q.cprof = 1; q.pargprof = ppf;
+  q.cobj = 1; q.pargobj = &ob;
+  if (!FEphPromCompute(&q, &a) || a.rowsOk < 1)
+    return fFalse;
+  *pLon = rgVal[0];
+  *pLat = rgVal[1];
+  *pAyan = (a.columns & 2) ? rgVal[7] : 0.0;
+  *pDeltaT = (a.columns & 8) ? rgVal[9] : 0.0;
+  return fTrue;
+}
+
+// One oracle comparison, printed so the run's own log carries the
+// figures. SphDistance() is work log 0c's acos formula: angular
+// separation, never a longitude difference.
+static real ROracleSepQt(CONST char *szLeg, real lon1, real lat1,
+  real lon2, real lat2)
+{
+  real sep = SphDistance(lon1, lat1, lon2, lat2) * 3600.0;
+
+  printf("  oracle %-46s %9.4f\"\n", szLeg, sep);
+  return sep;
+}
+
+// The oracle: the plugin's answers against the local Swiss path
+// (FSwissPlanet, calc.cpp). Both sides answer at UT instants --
+// FSwissPlanet takes UT and adds swe_deltat() itself, and the plugin's
+// delta T hook is bound to the same model -- so the time scales agree
+// by construction and the separations measure what is left: the frame,
+// observer and corrections bindings, and then the engines. The engines
+// meet on DE440 when a JPL DE440 binary sits under the name the -bj
+// backend looks for (de431.eph) on the -Yi paths and the Swiss side is
+// pinned to the jpl source, which is how this session ran it; on the
+// .se1 files instead the differences measured are dataset plus engine,
+// and the tolerances carry them. The tiers are work log 0c's: an orbit
+// point's corrections are interoperable in full or not at all, and mean
+// elements differ between engines' fits -- so each leg says which tier
+// it is in, and even the loose tiers stay binding checks: a wrong frame
+// or observer moves a body degrees, not arcseconds.
+static void TestPrometheiaOracleQt()
+{
+  static CONST struct { int obj, naif; } rgorb[] = {
+    {oSun, 10}, {oMoo, 301}, {oMer, 199}, {oVen, 299}, {oMar, 4},
+    {oJup, 5}, {oSat, 6}, {oUra, 7}, {oNep, 8}, {oPlu, 9},
+  };
+  static CONST struct { int yea, mon, day; real tim; } rgins[] = {
+    {1990, 6, 15, 12.0}, {2000, 1, 1, 12.0}, {2026, 9, 17, 0.0},
+  };
+  CI ciSav = ciCore, ciMainSav = ciMain;
+  char szLeg[256];
+  flag fNoEphSav = is.fNoEphFile, fS = fFalse, fCast;
+  eph::Profile pfTrop, pfTopo, pfHelio, pfNode7, pfNode6, pfNode1, pfNode0,
+    pfStar, pfSid;
+  int cOrb = (int)(sizeof(rgorb)/sizeof(*rgorb));
+  int cIns = (int)(sizeof(rgins)/sizeof(*rgins));
+  int iIns, iOrb, cSep = 0, cSkip = 0, nMode;
+  CONST char *szChainOracle = "swiss";
+  real lonS, latS, lonP, latP, lonP2, latP2, dAyan, dAyan2, dT, dT2, d, sep,
+    jd = 0.0, jdTT;
+
+  // Which Swiss backend answers: the jpl source (a JPL DE file under the
+  // de431.eph name -- this session's DE440) when it opens, else the
+  // files the run ships. Either way one borrow pins it for the oracle.
+  {
+    EphSelBorrow bSwiss("jpl");
+    fS = FSwissPlanet(oSun, 2451544.5, oEar, &lonS, &latS, &d, &d, &d, &d);
+  }
+  nMode = fS ? 2 : 0;
+  szChainOracle = nMode == 2 ? "jpl" : "swiss";
+  printf("  oracle Swiss backend: %s\n",
+    nMode == 2 ? "JPL DE file (DE440 under the de431.eph name)" :
+    "Swiss Ephemeris files");
+  if (!fS) {
+    EphSelBorrow bSwiss("swiss");
+    fS = FSwissPlanet(oSun, 2451544.5, oEar, &lonS, &latS, &d, &d, &d, &d);
+  }
+  if (!fS) {
+    printf("  skipped: neither Swiss backend answers, so there is no "
+      "oracle (no ephemeris files on the -Yi paths?)\n");
+    ciCore = ciSav; ciMain = ciMainSav;
+    is.fNoEphFile = fNoEphSav;
+    return;
+  }
+
+  pfTrop = eph::Profile();
+  pfTrop.columns = 8;          // the delta T column when the scale is UT1
+  pfNode7 = eph::Profile();
+  pfNode1 = pfNode0 = pfNode6 = pfNode7;
+  pfNode1.corrections = eph::kCorrLightTime;
+  pfNode0.corrections = 0;
+  pfNode6.corrections = eph::kCorrDeflection | eph::kCorrAberration;
+
+  // Leg 1: the bodies, geocentric apparent, tropical, true ecliptic of
+  // date -- both engines' defaults, the same question both ways.
+  {
+    EphSelBorrow bSwiss(szChainOracle);
+    for (iIns = 0; iIns < cIns; iIns++) {
+      OraclePinUtQt(rgins[iIns].yea, rgins[iIns].mon, rgins[iIns].day,
+        rgins[iIns].tim);
+      CastChart(1);
+      jd = JulianDayFromTime(is.T);
+      for (iOrb = 0; iOrb < cOrb; iOrb++) {
+        fS = FSwissPlanet(rgorb[iOrb].obj, jd, oEar, &lonS, &latS,
+          &d, &d, &d, &d);
+        fCast = FPromOneRowQt(eph::kTimeUT1, jd, &pfTrop, eph::kObjBody,
+          rgorb[iOrb].naif, 0, 0, NULL, &lonP, &latP, &dAyan, &dT);
+        sprintf2(S(szLeg), "body %s @%d vs FSwissPlanet",
+          szObjName[rgorb[iOrb].obj], rgins[iIns].yea);
+        if (!fS || !fCast) {
+          cSkip++;
+          printf("  oracle %-46s skipped (%s side)\n", szLeg,
+            !fS ? "Swiss" : "plugin");
+          continue;
+        }
+        sep = ROracleSepQt(szLeg, lonS, latS, lonP, latP);
+        Check(sep < 1.0, "%s within 1\" (%.4f\")", szLeg, sep);
+        cSep++;
+      }
+    }
+    Check(cSep > 0, "the oracle ran (%d comparisons, %d skipped)", cSep,
+      cSkip);
+  }
+
+  // Leg 2: topocentric, at the 2026 instant, a Seattle-ish site. The
+  // site is the same numbers both sides: Astrolog's west-positive
+  // longitude is what FSwissPlanet hands swe_set_topo negated already.
+  OraclePinUtQt(2026, 9, 17, 0.0);
+  ciCore.lon = 122.3; ciCore.lat = 47.6;
+  CastChart(1);
+  jd = JulianDayFromTime(is.T);
+  {
+    EphSelBorrow bSwiss(szChainOracle);
+    Borrow bTopo(us.fTopoPos, fTrue);
+    pfTopo = eph::Profile();
+    pfTopo.observer = eph::kObsTopo;
+    pfTopo.siteLonEastDeg = -ciCore.lon;
+    pfTopo.siteLatDeg = ciCore.lat;
+    pfTopo.siteHeightM = us.elvDef;
+    for (iOrb = 0; iOrb < 2; iOrb++) {          // the Sun and the Moon
+      fS = FSwissPlanet(rgorb[iOrb].obj, jd, oEar, &lonS, &latS,
+        &d, &d, &d, &d);
+      fCast = FPromOneRowQt(eph::kTimeUT1, jd, &pfTopo, eph::kObjBody,
+        rgorb[iOrb].naif, 0, 0, NULL, &lonP, &latP, &dAyan, &dT);
+      sprintf2(S(szLeg), "topocentric %s vs FSwissPlanet",
+        szObjName[rgorb[iOrb].obj]);
+      if (!fS || !fCast) {
+        printf("  oracle %-46s skipped\n", szLeg);
+        continue;
+      }
+      sep = ROracleSepQt(szLeg, lonS, latS, lonP, latP);
+      Check(sep < 1.0, "%s within 1\" (%.4f\")", szLeg, sep);
+    }
+  }
+
+  // Leg 3: heliocentric. Swiss's own heliocentric calls carry light
+  // time and nothing else (its plaus_iflag turns the other two off,
+  // work log item 2), so the plugin answers under that same mask and
+  // the tier is tight.
+  {
+    EphSelBorrow bSwiss(szChainOracle);
+    pfHelio = eph::Profile();
+    pfHelio.observer = eph::kObsHelio;
+    pfHelio.corrections = eph::kCorrLightTime;
+    for (iOrb = 0; iOrb < cOrb; iOrb++) {
+      if (rgorb[iOrb].obj == oSun)
+        continue;                    // the Sun from the Sun is not a thing
+      fS = FSwissPlanet(rgorb[iOrb].obj, jd, oSun, &lonS, &latS,
+        &d, &d, &d, &d);
+      fCast = FPromOneRowQt(eph::kTimeUT1, jd, &pfHelio, eph::kObjBody,
+        rgorb[iOrb].naif, 0, 0, NULL, &lonP, &latP, &dAyan, &dT);
+      sprintf2(S(szLeg), "heliocentric %s vs FSwissPlanet",
+        szObjName[rgorb[iOrb].obj]);
+      if (!fS || !fCast) {
+        printf("  oracle %-46s skipped\n", szLeg);
+        continue;
+      }
+      sep = ROracleSepQt(szLeg, lonS, latS, lonP, latP);
+      Check(sep < 1.0, "%s within 1\" (%.4f\")", szLeg, sep);
+    }
+  }
+
+  // Leg 4: the sidereal binding. FSwissPlanet under us.fSidereal
+  // answers the TROPICAL position (the library subtracts the ayanamsa
+  // and FSwissPlanet un-subtracts it, calc.cpp:4003), so the separation
+  // is against the plugin's tropical answer, and the ayanamsa itself is
+  // the observable: is.rSid is Swiss's (negated), the plugin's column
+  // is Prometheia's.
+  {
+    EphSelBorrow bSwiss(szChainOracle);
+    Borrow bSid(us.fSidereal, fTrue);
+    Borrow bSid2(us.fSidereal2, fFalse);
+    Borrow bZoff(us.rZodiacOffset, 0.0), bZall(us.rZodiacOffsetAll, 0.0);
+    CastChart(1);
+    jd = JulianDayFromTime(is.T);
+    fS = FSwissPlanet(oSun, jd, oEar, &lonS, &latS, &d, &d, &d, &d);
+    pfSid = eph::Profile();
+    pfSid.zodiac = "fagan-bradley";
+    pfSid.columns = 2;
+    fCast = FPromOneRowQt(eph::kTimeUT1, jd, &pfSid, eph::kObjBody, 10, 0, 0,
+      NULL, &lonP, &latP, &dAyan, &dT);
+    fCast = fCast && FPromOneRowQt(eph::kTimeUT1, jd, &pfTrop, eph::kObjBody,
+      10, 0, 0, NULL, &lonP2, &latP2, &dAyan2, &dT2);
+    if (fS && fCast) {
+      // FSwissPlanet's answer carries is.rSid (Swiss's MEAN ayanamsa,
+      // negated); the library's own sidereal longitude is the answer
+      // plus it. That, not the un-subtracted tropical-equivalent, is
+      // what the locked 3.5a calls the answer: frame 0's ayanamsa is
+      // the TRUE one, mean plus the nutation in longitude at the
+      // instant -- and both engines subtract exactly that, measured to
+      // 0.0005" apart, while the mean ayanamsas differ by the nutation.
+      sep = ROracleSepQt("Sun sidereal fagan-bradley, Swiss vs plugin",
+        lonS + is.rSid, latS, lonP, latP);
+      Check(sep < 0.05, "the sidereal longitudes agree within 0.05\" "
+        "(%.4f\")", sep);
+      d = RAbs(dAyan - swe_get_ayanamsa(jd + swe_deltat(jd)));
+      printf("  oracle %-46s %9.4f\"\n",
+        "ayanamsa column vs Swiss's MEAN ayanamsa (nutation)", d * 3600.0);
+      Check(d * 3600.0 > 0.5 && d * 3600.0 < 20.0, "the plugin's "
+        "ayanamsa is the true one, nutation away from Swiss's mean "
+        "(%.4f\")", d * 3600.0);
+      // And the plugin's own two forms stay consistent: its sidereal
+      // longitude plus its own ayanamsa is its tropical longitude.
+      d = RAbs(lonP + dAyan - lonP2);
+      Check(d < 0.001, "sidereal plus ayanamsa is tropical, inside the "
+        "plugin (%.6f\")", d * 3600.0);
+    } else
+      printf("  oracle sidereal leg skipped\n");
+  }
+  // The sidereal cast left is.rSid at minus the ayanamsa; every
+  // FSwissPlanet after it would subtract that again, and the whole
+  // rest of the oracle would read 25 degrees off. Cast it back.
+  CastChart(1);
+
+  // Leg 5: the Moon's true node, osculating (kind 1). Work log 0c's
+  // finding, measured: Swiss's node carries light time in ITS
+  // convention (a 0.003" term, the Earth's frame), Prometheia's in its
+  // own (a 19.1" term, the barycentre's) -- so Swiss's answer sits
+  // within a hair of the plugin's UNCORRECTED node (tight tier) and
+  // 19" from its light-timed one (the documented convention gap, a
+  // loose tier that is still binding: a wrong frame is degrees).
+  {
+    EphSelBorrow bSwiss(szChainOracle);
+    Borrow bTN(us.fTrueNode, fTrue);
+    fS = FSwissPlanet(oNod, jd, oEar, &lonS, &latS, &d, &d, &d, &d);
+    if (fS) {
+      fCast = FPromOneRowQt(eph::kTimeUT1, jd, &pfNode0, eph::kObjOrbitPoint,
+        301, 0, 1, NULL, &lonP, &latP, &dAyan, &dT);
+      if (fCast) {
+        sep = ROracleSepQt("Moon true node, Swiss (its mask 1) vs plugin 0",
+          lonS, latS, lonP, latP);
+        Check(sep < 1.0, "the Moon's true node, Swiss's convention vs the "
+          "plugin's uncorrected, within 1\" (%.4f\")", sep);
+      }
+      fCast = FPromOneRowQt(eph::kTimeUT1, jd, &pfNode1, eph::kObjOrbitPoint,
+        301, 0, 1, NULL, &lonP, &latP, &dAyan, &dT);
+      if (fCast) {
+        sep = ROracleSepQt("Moon true node, Swiss vs plugin mask 1",
+          lonS, latS, lonP, latP);
+        Check(sep < 25.0, "the two light-time conventions on the Moon's "
+          "node sit 19\" apart by design (%.4f\")", sep);
+      }
+      fCast = FPromOneRowQt(eph::kTimeUT1, jd, &pfNode7, eph::kObjOrbitPoint,
+        301, 0, 1, NULL, &lonP, &latP, &dAyan, &dT);
+      if (fCast) {
+        sep = ROracleSepQt("Moon true node, Swiss vs plugin mask 7",
+          lonS, latS, lonP, latP);
+        Check(sep < 25.0, "Swiss's node against the plugin's full "
+          "corrections (%.4f\")", sep);
+      }
+    } else
+      printf("  oracle Moon node leg skipped (Swiss refused)\n");
+  }
+
+  // Leg 6: the Moon's MEAN node. Mean elements are the loose tier by
+  // work log 0c's standing fact (mean-element fits differ, 0.006-0.025"
+  // between these engines) -- and the loose tolerance still catches a
+  // wrong frame, which would move the node degrees.
+  {
+    EphSelBorrow bSwiss(szChainOracle);
+    Borrow bTN(us.fTrueNode, fFalse);
+    fS = FSwissPlanet(oNod, jd, oEar, &lonS, &latS, &d, &d, &d, &d);
+    if (fS) {
+      fCast = FPromOneRowQt(eph::kTimeUT1, jd, &pfNode0, eph::kObjOrbitPoint,
+        301, 0, 0, NULL, &lonP, &latP, &dAyan, &dT);
+      if (fCast) {
+        sep = ROracleSepQt("Moon mean node (both uncorrected) vs Swiss",
+          lonS, latS, lonP, latP);
+        Check(sep < 0.5, "the mean nodes' fits agree within 0.5\" "
+          "(%.4f\")", sep);
+      }
+    } else
+      printf("  oracle mean node leg skipped (Swiss refused)\n");
+  }
+
+  // Leg 7: the Moon's osculating and mean apogee (oLil), the same two
+  // tiers as the nodes.
+  {
+    EphSelBorrow bSwiss(szChainOracle);
+    {
+      Borrow bTN(us.fTrueNode, fTrue);
+      Borrow bNN(us.fNaturalNode, fFalse);
+      fS = FSwissPlanet(oLil, jd, oEar, &lonS, &latS, &d, &d, &d, &d);
+      if (fS) {
+        fCast = FPromOneRowQt(eph::kTimeUT1, jd, &pfNode0,
+          eph::kObjOrbitPoint, 301, 3, 1, NULL, &lonP, &latP, &dAyan, &dT);
+        if (fCast) {
+          sep = ROracleSepQt("Moon osculating apogee, Swiss vs plugin 0",
+            lonS, latS, lonP, latP);
+          Check(sep < 25.0, "the Moon's osculating apogee, a convention "
+            "pair like the nodes (%.4f\")", sep);
+        }
+        fCast = FPromOneRowQt(eph::kTimeUT1, jd, &pfNode1,
+          eph::kObjOrbitPoint, 301, 3, 1, NULL, &lonP, &latP, &dAyan, &dT);
+        if (fCast) {
+          sep = ROracleSepQt("Moon osculating apogee, Swiss vs plugin mask 1",
+            lonS, latS, lonP, latP);
+          Check(sep < 25.0, "the apogee conventions' gap (%.4f\")", sep);
+        }
+      } else
+        printf("  oracle osculating apogee leg skipped (Swiss refused)\n");
+    }
+    {
+      Borrow bTN(us.fTrueNode, fFalse);
+      Borrow bNN(us.fNaturalNode, fFalse);
+      fS = FSwissPlanet(oLil, jd, oEar, &lonS, &latS, &d, &d, &d, &d);
+      if (fS) {
+        fCast = FPromOneRowQt(eph::kTimeUT1, jd, &pfNode0,
+          eph::kObjOrbitPoint, 301, 3, 0, NULL, &lonP, &latP, &dAyan, &dT);
+        if (fCast) {
+          sep = ROracleSepQt("Moon mean apogee (both uncorrected)",
+            lonS, latS, lonP, latP);
+          Check(sep < 0.5, "the mean apogees' fits agree within 0.5\" "
+            "(%.4f\")", sep);
+        }
+      } else
+        printf("  oracle mean apogee leg skipped (Swiss refused)\n");
+    }
+  }
+
+  // Leg 8: a planetary orbit point. Jupiter's ascending node through a
+  // customized object (type 2, the Astrolog object index; point 1 is
+  // the north node). Since prometheia's cf889eb (settled jointly for
+  // protocol 4; their docs/ORBIT-POINTS.md), that engine applies the
+  // correction bits to an orbit point exactly as to a body, so the
+  // plugin's node and Swiss's (its own treatment: aberration and
+  // deflection, never light time, per work log 0c) now differ by the
+  // correction treatment itself, ~10.5" on Jupiter -- their measured
+  // table puts light time at 0.0003" and the observer's velocity at
+  // 20.837" here, and the plugin's masks 6 and 7 differ by only 0.008".
+  // A same-subset cross-engine comparison is a courtesy, not a
+  // guarantee (3.5a), so both legs pin the measured figure with margin,
+  // against their engine at df0ae42; a leg tripping here again means
+  // the engine moved, which is the tripwire doing its work.
+  {
+    EphSelBorrow bSwiss(szChainOracle);
+    Borrow bTyp(rgTypSwiss[oNorm - custLo], 2);
+    Borrow bObj(rgObjSwiss[oNorm - custLo], (int)oJup);
+    Borrow bPnt(rgPntSwiss[oNorm - custLo], 1);
+    Borrow bFlg(rgFlgSwiss[oNorm - custLo], 0);
+    fS = FSwissPlanet(oNorm, jd, oEar, &lonS, &latS, &d, &d, &d, &d);
+    if (fS) {
+      fCast = FPromOneRowQt(eph::kTimeUT1, jd, &pfNode6, eph::kObjOrbitPoint,
+        5, 0, 1, NULL, &lonP, &latP, &dAyan, &dT);
+      if (fCast) {
+        sep = ROracleSepQt("Jupiter asc node, Swiss vs plugin mask 6",
+          lonS, latS, lonP, latP);
+        Check(sep < 11.0, "Jupiter's node, cross-engine courtesy tier "
+          "(%.4f\")", sep);
+      }
+      fCast = FPromOneRowQt(eph::kTimeUT1, jd, &pfNode7, eph::kObjOrbitPoint,
+        5, 0, 1, NULL, &lonP, &latP, &dAyan, &dT);
+      if (fCast) {
+        sep = ROracleSepQt("Jupiter asc node, Swiss vs plugin mask 7",
+          lonS, latS, lonP, latP);
+        Check(sep < 11.0, "the node's cross-engine courtesy tier, mask 7 "
+          "(%.4f\")", sep);
+      }
+    } else
+      printf("  oracle Jupiter node leg skipped (Swiss refused)\n");
+  }
+
+  // Leg 9: a small body through the catalog. Chiron: Swiss's own file
+  // and orbit vs the SBDB record with the sb441 perturbers -- different
+  // realizations of the same body, so the loosest of the body tiers,
+  // and still a binding check.
+  if (FSzSet(SzEphPromParam(epPromCatalog))) {
+    EphSelBorrow bSwiss(szChainOracle);
+    fS = FSwissPlanet(oChi, jd, oEar, &lonS, &latS, &d, &d, &d, &d);
+    fCast = FPromOneRowQt(eph::kTimeUT1, jd, &pfTrop, eph::kObjBody,
+      20002060, 0, 0, NULL, &lonP, &latP, &dAyan, &dT);
+    if (fS && fCast) {
+      sep = ROracleSepQt("Chiron, Swiss's file vs the SBDB catalog",
+        lonS, latS, lonP, latP);
+      Check(sep < 60.0, "Chiron's realizations agree within 60\" (%.4f\")",
+        sep);
+    } else
+      printf("  oracle Chiron leg skipped (%s side)\n",
+        !fS ? "Swiss" : "plugin");
+  } else
+    printf("  oracle Chiron leg skipped (no catalog)\n");
+
+  // Leg 10: a fixed star. The numeric oracle's own precedent applies:
+  // its Swiss reference is the library call the local path makes, and
+  // SwissComputeStar()'s swe_fixstar2 under the same flags is that call
+  // for stars. Swiss's fixstar path applies deflection and aberration
+  // and no light time (work log 0c), so the plugin answers under mask 6.
+  {
+    char serr[AS_MAXCH];
+    double xx[6];
+    EphSelBorrow bSwiss(szChainOracle);
+    pfStar = eph::Profile();
+    pfStar.corrections = eph::kCorrDeflection | eph::kCorrAberration;
+    // swe_fixstar2() WRITES the star's canonical name back into its
+    // first argument, and its NUMBER form counts a list whose head is
+    // not the file's first record (measured: "1" answers 109 Vir), so
+    // the leg sweeps the numbers the local path's own enumeration uses
+    // (SwissComputeStar's istar = 1, 2, ...) until one answers
+    // Aldebaran.
+    char szStar[AS_MAXCH];
+    int iStarSw;
+    fS = fFalse;
+    for (iStarSw = 1; iStarSw < 1000; iStarSw++) {
+      sprintf2(S(szStar), "%d", iStarSw);
+      if (swe_fixstar2(szStar, jd, SEFLG_SWIEPH | SEFLG_SPEED, xx,
+        serr) < 0)
+        break;
+      if (strncmp(szStar, "Aldebaran", 9) == 0) {
+        fS = fTrue;
+        break;
+      }
+    }
+    if (fS) {
+      fCast = FPromOneRowQt(eph::kTimeUT1, jd, &pfStar, eph::kObjStar, -1, 0,
+        0, "Aldebaran", &lonP, &latP, &dAyan, &dT);
+      if (fCast) {
+        sprintf2(S(szLeg), "Aldebaran (Swiss star %d) vs the plugin",
+          iStarSw);
+        sep = ROracleSepQt(szLeg, xx[0], xx[1], lonP, latP);
+        Check(sep < 1.0, "Aldebaran within 1\" (%.4f\")", sep);
+      }
+    } else
+      printf("  oracle Aldebaran leg skipped (%s)\n",
+        iStarSw >= 1000 ? "not found in 1000" : serr);
+  }
+
+  // Leg 11: the frames, Prometheia against itself. These are the
+  // binding checks the Swiss path cannot ask: the J2000 and ICRF
+  // ecliptics differ by the ~23 mas frame bias, the true and mean of
+  // date by nutation (under 18"), and true of date and J2000 by 26.7
+  // years of precession -- degrees would mean a wrong frame binding.
+  {
+    eph::Profile pfT, pfM, pfJ, pfI;
+    real lonJ, latJ, lonI, latI, lonM, latM, lonT, latT;
+
+    pfJ = eph::Profile(); pfJ.frame = eph::kFrameJ2000;
+    pfI = eph::Profile(); pfI.frame = eph::kFrameIcrf;
+    pfM = eph::Profile(); pfM.frame = eph::kFrameMeanOfDate;
+    pfT = eph::Profile();
+    jdTT = jd + swe_deltat(jd);
+    fCast = FPromOneRowQt(eph::kTimeTT, jdTT, &pfJ, eph::kObjBody, 499, 0, 0,
+      NULL, &lonJ, &latJ, &dAyan, &dT);
+    fCast = fCast && FPromOneRowQt(eph::kTimeTT, jdTT, &pfI, eph::kObjBody,
+      499, 0, 0, NULL, &lonI, &latI, &dAyan, &dT2);
+    if (fCast) {
+      sep = ROracleSepQt("Mars, J2000 vs ICRF (frame bias)",
+        lonJ, latJ, lonI, latI);
+      Check(sep < 0.1, "J2000 and ICRF differ by the frame bias only "
+        "(%.4f\")", sep);
+      if (FPromOneRowQt(eph::kTimeTT, jdTT, &pfT, eph::kObjBody, 499, 0, 0,
+        NULL, &lonT, &latT, &dAyan, &dT2)) {
+        sep = ROracleSepQt("Mars, true of date vs J2000 (precession)",
+          lonT, latT, lonJ, latJ);
+        Check(sep > 15.0*60.0 && sep < 30.0*60.0, "true of date vs J2000 "
+          "differ by 26.7 years of precession (%.1f')", sep / 60.0);
+        if (FPromOneRowQt(eph::kTimeTT, jdTT, &pfM, eph::kObjBody, 499, 0, 0,
+          NULL, &lonM, &latM, &dAyan, &dT2)) {
+          sep = ROracleSepQt("Mars, true of date vs mean of date (nutation)",
+            lonT, latT, lonM, latM);
+          Check(sep < 20.0, "true and mean of date differ by nutation only "
+            "(%.4f\")", sep);
+        }
+      }
+    }
+  }
+
+  // Leg 12: the time scales and the delta T column. The same instant
+  // asked as UT1 and as TT (with Astrolog's own delta T added) is the
+  // same answer; and the delta T column is the hook's value, within
+  // 0.01 s of the chart's own one-shot swe_deltat().
+  {
+    real lonU, latU;
+    fCast = FPromOneRowQt(eph::kTimeUT1, jd, &pfTrop, eph::kObjBody, 301, 0,
+      0, NULL, &lonU, &latU, &dAyan, &dT);
+    if (fCast) {
+      jdTT = jd + swe_deltat(jd);
+      fS = FPromOneRowQt(eph::kTimeTT, jdTT, &pfTrop, eph::kObjBody, 301, 0,
+        0, NULL, &lonP, &latP, &dAyan, &d);
+      if (fS) {
+        sep = ROracleSepQt("Moon, UT1 vs TT with Astrolog's delta T",
+          lonU, latU, lonP, latP);
+        Check(sep < 0.01, "the time scales agree within 0.01\" (%.5f\")",
+          sep);
+        d = RAbs(dT - swe_deltat(jd) * 86400.0);
+        printf("  oracle %-46s %9.5f s\n", "delta T column vs swe_deltat",
+          d);
+        Check(d < 0.01, "the delta T column is the chart's model within "
+          "0.01 s (%.5f)", d);
+      }
+    }
+  }
+
+  ciCore = ciSav; ciMain = ciMainSav;
+  is.fNoEphFile = fNoEphSav;
+}
+
+#endif // PROMETHEIA
+
+
+// The Prometheia source plugin (EPHEMERIS_PLUGINS_PLAN.md 4.2, phase 7).
+// Without -DPROMETHEIA -- pkg-config prometheia unresolved, which is
+// every stock checkout -- the group says so and passes; nothing else in
+// the suite references the library. With it, the pure mapping checks run
+// with no data file at all, the star grammar checks run against the
+// compiled-in star catalog, and the engine checks run when an ephemeris
+// is found on the -Yi paths, each leg saying what it skipped otherwise.
+// The oracle legs against the local Swiss path live in this group too:
+// angular separations only, never longitude differences (work log 0c),
+// with tolerances the measurements carried in headroom.
+static void TestPrometheiaQt()
+{
+#ifndef PROMETHEIA
+  printf("  skipped: compiled without PROMETHEIA (pkg-config prometheia "
+    "did not resolve)\n");
+#else
+  char szWhy[cchSzMax], szErr[256], szState[512];
+  char szStateAfter[512];
+  EPHMATCH rgm[8];
+  flag fCat = fFalse;
+  int idx, cm;
+  uint16_t nErr;
+
+  Group("Prometheia");
+
+  // ---- The parameters (4.2/4.3): declared once, and REACHABLE --------
+  // The declarations are rows of the generated table like every other
+  // source's, asked for by key. The source held its own copy until
+  // 2026-09-18, which nothing read and which had drifted from the
+  // generated one in both label and kind.
+  Check(CEphParamOfSrc("prometheia") == cepPromParam,
+    "the generated table declares this source's three parameters (%d)",
+    CEphParamOfSrc("prometheia"));
+  Check(IepOfSrc("prometheia", 0) == epPrometheiaEphemeris &&
+    IepOfSrc("prometheia", 1) == epPrometheiaCatalog &&
+    IepOfSrc("prometheia", 2) == epPrometheiaPerturbers &&
+    IepOfSrc("prometheia", 3) < 0,
+    "and hands them back in order, with nothing past the last");
+  Check(FEqSz(rgephparam[epPrometheiaEphemeris].ep.szKey, "ephemeris") &&
+    FEqSz(rgephparam[epPrometheiaCatalog].ep.szKey, "catalog") &&
+    FEqSz(rgephparam[epPrometheiaPerturbers].ep.szKey, "perturbers") &&
+    rgephparam[epPrometheiaEphemeris].ep.nKind == epkFile,
+    "the keys are the 4.2 table's, and all three are FILE parameters -- "
+    "they are paths resolved on the -Yi search paths");
+  Check(*SzEphPromParam(epPromEphemeris) == chNull,
+    "the ephemeris default is the source's own");
+
+  // THE VALUES ARE us.rgszEphParam[], which is what makes "-bP
+  // prometheia.catalog", the settings file's line and the Ephemeris
+  // Settings dialog reach this source at all. They did not until
+  // 2026-09-18: the source read a private array nothing outside itself
+  // ever wrote, so every configured path was silently dropped and the
+  // engine always opened on its default search. Asked from BOTH ends
+  // here -- set through the shared entry point, read through the
+  // source's own -- because either alone passes with the two stores
+  // disconnected again.
+  {
+    int iep = IepOfSrc("prometheia", epPromCatalog);
+
+    FEphParamSet(iep, "catalog-test.epm");
+    Check(FEqSz(SzEphPromParam(epPromCatalog), "catalog-test.epm"),
+      "a parameter set through the SHARED path is what the source reads "
+      "(\"%s\")", SzEphPromParam(epPromCatalog));
+    EphPromSetParam(epPromCatalog, "other.epm");
+    Check(FEqSz(SzSet(us.rgszEphParam[iep]), "other.epm"),
+      "and one set through the source lands in the shared store (\"%s\")",
+      SzSet(us.rgszEphParam[iep]));
+    FEphParamSet(iep, "");
+    Check(*SzEphPromParam(epPromCatalog) == chNull,
+      "an empty value restores the default");
+  }
+  EphPromSetParam(-1, "x");              // out of range: ignored
+  EphPromSetParam(cepPromParam, "x");
+
+  // ---- Profile to options (Appendix C), with no engine and no files --
+  // The frame lists are the SAME FOUR NAMES in OPPOSITE ORDERS: the
+  // protocol 0 true of date, 1 mean of date, 2 J2000, 3 ICRF;
+  // Prometheia 0 ICRF, 1 J2000, 2 mean of date, 3 true of date. A
+  // straight copy binds the wrong frame four ways; this is the one
+  // check that can catch it before any ephemeris is opened.
+  {
+    static CONST int rgnFrameProm[] = {PROMETHEIA_FRAME_TRUE_OF_DATE,
+      PROMETHEIA_FRAME_MEAN_OF_DATE, PROMETHEIA_FRAME_J2000,
+      PROMETHEIA_FRAME_ICRF};
+    eph::Profile pf;
+    prometheia_options opts;
+    int nFrame;
+
+    for (nFrame = 0; nFrame <= eph::kFrameMax; nFrame++) {
+      pf = eph::Profile();
+      pf.frame = (uint8_t)nFrame;
+      Check(FEphPromOptions(&pf, &opts) &&
+        opts.frame == rgnFrameProm[nFrame],
+        "frame %d maps to Prometheia's %d (%d)", nFrame, rgnFrameProm[nFrame],
+        opts.frame);
+    }
+    pf = eph::Profile();
+    Check(FEphPromOptions(&pf, &opts) && opts.center ==
+      PROMETHEIA_CENTER_GEOCENTRIC && opts.coords == PROMETHEIA_COORDS_ECLIPTIC &&
+      opts.sidereal == PROMETHEIA_SIDEREAL_TROPICAL &&
+      opts.light_time && opts.deflection && opts.aberration && opts.speed,
+      "the default profile maps to the default options");
+    pf.corrections = eph::kCorrLightTime;
+    Check(FEphPromOptions(&pf, &opts) && opts.light_time &&
+      !opts.deflection && !opts.aberration,
+      "the correction bits carry one at a time");
+    pf.corrections = eph::kCorrDeflection | eph::kCorrAberration;
+    Check(FEphPromOptions(&pf, &opts) && !opts.light_time &&
+      opts.deflection && opts.aberration, "the correction bits carry pairs");
+    pf.corrections = 0;
+    Check(FEphPromOptions(&pf, &opts) && !opts.light_time &&
+      !opts.deflection && !opts.aberration,
+      "mask 0 is true positions: no term at all, not light time alone");
+    // And the conversion from the program's own setting arrives at that
+    // mask: FSwissPlanetSpec under us.fTruePos carries SEFLG_TRUEPOS, and
+    // the plugin must turn it into corrections 0 -- Swiss's TRUEPOS is no
+    // corrections, the astrometric quantity it never computes there.
+    {
+      SWISSSPEC ss;
+      flag fSav = us.fTruePos;
+
+      us.fTruePos = fTrue;
+      Check(FSwissPlanetSpec(oJup, oEar, &ss) && (ss.iflag & SEFLG_TRUEPOS),
+        "the spec carries TRUEPOS when the setting is on");
+      us.fTruePos = fSav;
+    }
+    pf.observer = eph::kObsTopo;
+    pf.siteLonEastDeg = -122.3; pf.siteLatDeg = 47.6; pf.siteHeightM = 90.0;
+    Check(FEphPromOptions(&pf, &opts) &&
+      opts.center == PROMETHEIA_CENTER_TOPOCENTRIC &&
+      opts.site_lon_deg == -122.3 && opts.site_lat_deg == 47.6 &&
+      opts.site_height_m == 90.0, "the topocentric site carries through");
+    pf.observer = eph::kObsBody; pf.observerBody = 499;
+    Check(FEphPromOptions(&pf, &opts) && opts.center == PROMETHEIA_CENTER_BODY &&
+      opts.center_body == 499, "a body observer carries its body");
+    pf.observer = eph::kObsBary;
+    Check(FEphPromOptions(&pf, &opts) && opts.center ==
+      PROMETHEIA_CENTER_BARYCENTRIC, "the barycentre observer carries");
+    pf.observer = 5;
+    Check(!FEphPromOptions(&pf, &opts), "an observer out of range refuses");
+
+    // Sidereal zodiacs: the three tokens Appendix C names, the refusals
+    // the protocol and the appendix demand.
+    pf = eph::Profile();
+    pf.zodiac = "lahiri";
+    Check(FEphPromOptions(&pf, &opts) && opts.sidereal ==
+      PROMETHEIA_SIDEREAL_LAHIRI, "zodiac lahiri maps to the library's");
+    pf.zodiac = "fagan-bradley";
+    Check(FEphPromOptions(&pf, &opts) && opts.sidereal ==
+      PROMETHEIA_SIDEREAL_FAGAN_BRADLEY, "zodiac fagan-bradley maps");
+    pf.zodiac = "user";
+    Check(!FEphPromOptions(&pf, &opts),
+      "zodiac user without an anchor epoch refuses (3.5)");
+    pf.anchorEpoch = eph::Time{2451545.0, 0.0};
+    pf.anchorAyanamsaDeg = 24.0;
+    Check(FEphPromOptions(&pf, &opts) && opts.sidereal ==
+      PROMETHEIA_SIDEREAL_USER && opts.sidereal_epoch_jd == 2451545.0 &&
+      opts.sidereal_ayanamsa_deg == 24.0,
+      "zodiac user carries its anchor");
+    pf.plane = eph::kPlaneEquator;
+    Check(!FEphPromOptions(&pf, &opts),
+      "a sidereal zodiac on the equator refuses (3.5)");
+    // All three of A.8's sidereal planes since C ABI 6, which appended
+    // options.sidereal_plane. Before it only plane 0 was reachable and
+    // this asserted the refusal; the assertion is inverted rather than
+    // deleted, because the field being carried at all is the new
+    // contract and a plugin that ignored it would pass a weaker check.
+    pf.plane = eph::kPlaneEcliptic; pf.siderealPlane = eph::kSidPlaneDate;
+    Check(FEphPromOptions(&pf, &opts) && opts.sidereal_plane ==
+      PROMETHEIA_SIDEREAL_PLANE_DATE, "sidereal plane 0 is the ecliptic of date");
+    pf.siderealPlane = eph::kSidPlaneAnchor;
+    Check(FEphPromOptions(&pf, &opts) && opts.sidereal_plane ==
+      PROMETHEIA_SIDEREAL_PLANE_ANCHOR, "sidereal plane 1 carries to the anchor");
+    pf.siderealPlane = eph::kSidPlaneInvariable;
+    Check(FEphPromOptions(&pf, &opts) && opts.sidereal_plane ==
+      PROMETHEIA_SIDEREAL_PLANE_INVARIABLE,
+      "sidereal plane 2 carries to the invariable plane");
+    pf.plane = eph::kPlaneEquator;
+    Check(!FEphPromOptions(&pf, &opts),
+      "a fixed sidereal plane on the equator still refuses (3.5)");
+    pf.plane = eph::kPlaneEcliptic;
+    pf.siderealPlane = eph::kSidPlaneDate; pf.zodiac = "sassanian";
+    Check(!FEphPromOptions(&pf, &opts),
+      "an A.11 token this engine does not serve refuses");
+
+    // The columns the question can get, before any engine sees it.
+    pf = eph::Profile();
+    Check(EphPromColumns(&pf, eph::kTimeTT) == 4,
+      "a tropical TT question gets the light-time column only");
+    pf.zodiac = "lahiri"; pf.columns = 2;
+    Check(EphPromColumns(&pf, eph::kTimeTT) == 6,
+      "a sidereal question adds the ayanamsa column");
+    pf.columns = 10;
+    Check(EphPromColumns(&pf, eph::kTimeUT1) == 14,
+      "a UT1 question adds delta T");
+  }
+
+  // ---- The star grammar (3.5a), against the compiled-in catalog ----
+  // No ephemeris file needed: the star catalog is in the library.
+  Check(FEphPromStarResolve("Aldebaran", &idx, &nErr, szErr,
+    (int)sizeof(szErr)), "an IAU proper name resolves (%s)", szErr);
+  // A Bayer designation without its component number answers every
+  // component, and the library's find takes the BRIGHTEST -- it is not
+  // ambiguous. This group asserted error 6 here until 2026-09-18,
+  // transcribed from the other project's SERVER.md, which used this very
+  // name as its example of ambiguity and was wrong; their STARS.md
+  // grammar always said otherwise. It was caught by probing their server
+  // with our own wire client and getting a POSITION for "Beta Sco" where
+  // this said 6. Only DIFFERENT designations tying are ambiguous.
+  {
+    int idxB = -1, idxA = -1;
+    Check(FEphPromStarResolve("Beta Sco", &idxB, &nErr, szErr,
+      (int)sizeof(szErr)) && idxB >= 0,
+      "a Bayer designation without a component resolves to the brightest "
+      "of them, rather than refusing as ambiguous");
+    Check(FEphPromStarResolve("Acrab", &idxA, &nErr, szErr,
+      (int)sizeof(szErr)) && idxA == idxB,
+      "and it is the same star its proper name resolves to (%d vs %d)",
+      idxB, idxA);
+  }
+  Check(FEphPromStarResolve("Beta1 Sco", &idx, &nErr, szErr,
+    (int)sizeof(szErr)) && idx >= 0, "a numbered component resolves");
+  Check(FEphPromStarResolve("bet1 Sco", &idx, &nErr, szErr,
+    (int)sizeof(szErr)) && idx >= 0, "the three-letter form resolves too");
+  Check(FEphPromStarResolve("7 And", &idx, &nErr, szErr,
+    (int)sizeof(szErr)) && idx >= 0, "a Flamsteed number resolves");
+  Check(FEphPromStarResolve("61 Cyg", &idx, &nErr, szErr,
+    (int)sizeof(szErr)) && idx >= 0,
+    "a Flamsteed number two stars share resolves to the brighter, by the "
+    "same rule");
+  Check(FEphPromStarResolve("HR 5984", &idx, &nErr, szErr,
+    (int)sizeof(szErr)), "an HR designation resolves");
+  Check(FEphPromStarResolve("HIP 78820", &idx, &nErr, szErr,
+    (int)sizeof(szErr)), "a HIP designation resolves");
+  Check(FEphPromStarResolve("M 45", &idx, &nErr, szErr,
+    (int)sizeof(szErr)), "a Messier designation resolves");
+  Check(!FEphPromStarResolve("No Such Star", &idx, &nErr, szErr,
+    (int)sizeof(szErr)) && nErr == eph::kOErrUnknownBody,
+    "an unknown name is error 1");
+
+  // ---- The engine: kinds, error codes, correction pass-through ------
+  // Each leg names what it skipped; none fakes a pass. The catalog and
+  // perturbers are set when their files sit on the searched paths; a
+  // machine without them still checks every body, orbit-point and star
+  // leg, and the catalog's own legs say what they skipped.
+  {
+    char szPath[cchSzMax];
+    if (FEphPromFindFile("sbdb-full-20260916.epm", szPath, sizeof(szPath)))
+      EphPromSetParam(epPromCatalog, szPath);
+    else
+      printf("  note: no sbdb catalog on the -Yi paths, so the small-body "
+        "legs skip\n");
+    if (FEphPromFindFile("sb441-n16-de440span.bsp", szPath, sizeof(szPath)) ||
+      FEphPromFindFile("sb441-n16.bsp", szPath, sizeof(szPath)))
+      EphPromSetParam(epPromPerturbers, szPath);
+    fCat = FSzSet(SzEphPromParam(epPromCatalog));
+  }
+  if (!FEphPromAvailable(szWhy, sizeof(szWhy))) {
+    printf("  skipped: the engine's files are missing (%s)\n", szWhy);
+    return;
+  }
+  if (!FEphPromStart(szWhy, sizeof(szWhy))) {
+    printf("  skipped: the engine did not open (%s)\n", szWhy);
+    return;
+  }
+  Check(NEphPromState(szState, (int)sizeof(szState)) == 0, "state ready (%s)",
+    szState);
+  printf("  engine: %s\n", szState);
+
+  {
+    eph::Profile rgpf[6];
+    eph::Object rgobj[10];
+    EPHPROMANSWER rga[10];
+    double rgVal[10 * kEphPromStride];
+    EPHPROMQ q;
+    prometheia_error err;
+    double jd;
+    int i;
+
+    // One TT instant: 2026-09-17 0h UTC.
+    if (prometheia_utc_to_tt(2026, 9, 17, 0, 0, 0.0, &jd, &err) !=
+      PROMETHEIA_OK) {
+      Check(fFalse, "utc_to_tt refused (%s)", err.message);
+      goto LStop;
+    }
+    rgpf[0] = eph::Profile();                       // apparent, masks 7
+    rgpf[1] = eph::Profile();                       // astrometric, masks 0
+    rgpf[1].corrections = 0;
+    rgpf[2] = eph::Profile();                       // light time only
+    rgpf[2].corrections = eph::kCorrLightTime;
+    rgpf[3] = eph::Profile();                       // aberration only
+    rgpf[3].corrections = eph::kCorrAberration;
+
+    for (i = 0; i < 10; i++) {
+      rga[i].prgVal = rgVal + i * kEphPromStride;   // one row each
+      rgobj[i] = eph::Object();
+    }
+    // 0-3: the Moon's ascending node, osculating, under four masks --
+    // 0 all three, 1 none, 2 light time only, 3 aberration only.
+    for (i = 0; i < 4; i++) {
+      rgobj[i].kind = eph::kObjOrbitPoint;
+      rgobj[i].profile = (uint8_t)i;
+      rgobj[i].naif = PROMETHEIA_MOON;
+      rgobj[i].point = eph::kPtAscNode;
+      rgobj[i].method = eph::kMethOsculating;
+    }
+    // 4: a named hypothetical -- not served.
+    rgobj[4].kind = eph::kObjHypothetical;
+    rgobj[4].profile = 0;
+    rgobj[4].name = "Vulcan";
+    // 5: elements -- its Kepler engine is not implemented.
+    rgobj[5].kind = eph::kObjElements;
+    rgobj[5].profile = 0;
+    rgobj[5].name = "test elements";
+    // 6: the Sun's node -- no orbit.
+    rgobj[6] = rgobj[0];
+    rgobj[6].naif = PROMETHEIA_SUN;
+    // 7: a method out of range.
+    rgobj[7] = rgobj[0];
+    rgobj[7].method = 2;
+    // 8: designation "1" -- Ceres through the catalog.
+    rgobj[8].kind = eph::kObjDesignation;
+    rgobj[8].profile = 0;
+    rgobj[8].name = "1";
+    // 9: an ambiguous star -- error 6.
+    rgobj[9].kind = eph::kObjStar;
+    rgobj[9].profile = 0;
+    rgobj[9].name = "Beta Sco";
+
+    q.nTs = eph::kTimeTT; q.fList = fFalse;
+    q.jd1 = jd; q.jd2 = 0.0; q.stepNs = 0; q.cRow = 1;
+    q.prgJd = NULL;
+    q.rDeltaTSec = rInvalid;
+    q.cprof = 4; q.pargprof = rgpf;
+    q.cobj = 10; q.pargobj = rgobj;
+    Check(FEphPromCompute(&q, rga), "the question computes");
+
+    // The correction bits reach the orbit point: Prometheia honours
+    // them as sent (3.5a), which the plugin must not flatten. Light
+    // time alone moves the Moon's node by its own convention's 19.1"
+    // class, aberration alone by about the same, and all three
+    // together by almost nothing -- the two large terms nearly cancel.
+    // Measured against the library at this instant; these are binding
+    // checks, not engine comparisons.
+    Check(rga[0].rowsOk == 1 && rga[1].rowsOk == 1, "the node computed");
+    {
+      double dLT = RAbs(rgVal[2 * kEphPromStride] -
+        rgVal[1 * kEphPromStride]) * 3600.0;
+      double dAb = RAbs(rgVal[3 * kEphPromStride] -
+        rgVal[1 * kEphPromStride]) * 3600.0;
+      double dAll = RAbs(rgVal[0 * kEphPromStride] -
+        rgVal[1 * kEphPromStride]) * 3600.0;
+      Check(dLT > 15.0 && dLT < 25.0,
+        "the light-time bit moves the Moon's node on its own (%.4f\")", dLT);
+      Check(dAb > 15.0 && dAb < 25.0,
+        "the aberration bit moves the Moon's node on its own (%.4f\")", dAb);
+      Check(dAll < 0.05,
+        "all three masks together move it almost none (%.4f\")", dAll);
+    }
+    Check(rga[0].corrApplied == eph::kCorrMask,
+      "the orbit point reports all three terms live");
+    Check(rga[4].errCode == eph::kOErrUnsupported,
+      "a named hypothetical is error 2 here (%d)", rga[4].errCode);
+    Check(rga[5].errCode == eph::kOErrUnsupported,
+      "elements are error 2 here (%d)", rga[5].errCode);
+    Check(rga[6].errCode == eph::kOErrUnsupported,
+      "the Sun's node is error 2 (%d)", rga[6].errCode);
+    Check(rga[7].errCode == eph::kOErrUnsupported,
+      "orbit method 2 is error 2 (%d)", rga[7].errCode);
+    if (fCat) {
+      Check(rga[8].rowsOk == 1 && rga[8].naif == 20000001,
+        "designation '1' resolves to Ceres (err %d rows %d %s)",
+        rga[8].errCode, rga[8].rowsOk, rga[8].szErr);
+    } else
+      Check(rga[8].errCode == eph::kOErrUnknownBody,
+        "a designation with no catalog is error 1 (%d)", rga[8].errCode);
+    Check(rga[9].errCode == eph::kOErrNone,
+      "a Bayer designation without a component COMPUTES, at the brightest "
+      "component (%d)", rga[9].errCode);
+
+    // LOOKUP, through the source's own entry point: bodies first, then
+    // the star namespace. nNative carries the SPK-ID or the star index.
+    cm = ephsrcPrometheia.NLookup("Chiron", rgm, 8);
+    if (fCat)
+      Check(cm >= 1 && rgm[0].nNative == 20002060,
+        "Chiron resolves to its SPK-ID (cm %d native %d)",
+        cm, cm > 0 ? rgm[0].nNative : -1);
+    else
+      Check(cm == 0, "no catalog, no Chiron (%d)", cm);
+    cm = ephsrcPrometheia.NLookup("Beta Sco", rgm, 8);
+    Check(cm == 2, "the ambiguous star LOOKUPs as both components (%d)",
+      cm);
+
+    // The oracle: the plugin against the local Swiss path, while the
+    // engine is open and the settings are still ours to borrow.
+    TestPrometheiaOracleQt();
+
+    // ---- The host path: the source through the phase 3 registry ------
+    // The registry group's own borrows, a query built the way
+    // ComputeEphem() builds its, submitted down a chain that holds the
+    // prometheia source alone, and every row compared against the
+    // direct call it replaces -- angular separations again, with the
+    // registry group's byte-equality reserved for the delegation it
+    // exists to pin.
+    {
+      EphSelBorrow bChainH("prometheia");
+      Borrow bSid(us.fSidereal, fFalse), bSid2(us.fSidereal2, fFalse);
+      Borrow bTopo(us.fTopoPos, fFalse), bTrue(us.fTruePos, fFalse);
+      Borrow bBary(us.fBarycenter, fFalse), bNoNut(us.fNoNutation, fFalse);
+      Borrow bCtr(us.objCenter, (int)oEar);
+      Borrow bZoff(us.rZodiacOffset, 0.0), bZall(us.rZodiacOffsetAll, 0.0);
+      Borrow bElv(us.elvDef, 0.0);
+      Borrow bTrueN(us.fTrueNode, fFalse);
+      Borrow bTyp(rgTypSwiss[0], 0), bObj(rgObjSwiss[0], 0);
+      Borrow bPnt(rgPntSwiss[0], 0), bFlg(rgFlgSwiss[0], 0);
+      int rgisrc[1], iH;
+      EPHQUERY eqh;
+      char szLeg2[cchSzDef];
+      real h1, h2, h3, h4, h5, h6, r1, r2, r3, r4, r5, r6, rD;
+      flag fHost, fDirect, fSav;
+
+      Check(IEphSrcFromKey("prometheia") == 4 + (cEphSrcPrometheia - 1) &&
+        PephsrcGet(IEphSrcFromKey("prometheia")) == &ephsrcPrometheia &&
+        rgephsrc[cEphSrcBuiltIn-1] == &ephsrcNone,
+        "the prometheia source sits in the registry before none (%d)",
+        IEphSrcFromKey("prometheia"));
+      rgisrc[0] = IEphSrcFromKey("prometheia");
+
+      // Geocentric apparent tropical bodies, the cast question's shape.
+      OraclePinUtQt(2026, 9, 17, 0.0);
+      ciCore.lon = 0.0; ciCore.lat = 0.0;
+      CastChart(0);
+      jd = JulianDayFromTime(is.T);
+      EphQueryInit(&eqh, jd);
+      FEphQueryAdd(&eqh, oSun, 0, oEar, NULL);
+      FEphQueryAdd(&eqh, oMoo, 0, oEar, NULL);
+      FEphQueryAdd(&eqh, oMar, 0, oEar, NULL);
+      FEphQueryAdd(&eqh, oJup, 0, oEar, NULL);
+      Check(FEphSubmitChain(&eqh, rgisrc, 1), "the host path answers a "
+        "cast-shaped query");
+      for (iH = 0; iH < 4; iH++) {
+        int objH = iH == 0 ? oSun : (iH == 1 ? oMoo : (iH == 2 ? oMar :
+          oJup));
+        fHost = FEphRead(&eqh, objH, &h1, &h2, &h3, &h4, &h5, &h6);
+        fDirect = FSwissPlanet(objH, jd, oEar, &r1, &r2, &r3, &r4, &r5, &r6);
+        Check(fHost && fDirect, "%s answered on both paths",
+          szObjName[objH]);
+        if (!fHost || !fDirect)
+          continue;
+        rD = SphDistance(h1, h2, r1, r2) * 3600.0;
+        sprintf2(S(szLeg2), "host path %s vs FSwissPlanet",
+          szObjName[objH]);
+        printf("  oracle %-46s %9.4f\"\n", szLeg2, rD);
+        Check(rD < 0.2, "%s within 0.2\" (%.4f\")", szLeg2, rD);
+        Check(eqh.rgisrc[iH == 0 ? 0 : (iH == 1 ? 1 : (iH == 2 ? 2 : 3))] ==
+          rgisrc[0] && FEqSz(eqh.rgrow[iH == 0 ? 0 : (iH == 1 ? 1 :
+          iH == 2 ? 2 : 3)].szSrc, "prometheia"),
+          "the host row's provenance names the prometheia source");
+      }
+
+      // The Moon's true node through the kind-1 conversion.
+      {
+        Borrow bTN(us.fTrueNode, fTrue);
+        EphQueryInit(&eqh, jd);
+        FEphQueryAdd(&eqh, oNod, 0, oEar, NULL);
+        Check(FEphSubmitChain(&eqh, rgisrc, 1), "the node query computes");
+        fHost = FEphRead(&eqh, oNod, &h1, &h2, &h3, &h4, &h5, &h6);
+        fDirect = FSwissPlanet(oNod, jd, oEar, &r1, &r2, &r3, &r4, &r5, &r6);
+        if (fHost && fDirect) {
+          rD = SphDistance(h1, h2, r1, r2) * 3600.0;
+          printf("  oracle %-46s %9.4f\"\n",
+            "host path Moon true node vs FSwissPlanet", rD);
+          Check(rD < 1.0, "the host path's true node within 1\" (%.4f\")",
+            rD);
+        } else
+          Check(fFalse, "the host path's true node did not compute");
+      }
+
+      // Sidereal: the row carries is.rSid subtracted, the same
+      // convention FSwissPlanet's own output carries, and the host
+      // re-adds it -- so the comparison below is of like with like.
+      {
+        Borrow bSidT(us.fSidereal, fTrue);
+        CastChart(0);
+        jd = JulianDayFromTime(is.T);
+        EphQueryInit(&eqh, jd);
+        FEphQueryAdd(&eqh, oSun, 0, oEar, NULL);
+        Check(FEphSubmitChain(&eqh, rgisrc, 1), "the sidereal query "
+          "computes");
+        fHost = FEphRead(&eqh, oSun, &h1, &h2, &h3, &h4, &h5, &h6);
+        fDirect = FSwissPlanet(oSun, jd, oEar, &r1, &r2, &r3, &r4, &r5, &r6);
+        if (fHost && fDirect) {
+          rD = SphDistance(h1, h2, r1, r2) * 3600.0;
+          printf("  oracle %-46s %9.4f\"\n",
+            "host path sidereal Sun vs FSwissPlanet", rD);
+          Check(rD < 0.05, "the host path's sidereal Sun within 0.05\" "
+            "(%.4f\")", rD);
+        } else
+          Check(fFalse, "the host path's sidereal Sun did not compute");
+      }
+
+      // Topocentric, with the site the spec's own fields carry.
+      {
+        Borrow bTopoT(us.fTopoPos, fTrue);
+        OraclePinUtQt(2026, 9, 17, 0.0);
+        ciCore.lon = 122.3; ciCore.lat = 47.6;
+        CastChart(0);
+        jd = JulianDayFromTime(is.T);
+        EphQueryInit(&eqh, jd);
+        FEphQueryAdd(&eqh, oMoo, 0, oEar, NULL);
+        Check(FEphSubmitChain(&eqh, rgisrc, 1), "the topo query computes");
+        fHost = FEphRead(&eqh, oMoo, &h1, &h2, &h3, &h4, &h5, &h6);
+        fDirect = FSwissPlanet(oMoo, jd, oEar, &r1, &r2, &r3, &r4, &r5, &r6);
+        if (fHost && fDirect) {
+          rD = SphDistance(h1, h2, r1, r2) * 3600.0;
+          printf("  oracle %-46s %9.4f\"\n",
+            "host path topocentric Moon vs FSwissPlanet", rD);
+          Check(rD < 0.2, "the host path's topocentric Moon within 0.2\" "
+            "(%.4f\")", rD);
+        } else
+          Check(fFalse, "the host path's topocentric Moon did not compute");
+      }
+
+      // A fixed star through the host path, against the plugin's own
+      // internal answer (the star grammar and the fixstar comparison
+      // are the legs above).
+      {
+        eph::Profile pfHX;
+        real lonHX, latHX, dAX, dTX;
+        EphQueryInit(&eqh, jd);
+        FEphQueryAdd(&eqh, starLo, 0, 0, (char *)"Aldebaran");
+        Check(FEphSubmitChain(&eqh, rgisrc, 1), "the star query computes");
+        fHost = FEphRead(&eqh, starLo, &h1, &h2, &h3, &h4, &h5, &h6);
+        pfHX = eph::Profile();
+        fSav = FPromOneRowQt(eph::kTimeUT1, jd, &pfHX, eph::kObjStar, -1, 0,
+          0, "Aldebaran", &lonHX, &latHX, &dAX, &dTX);
+        Check(fHost && fSav && SphDistance(h1, h2, lonHX, latHX) * 3600.0 <
+          0.001, "the host path's star row is the internal answer");
+      }
+
+      // A custom body that is Jupiter's ascending node, the registry
+      // group's scenario 6, through the kind-1 conversion.
+      {
+        Borrow bTN(us.fTrueNode, fTrue);
+        rgTypSwiss[0] = 2; rgObjSwiss[0] = oJup; rgPntSwiss[0] = 1;
+        rgFlgSwiss[0] = 0;
+        EphQueryInit(&eqh, jd);
+        FEphQueryAdd(&eqh, custLo, 0, oEar, NULL);
+        Check(FEphSubmitChain(&eqh, rgisrc, 1), "the custom node query "
+          "computes");
+        fHost = FEphRead(&eqh, custLo, &h1, &h2, &h3, &h4, &h5, &h6);
+        fDirect = FSwissPlanet(custLo, jd, oEar, &r1, &r2, &r3, &r4, &r5,
+          &r6);
+        if (fHost && fDirect) {
+          rD = SphDistance(h1, h2, r1, r2) * 3600.0;
+          printf("  oracle %-46s %9.4f\"\n",
+            "host path Jupiter node (custom) vs FSwissPlanet", rD);
+          Check(rD < 1.0, "the host path's Jupiter node within 1\" "
+            "(%.4f\")", rD);
+        } else
+          Check(fFalse, "the host path's Jupiter node did not compute");
+      }
+
+      // Finding 2 of the Prometheia session's review of this file.
+      // Star profiles are given zodiac "fagan-bradley" under fSidereal,
+      // while the read deliberately does NOT subtract is.rSid, on the
+      // stated belief that the library's zodiac option is "a label, not
+      // a transform". If it IS a transform, a sidereal star comes back
+      // already shifted and the consumer shifts it again -- about 24.7
+      // degrees, silently, exactly the shape of the server source's P1.
+      //
+      // Settled here by comparing like with like rather than by reading
+      // either side's documentation: the star row THIS source returns
+      // against the one the SWISS source returns for the same star at
+      // the same instant. ephem.h's convention is one row shape for
+      // every source, so they must agree -- and in BOTH zodiacs, since
+      // a zodiac-dependent disagreement is the whole question.
+      {
+        char szStarT[cchSzMax];
+        real p1, p2, p3, p4, p5, p6, s1, s2, s3, s4, s5, s6, rD;
+        int rgisrcS[1], iZod;
+
+        rgisrcS[0] = IEphSrcFromKey("swiss");
+        for (iZod = 0; iZod <= 1; iZod++) {
+          EPHQUERY eqp, eqs;
+          flag fP, fS;
+          Borrow bSidStar(us.fSidereal, iZod ? fTrue : fFalse);
+
+          // Re-cast inside the borrow, or is.rSid keeps the previous
+          // leg's value -- which is zero, and a zero is.rSid makes this
+          // leg blind to the very subtraction it exists to watch. The
+          // first version of this test PASSED with that subtraction
+          // deliberately reinstated for stars, and so proved nothing.
+          CastChart(0);
+          Check(!us.fSidereal || is.rSid != 0.0,
+            "the sidereal leg really has an ayanamsa in is.rSid (%.6f)",
+            is.rSid);
+
+          EphQueryInit(&eqp, jd);
+          sprintf2(S(szStarT), "%s", "Sirius");
+          FEphQueryAdd(&eqp, 1, 0, 0, szStarT);
+          {
+            flag fSub = FEphSubmitChain(&eqp, rgisrc, 1);
+            fP = fSub && FEphRead(&eqp, 1, &p1, &p2, &p3, &p4, &p5, &p6);
+            if (!fP)
+              printf("    (prom submit=%d isrc=%d nErr=%d)\n", (int)fSub,
+                eqp.rgisrc[0], (int)eqp.rgrow[0].nErr);
+          }
+
+          EphQueryInit(&eqs, jd);
+          sprintf2(S(szStarT), "%s", "Sirius");
+          FEphQueryAdd(&eqs, 1, 0, 0, szStarT);
+          fS = FEphSubmitChain(&eqs, rgisrcS, 1) &&
+            FEphRead(&eqs, 1, &s1, &s2, &s3, &s4, &s5, &s6);
+
+          if (!fP || !fS) {
+            printf("  star parity %s: not served by %s (prom nErr %d, "
+              "swiss nErr %d), skipped\n",
+              iZod ? "sidereal" : "tropical", !fP ? "prometheia" : "swiss",
+              (int)eqp.rgrow[0].nErr, (int)eqs.rgrow[0].nErr);
+            continue;
+          }
+          // An angular separation, not a longitude difference: Sirius is
+          // 39 degrees south and a longitude difference there is a
+          // projection rather than a distance.
+          rD = SphDistance(p1, p2, s1, s2) * 3600.0;
+          printf("  star parity %-9s %s %.6f vs %s %.6f: %8.4f\"\n",
+            iZod ? "sidereal" : "tropical", SzSet(eqp.rgrow[0].szSrc), p1,
+            SzSet(eqs.rgrow[0].szSrc), s1, rD);
+          // The measurement is worthless if the fallback answered both
+          // sides: a chain of one cannot fall back, but say so rather
+          // than trust it.
+          Check(FEqSz(SzSet(eqp.rgrow[0].szSrc), "prometheia"),
+            "the %s star row really came from prometheia (%s)",
+            iZod ? "sidereal" : "tropical", SzSet(eqp.rgrow[0].szSrc));
+          Check(rD < 1.0, "the %s star row agrees with the swiss source's "
+            "(%.4f\"): one row shape for every source, and the consumer "
+            "applies the zodiac exactly once",
+            iZod ? "sidereal" : "tropical", rD);
+        }
+      }
+
+      // The A.8 sidereal plane has to MOVE the answer. A source that
+      // accepts sidplane=2 and hands back the plane-0 numbers reads
+      // exactly like support, and that is not hypothetical: astrolog-ephd
+      // does it for 16 of the 47 registry zodiac tokens, because Swiss
+      // declines SE_SIDBIT_SSY_PLANE for the star- and frame-anchored
+      // ayanamsas and nothing noticed. So assert the movement, not the
+      // acceptance. The Moon reaches 5 degrees of latitude, where the
+      // 1.578701-degree tilt is worth thousands of arcsec; 60" is a
+      // floor far below anything real and far above zero.
+      {
+        eph::Profile pf0, pf2;
+        double rg0[kEphPromStride], rg2[kEphPromStride];
+        EPHPROMANSWER a0, a2;
+        real rD;
+
+        pf0 = eph::Profile(); pf0.zodiac = "fagan-bradley";
+        pf2 = pf0; pf2.siderealPlane = eph::kSidPlaneInvariable;
+        if (FPromRowsQt(eph::kTimeUT1, jd, 0.0, 1, &pf0, eph::kObjBody,
+            301, 0, 0, rg0, &a0) && a0.rowsOk == 1 &&
+          FPromRowsQt(eph::kTimeUT1, jd, 0.0, 1, &pf2, eph::kObjBody,
+            301, 0, 0, rg2, &a2) && a2.rowsOk == 1) {
+          rD = SphDistance(rg0[0], rg0[1], rg2[0], rg2[1]) * 3600.0;
+          printf("  sidereal plane 2 moves the Moon %9.1f\" off plane 0\n", rD);
+          Check(rD > 60.0, "sidereal plane 2 MOVES the answer (%.4f\"): a "
+            "plane that is accepted and then ignored reads like support", rD);
+        } else
+          // Not a skip. The engine is loaded by the time this runs and
+          // the Moon needs no catalog, so a refusal here is the finding
+          // -- and a skip would let a plugin that declines the plane
+          // pass the one check written to watch the plane.
+          Check(fFalse, "sidereal plane 0 and 2 both answer for the Moon "
+            "(rowsOk %d and %d)", (int)a0.rowsOk, (int)a2.rowsOk);
+      }
+
+      // ---- The Prometheia review's findings, each with its net -------
+      // These are the shapes no CAST makes -- more than one row, a row
+      // that fails after one that did not, a scale-matched orbit point,
+      // an overridden delta-T -- which is exactly why nothing here asked
+      // about them before and why every one of them was wrong.
+      {
+        eph::Profile pfT;
+        double rgVal[4 * kEphPromStride];
+        EPHPROMANSWER aT;
+        real lonA, latA, ayanA, dtA, lonB, latB, ayanB, dtB;
+
+        pfT = eph::Profile();
+        // Ask for the delta-T column, or there is none to check: a
+        // profile requests its extra columns, and the first version of
+        // the delta-T leg below read a column that was never present and
+        // compared 0.0 against 0.0.
+        pfT.columns = eph::kColDeltaT;
+
+        // FINDING 1: every successful row was written to ROW 0. Two rows
+        // a day apart, against the same two instants asked one at a
+        // time: each row must land in its own slot and match.
+        if (FPromRowsQt(eph::kTimeUT1, jd, 1.0, 2, &pfT, eph::kObjBody,
+          301, 0, 0, rgVal, &aT) && aT.rowsOk == 2 &&
+          FPromOneRowQt(eph::kTimeUT1, jd, &pfT, eph::kObjBody, 301, 0, 0,
+            NULL, &lonA, &latA, &ayanA, &dtA) &&
+          FPromOneRowQt(eph::kTimeUT1, jd + 1.0, &pfT, eph::kObjBody, 301,
+            0, 0, NULL, &lonB, &latB, &ayanB, &dtB)) {
+          Check(RAbs(rgVal[0] - lonA) < 1.0e-9,
+            "a two-row question's row 0 is the FIRST instant (%.9f vs "
+            "%.9f)", rgVal[0], lonA);
+          Check(RAbs(rgVal[kEphPromStride] - lonB) < 1.0e-9,
+            "and its row 1 is the second, in its own slot (%.9f vs %.9f)",
+            rgVal[kEphPromStride], lonB);
+        } else
+          Check(fFalse, "the two-row Moon question computed");
+
+        // FINDING 3: an orbit point took the TT entry point whatever the
+        // question's scale, so a UT1 question was answered delta-T late.
+        // The osculating lunar apogee moves fast enough to see it.
+        if (FPromOneRowQt(eph::kTimeUT1, jd, &pfT, eph::kObjOrbitPoint,
+            301, eph::kPtApo, eph::kMethOsculating, NULL,
+            &lonA, &latA, &ayanA, &dtA) &&
+          FPromOneRowQt(eph::kTimeTT, jd, &pfT, eph::kObjOrbitPoint,
+            301, eph::kPtApo, eph::kMethOsculating, NULL,
+            &lonB, &latB, &ayanB, &dtB)) {
+          real rD = RAbs(lonA - lonB) * 3600.0;
+          printf("  osculating apogee, UT1 vs TT at the same number: "
+            "%.4f\"\n", rD);
+          Check(rD > 0.01, "an orbit point honours the question's time "
+            "scale, so UT1 and TT at the same NUMBER differ (%.4f\")", rD);
+        } else
+          Check(fFalse, "the osculating apogee computed in both scales");
+
+        // FINDING 4: a row that failed AFTER one that succeeded was not
+        // recorded at all -- no code, no firstFailedRow, just NaNs. Four
+        // rows walking off the end of the ephemeris. The step is 100000
+        // days and not one big jump, because stepNs is an int64 of
+        // NANOSECONDS and so cannot express much past 292 years -- the
+        // first version of this leg asked for 400000 days, silently
+        // overflowed, and "passed" by computing two rows in coverage.
+        // A LIST of instants, not a grid: 3.5's grid arithmetic forms
+        // the i64 product of row and step in NANOSECONDS, so a grid
+        // cannot span more than about 292 years however the step is
+        // chosen, and the end of this ephemeris is 660 years from here.
+        // The list form exists for exactly this.
+        {
+          EPHPROMQ qL;
+          eph::Object obL;
+          double rgJd[4];
+          int iJd;
+
+          for (iJd = 0; iJd < 4; iJd++)
+            rgJd[iJd] = jd + (double)iJd * 250000.0;
+          obL = eph::Object();
+          obL.kind = eph::kObjBody; obL.profile = 0; obL.naif = 301;
+          aT.prgVal = rgVal;
+          qL.nTs = eph::kTimeUT1; qL.fList = fTrue;
+          qL.jd1 = jd; qL.jd2 = 0.0; qL.stepNs = 0; qL.cRow = 4;
+          qL.prgJd = rgJd; qL.rDeltaTSec = rInvalid;
+          qL.cprof = 1; qL.pargprof = &pfT;
+          qL.cobj = 1; qL.pargobj = &obL;
+          if (FEphPromCompute(&qL, &aT)) {
+          Check(aT.rowsOk > 0 && aT.rowsOk < 4,
+            "some but not all rows of the straddling question computed "
+            "(%d of 4)", aT.rowsOk);
+          Check(aT.errCode != eph::kOErrNone,
+            "a row failing AFTER a row succeeded still reports its error "
+            "(%d)", (int)aT.errCode);
+          // FINDING 5: the classifier used to DEFAULT an unrecognised
+          // argument refusal to "undefined point", so a rewording on the
+          // library's side could turn any refusal into a claim about
+          // orbital geometry. A BODY's refusal must never say that -- it
+          // is coverage where the text says so, and otherwise the honest
+          // "unsupported".
+          Check(aT.errCode == eph::kOErrCoverage ||
+            aT.errCode == eph::kOErrUnsupported,
+            "a body's refusal is coverage or unsupported, never a claim "
+            "about orbital geometry (%d)", (int)aT.errCode);
+          Check(aT.iRowFailed == (uint32_t)aT.rowsOk,
+            "and names the FIRST row it failed on (%u, with %d ok)",
+            (unsigned)aT.iRowFailed, aT.rowsOk);
+          } else
+            Check(fFalse, "the straddling question returned an answer");
+        }
+
+        // FINDING 7: the delta-T COLUMN reported the model's value while
+        // the hook applied the user's -Yz0 override.
+        {
+          Borrow bDt(us.rDeltaT, (real)123.5);
+          if (FPromOneRowQt(eph::kTimeUT1, jd, &pfT, eph::kObjBody, 301,
+            0, 0, NULL, &lonA, &latA, &ayanA, &dtA))
+            Check(RAbs(dtA - 123.5) < 1.0e-6,
+              "the delta-T column reports the delta-T actually applied, "
+              "including the user's override (%.4f)", dtA);
+          else
+            Check(fFalse, "the overridden delta-T question computed");
+        }
+      }
+
+      // The walk: with the ephemeris parameter pointed at a file that
+      // is not there, the source's submit refuses and every object
+      // stays open; with the Swiss source behind it, the fallback
+      // serves and the notice says so.
+      {
+        EPHQUERY eqw;
+        EphPromSetParam(epPromEphemeris,
+          "/nvm/work/eph7prom-scratch/no-such-ephemeris.440");
+        EphQueryInit(&eqw, jd);
+        FEphQueryAdd(&eqw, oSun, 0, oEar, NULL);
+        Check(!FEphSubmitChain(&eqw, rgisrc, 1), "a source whose files are "
+          "missing submits nothing");
+        Check(!FEphRead(&eqw, oSun, &h1, &h2, &h3, &h4, &h5, &h6),
+          "the refused object stays open");
+        {
+          int rgisrc2[2];
+          rgisrc2[0] = rgisrc[0];
+          rgisrc2[1] = IEphSrcFromKey("swiss");
+          EphQueryInit(&eqw, jd);
+          FEphQueryAdd(&eqw, oSun, 0, oEar, NULL);
+          Check(FEphSubmitChain(&eqw, rgisrc2, 2), "the fallback behind a "
+            "refused source serves");
+          Check(FEphRead(&eqw, oSun, &h1, &h2, &h3, &h4, &h5, &h6) &&
+            FEqSz(eqw.rgrow[0].szSrc, "swiss"),
+            "the fallback's provenance names the swiss source");
+          Check(FEphFallbackNotice(), "a fallback serving something raises "
+            "the notice");
+        }
+        EphPromSetParam(epPromEphemeris, "");
+      }
+    }
+
+LStop:
+    ;
+  }
+  EphPromStop();
+  Check(NEphPromState(szStateAfter, (int)sizeof(szStateAfter)) == 1,
+    "the engine stopped cleanly (%s)", szStateAfter);
+#endif
+}
+
 static void TestEphSrvLiveQt()
 {
-  flag fEphemSav = us.fEphemFiles, fNoNetSav = us.fNoNetwork,
-    fNoEphFileSav = is.fNoEphFile, fPopSav = FNoPopupQt(),
-    fAddrSav = us.szEphSrv != NULL, fSidSav = us.fSidereal,
+  flag fNoEphFileSav = is.fNoEphFile, fPopSav = FNoPopupQt(),
+    fSidSav = us.fSidereal,
     fTopoSav = us.fTopoPos, fTrueNodeSav = us.fTrueNode,
     fIgnoreSav = ignore[custLo], fSid2Sav = us.fSidereal2,
     fProgSav = us.fProgress;
-  QByteArray baAddrSav(SzSet(us.szEphSrv));
-  int nSwissSav = us.nSwissEph, objCenterSav = us.objCenter,
+  QByteArray baChainSav(SzSet(us.szEphemSource));
+  QByteArray baAddrSav(SzSet(us.rgszEphParam[epServerUrl]));
+  int objCenterSav = us.objCenter,
     nObjSav = rgObjSwiss[0], nTypSav = rgTypSwiss[0], nPntSav = rgPntSwiss[0],
     nFlgSav = rgFlgSwiss[0];
   CI ciSav = ciCore, ciMainSav = ciMain;
   QString strBin, strEphe;
   QProcess proc;
-  QByteArray baLog;
+  QByteArray baLog, strUrlEnv;
   EPHSNAPSHOT snLocal, snSrv;
   char sz[cchSzMax], szDiff[cchSzMax];
-  int port, iScen, cDiff, cWarn, cReq;
+  // port is set only when this group starts its own daemon; with
+  // ASTROLOG_EPHSRV_URL it never is, and Qt6's optimiser noticed the
+  // uninitialised read in the sprintf below.
+  int port = 0, iScen, cDiff, cWarn, cReq, iU;
 
   Group("Ephemeris server, live parity");
   SetNoPopupQt(fTrue);
-  us.fNoNetwork = fFalse;
 
+  // ASTROLOG_EPHSRV_URL points this group at a server that is ALREADY
+  // RUNNING instead of starting astrolog-ephd. It exists for the
+  // cross-project work: the whole group is "cast the same chart through a
+  // v4 server and through the local Swiss files, and compare", which is
+  // exactly the application-level question the Prometheia project asked
+  // for, and there is no reason the server at the other end has to be
+  // ours. Their daemon serves the protocol; that is the point of it.
+  //
+  // The parity tolerance is NOT relaxed when this is set, deliberately.
+  // Against astrolog-ephd the comparison is bit-identical because both
+  // sides are the same Swiss; against a different engine it will not be,
+  // and the group will say so in the numbers rather than being told in
+  // advance what to forgive.
+  strUrlEnv = qgetenv("ASTROLOG_EPHSRV_URL");
+  if (!strUrlEnv.isEmpty()) {
+    printf("  (ASTROLOG_EPHSRV_URL: using the server already at %s, not "
+      "starting one)\n", strUrlEnv.constData());
+  } else {
   strBin = QCoreApplication::applicationDirPath() + "/astrolog-ephd";
   if (!QFileInfo(strBin).isExecutable()) {
     printf("  skipped: %s is not built (make ephsrv needs the thread-safe "
@@ -18636,6 +20583,17 @@ static void TestEphSrvLiveQt()
       strEphe += ";";
     strEphe += strDir;
   }
+  // And the tree root, because sefstars.txt lives THERE and not in the
+  // bundled ephem/. An explicit --ephe is the server's whole search path,
+  // so without this the daemon has no star catalogue and answers every
+  // star "data unavailable" -- which is exactly why P1's regression test
+  // could not be written when P1 was fixed, and why the plan carried it
+  // as an outstanding gap. The local cast finds the file regardless,
+  // because Swiss falls back to the working directory; the server, with
+  // its path stated, does not.
+  if (!strEphe.isEmpty())
+    strEphe += ";";
+  strEphe += QCoreApplication::applicationDirPath();
   if (strEphe.isEmpty()) {
     printf("  skipped: no -Yi ephemeris directory to point the server at\n");
     goto LRestore;
@@ -18678,6 +20636,7 @@ static void TestEphSrvLiveQt()
   Check(baLog.contains(" evt=ephe path=") &&
     !baLog.contains(" evt=ephe path=\"\""),
     "the server found the ephemeris directory");
+  }
 
   // The chart: a fixed UT instant at a fixed place, no zone, no DST.
   OraclePinUtQt(1990, 6, 15, 12.0);
@@ -18688,13 +20647,15 @@ static void TestEphSrvLiveQt()
   // form failed that cast at once (EPHEMERIS_REVIEW.md C3).
   EphSrvFinalizeQt();
   ClearWinSrvTestQt();
-  sprintf2(S(sz), "localhost:%d", port);
-  FCloneSz(sz, &us.szEphSrv);
-  us.fEphemFiles = fTrue;
-  us.nSwissEph = 0;
+  if (!strUrlEnv.isEmpty())
+    sprintf2(S(sz), "%s", strUrlEnv.constData());
+  else
+    sprintf2(S(sz), "localhost:%d", port);
+  FEphParamSet(epServerUrl, sz);
+  EphSourceSet("swiss");
   CastChart(0);
   SnapshotEphQt(&snLocal);
-  us.nSwissEph = 5;
+  EphSourceSet("server,swiss");
   EphSrvStartupQt();
   Check(NEphSrvStateTestQt() == 1, "the backend is connecting");
   cWarn = NCastWarnSrvTestQt();
@@ -18714,12 +20675,14 @@ static void TestEphSrvLiveQt()
   SetBackoffEphSrvTestQt(100);   // Hurry the ladder for the drop below.
 
   // The scenarios. Each: settings, local cast, server cast, compare.
-  for (iScen = 0; iScen < 10; iScen++) {
+  for (iScen = 0; iScen < 11; iScen++) {
     CONST char *szScen;
     real rTol = 0.0;
     us.fSidereal = fFalse; us.fSidereal2 = fFalse; us.objCenter = oEar;
     us.fTopoPos = fFalse; us.fProgress = fFalse;
     us.fTrueNode = fFalse; ignore[custLo] = fTrue;
+    for (iU = uranLo + 1; iU <= uranHi; iU++)
+      ignore[iU] = fTrue;
     AdjustRestrictions();
     OraclePinUtQt(1990, 6, 15, 12.0);
     ciCore.lon = 122.3; ciCore.lat = 47.6;
@@ -18761,6 +20724,24 @@ static void TestEphSrvLiveQt()
       us.fProgress = fTrue;
       SetProgressTarget(6, 15, 2020, 12.0);
       break;
+    case 10: szScen = "the eight Hamburg points (kind 3 on the wire)";
+      // The Uranians, which no other scenario casts -- so until now
+      // nothing here had ever put an object of KIND 3 on the wire, and the
+      // claim that Astrolog asks a server for them rather than computing
+      // them locally was a code trace and not a measurement. The
+      // Prometheia project asked for this one by name: their maintainer is
+      // a Uranian astrologer and it is the path that matters to them.
+      //
+      // FSwissPlanetSpec sends obj - uranLo + SE_FICT_OFFSET_1, and
+      // ObjectFromSwiss turns SE_FICT_OFFSET.. into kObjHypothetical with
+      // the token. The mismatched constants are load-bearing rather than
+      // an off-by-one: oVul IS uranLo and an earlier branch takes Vulcan,
+      // so the first object to reach the Uranian branch is Cupido at
+      // obj - uranLo == 1, landing on SE_FICT_OFFSET exactly.
+      for (iU = uranLo + 1; iU <= uranHi; iU++)
+        ignore[iU] = fFalse;
+      AdjustRestrictions();
+      break;
     case 8: szScen = "sidereal on the solar system plane (a second sid mode)";
       // Fagan-Bradley is sidMode 0, the library's default: a server that
       // ignored the mode passed the first sidereal scenario (review T8).
@@ -18770,10 +20751,10 @@ static void TestEphSrvLiveQt()
       ciCore.lon = 122.3; ciCore.lat = 47.6;
       break;
     }
-    us.nSwissEph = 0;   // The local Swiss path: the oracle.
+    EphSourceSet("swiss");   // The local Swiss path: the oracle.
     CastChart(0);
     SnapshotEphQt(&snLocal);
-    us.nSwissEph = 5;   // The server.
+    EphSourceSet("server,swiss");   // The server.
     cWarn = NCastWarnSrvTestQt();
     CastChart(0);
     SnapshotEphQt(&snSrv);
@@ -18800,16 +20781,88 @@ static void TestEphSrvLiveQt()
   OraclePinUtQt(1990, 6, 15, 12.0);
   ciCore.lon = 122.3; ciCore.lat = 47.6;
 
+  // ---- P1: a fixed star through the server, in both zodiacs ---------
+  // The gap this closes was named in the plan and left open: D2's fix
+  // made the server compute a star with the chart's real settings, and
+  // the consumer half still applied the BODY convention to the answer,
+  // putting every fixed star about 24.7 degrees out in sidereal charts
+  // -- silently, nErr clear, so the chain claimed the row. The scenario
+  // loop above cannot see it, because its snapshot compares PLANETS.
+  //
+  // The test written for it at the time was withdrawn rather than kept:
+  // its first form set us.fStar alone and PASSED while sabotaged,
+  // because SwissComputeStars() only asks about stars whose ignore[] is
+  // clear, so the query was empty. This asks the chain directly instead,
+  // one named star, and checks provenance so the swiss fallback cannot
+  // answer for the server.
+  {
+    char szStarT[cchSzMax];
+    real p1, p2, p3, p4, p5, p6, s1, s2, s3, s4, s5, s6, rD, jdT;
+    int rgisrcSrv[1], rgisrcSw[1], iZod;
+
+    rgisrcSrv[0] = IEphSrcFromKey("server");
+    rgisrcSw[0] = IEphSrcFromKey("swiss");
+    OraclePinUtQt(1990, 6, 15, 12.0);
+    for (iZod = 0; iZod <= 1; iZod++) {
+      EPHQUERY eqp, eqs;
+      flag fP, fS;
+      Borrow bSidStar(us.fSidereal, iZod ? fTrue : fFalse);
+
+      // Inside the borrow, or is.rSid keeps the last cast's value: the
+      // prometheia star leg was blind to its own subtraction that way.
+      CastChart(0);
+      jdT = JulianDayFromTime(is.T);
+      Check(!us.fSidereal || is.rSid != 0.0,
+        "the sidereal star leg really has an ayanamsa (%.6f)", is.rSid);
+
+      EphQueryInit(&eqp, jdT);
+      sprintf2(S(szStarT), "%s", "Sirius");
+      FEphQueryAdd(&eqp, 1, 0, 0, szStarT);
+      fP = FEphSubmitChain(&eqp, rgisrcSrv, 1) &&
+        FEphRead(&eqp, 1, &p1, &p2, &p3, &p4, &p5, &p6);
+
+      EphQueryInit(&eqs, jdT);
+      sprintf2(S(szStarT), "%s", "Sirius");
+      FEphQueryAdd(&eqs, 1, 0, 0, szStarT);
+      fS = FEphSubmitChain(&eqs, rgisrcSw, 1) &&
+        FEphRead(&eqs, 1, &s1, &s2, &s3, &s4, &s5, &s6);
+
+      if (!fP) {
+        // Said out loud rather than passed over: the server's --ephe is
+        // every -Yi directory, and sefstars.txt lives in the TREE ROOT,
+        // which "-Yi1 ephem" does not name. That is the whole of why
+        // this leg could not be written before.
+        printf("  P1 %s: the server served no star (nErr %d); its --ephe "
+          "needs a directory holding sefstars.txt\n",
+          iZod ? "sidereal" : "tropical", (int)eqp.rgrow[0].nErr);
+        continue;
+      }
+      Check(fS, "the local Swiss path serves the same star");
+      Check(FEqSz(SzSet(eqp.rgrow[0].szSrc), "server"),
+        "the %s star row really came from the server (%s)",
+        iZod ? "sidereal" : "tropical", SzSet(eqp.rgrow[0].szSrc));
+      if (!fS)
+        continue;
+      rD = SphDistance(p1, p2, s1, s2) * 3600.0;
+      printf("  P1 star %-9s server vs swiss: %11.4f\"\n",
+        iZod ? "sidereal" : "tropical", rD);
+      Check(rD < 1.0, "the %s star through the server agrees with the "
+        "local one (%.4f\")", iZod ? "sidereal" : "tropical", rD);
+    }
+    us.fSidereal = fFalse;
+    CastChart(0);
+  }
+
   // A cast made inside another cast's wait -- a timer, a paint -- leaves
   // the waiting cast alone: it lands bit-identical. The first form wiped
   // the waiting cast's plan on entry and failed every object it had
   // (EPHEMERIS_REVIEW.md C1).
   OraclePinUtQt(1990, 7, 4, 3.0);
   ciCore.lon = 122.3; ciCore.lat = 47.6;
-  us.nSwissEph = 0;
+  EphSourceSet("swiss");
   CastChart(0);
   SnapshotEphQt(&snLocal);
-  us.nSwissEph = 5;
+  EphSourceSet("server,swiss");
   {
     static int cNested;
     cNested = 0;
@@ -18855,7 +20908,6 @@ static void TestEphSrvLiveQt()
   }
 
   // The window cache: the same cast again sends nothing.
-  us.nSwissEph = 5;
   CastChart(0);
   cReq = CReqSentEphSrvTestQt();
   cWarn = NCastWarnSrvTestQt();
@@ -18886,7 +20938,7 @@ static void TestEphSrvLiveQt()
     char szWorst[cchSzMax];
 
     us.nRel = rcNone; gi.nMode = gWheel;
-    us.nSwissEph = 5;
+    EphSourceSet("server,swiss");
     ClearWinSrvTestQt();
     SetRowsAnimSrvTestQt(20);
     // Seven rows a chunk: every 20-row window arrives in three, so the
@@ -18925,8 +20977,8 @@ static void TestEphSrvLiveQt()
     // A cast outside a tick, animation or not, is still asked exactly.
     {
       EPHSNAPSHOT snL, snS;
-      us.nSwissEph = 0; ciCore = ciMain; CastChart(0); SnapshotEphQt(&snL);
-      us.nSwissEph = 5; CastChart(0); SnapshotEphQt(&snS);
+      EphSourceSet("swiss"); ciCore = ciMain; CastChart(0); SnapshotEphQt(&snL);
+      EphSourceSet("server,swiss"); CastChart(0); SnapshotEphQt(&snS);
       cDiff = CDiffEphQt(&snL, &snS, 0.0, S(szDiff));
       Check(cDiff == 0, "animation: a cast outside a tick stays bit-identical "
         "(%d differ: %s)", cDiff, szDiff);
@@ -18939,8 +20991,8 @@ static void TestEphSrvLiveQt()
     // pass with no recast at all, which is how its first draft passed.
     {
       EPHSNAPSHOT snL, snS;
-      us.nSwissEph = 0; ciCore = ciMain; CastChart(0); SnapshotEphQt(&snL);
-      us.nSwissEph = 5;
+      EphSourceSet("swiss"); ciCore = ciMain; CastChart(0); SnapshotEphQt(&snL);
+      EphSourceSet("server,swiss");
       gs.nAnim = 2; gi.nDir = 5;
       SetAnimFrameSrvTestQt(fTrue);
       CastChart(0);
@@ -18951,8 +21003,8 @@ static void TestEphSrvLiveQt()
         "the approximate one before the stop (%d objects differ)", cDiff);
       SetAnimRunningTestQt(fFalse);
       SnapshotEphQt(&snS);
-      us.nSwissEph = 0; ciCore = ciMain; CastChart(0); SnapshotEphQt(&snL);
-      us.nSwissEph = 5;
+      EphSourceSet("swiss"); ciCore = ciMain; CastChart(0); SnapshotEphQt(&snL);
+      EphSourceSet("server,swiss");
       cDiff = CDiffEphQt(&snL, &snS, 0.0, S(szDiff));
       Check(cDiff == 0 && !FApproxSrvTestQt(), "animation: stopping leaves "
         "the bit-exact chart (%d differ: %s)", cDiff, szDiff);
@@ -19080,30 +21132,31 @@ static void TestEphSrvLiveQt()
       gs.nAnim = -2;          // What PrintWarningQt() does.
       AnimTickTestQt();
       SnapshotEphQt(&snS);
-      us.nSwissEph = 0; ciCore = ciMain; CastChart(0); SnapshotEphQt(&snL);
-      us.nSwissEph = 5;
+      EphSourceSet("swiss"); ciCore = ciMain; CastChart(0); SnapshotEphQt(&snL);
+      EphSourceSet("server,swiss");
       cDiff = CDiffEphQt(&snL, &snS, 0.0, S(szDiff));
       Check(cDiff == 0 && !FApproxSrvTestQt(), "animation stopped by a "
         "warning box: the next tick leaves the bit-exact chart (%d differ: "
         "%s)", cDiff, szDiff);
     }
 
-    // A cast with more groups than the cache holds keeps every window it
-    // points at: with room for one, a heliocentric chart (two groups) holds
-    // two, rather than reading the first after the second evicted it.
+    // A cast split into more requests than the window cache holds keeps
+    // every window it points at: a server allowing five objects a request
+    // makes a chart several windows, and with room for one they all have to
+    // survive until the cast has read them.
     ClearWinSrvTestQt();
+    SetWelcMaxObjsSrvTestQt(5);
     SetWindowCapSrvTestQt(1);
-    us.objCenter = oSun;
     {
       EPHSNAPSHOT snL, snS;
-      us.nSwissEph = 0; ciCore = ciMain; CastChart(0); SnapshotEphQt(&snL);
-      us.nSwissEph = 5; CastChart(0); SnapshotEphQt(&snS);
+      EphSourceSet("swiss"); ciCore = ciMain; CastChart(0); SnapshotEphQt(&snL);
+      EphSourceSet("server,swiss"); CastChart(0); SnapshotEphQt(&snS);
       cDiff = CDiffEphQt(&snL, &snS, 0.0, S(szDiff));
-      Check(CWinSrvTestQt() >= 2 && cDiff == 0, "a cast with more groups "
-        "than the window cap holds all its windows (%d held, %d differ: %s)",
-        CWinSrvTestQt(), cDiff, szDiff);
+      Check(CWinSrvTestQt() >= 2 && cDiff == 0, "a cast split over more "
+        "requests than the window cap holds all its windows (%d held, %d "
+        "differ: %s)", CWinSrvTestQt(), cDiff, szDiff);
     }
-    us.objCenter = oEar;
+    SetWelcMaxObjsSrvTestQt(eph::Welcome().maxObjs);
     SetWindowCapSrvTestQt(32);
     SetRowsAnimSrvTestQt(1000);
     SetChunkRowsSrvTestQt(500);
@@ -19149,10 +21202,10 @@ static void TestEphSrvLiveQt()
   }
   Check(CRecastSrvTestQt() == cReq + 1, "the WELCOME recast the chart that "
     "missed the server (%d recasts)", CRecastSrvTestQt() - cReq);
-  us.nSwissEph = 0;
+  EphSourceSet("swiss");
   CastChart(0);
   SnapshotEphQt(&snLocal);
-  us.nSwissEph = 5;
+  EphSourceSet("server,swiss");
   cWarn = NCastWarnSrvTestQt();
   CastChart(0);
   SnapshotEphQt(&snSrv);
@@ -19168,10 +21221,10 @@ static void TestEphSrvLiveQt()
   ClearWinSrvTestQt();
   OraclePinUtQt(1990, 6, 19, 12.0);
   ciCore.lon = 122.3; ciCore.lat = 47.6;
-  us.nSwissEph = 0;
+  EphSourceSet("swiss");
   CastChart(0);
   SnapshotEphQt(&snLocal);
-  us.nSwissEph = 5;
+  EphSourceSet("server,swiss");
   cWarn = NCastWarnSrvTestQt();
   CastChart(0);
   SnapshotEphQt(&snSrv);
@@ -19179,82 +21232,107 @@ static void TestEphSrvLiveQt()
   Check(NCastWarnSrvTestQt() == cWarn && cDiff == 0 && CWinSrvTestQt() >= 3,
     "a server allowing 5 objects a request: %d requests, bit-identical (%d "
     "differ: %s)", CWinSrvTestQt(), cDiff, szDiff);
-  SetWelcMaxObjsSrvTestQt(eph::kMaxObjs);
+  SetWelcMaxObjsSrvTestQt(eph::Welcome().maxObjs);
 
-  // -0n: fails fast, sends nothing.
-  us.fNoNetwork = fTrue;
+  // The server deselected: a cast raises nothing and sends nothing --
+  // the local path is the whole cast. (The old -0n lock failed fast
+  // here; it is inert now.)
+  EphSourceSet("swiss");
   OraclePinUtQt(1990, 6, 18, 12.0);
   ciCore.lon = 122.3; ciCore.lat = 47.6;
   cReq = CReqSentEphSrvTestQt();
   cWarn = NCastWarnSrvTestQt();
   CastChart(0);
-  Check(NCastWarnSrvTestQt() == cWarn + 1 && CReqSentEphSrvTestQt() == cReq,
-    "under -0n a cast fails fast with one warning and no request");
-  us.fNoNetwork = fFalse;
+  Check(NCastWarnSrvTestQt() == cWarn && CReqSentEphSrvTestQt() == cReq,
+    "a cast with the server deselected sends nothing and warns not");
 
-  // Required-server mode (increment 4): no local ephemeris anywhere and
-  // the server backend selected -- the startup dialog and its ladder.
-  // The probe is pinned, not re-run: SwissEnsurePath() early-returns
-  // once is.fSwissPathSet is set, so fNoEphFound is whatever the tests
-  // pin here, whatever directories this machine has.
+
+  // An object with no Astrolog object index is REFUSED, not written out
+  // of bounds (phase 6 review, D1). The adapter's plan is addressed by
+  // object index and is objMax long; a side call names an asteroid as
+  // SE_AST_OFFSET + n, over 10000, and a star by catalogue number. The
+  // read side had always range-checked and the write side had not,
+  // because until the transport took queries the only producer was a
+  // cast loop that cannot go out of range. Submitting one of these wrote
+  // an EPHWINDOW pointer roughly 160 KB past the array.
+  //
+  // Asserted as a REFUSAL because that is what is observable from in
+  // here: the corruption itself is only visible under a sanitizer, and a
+  // net that needs one does not run in the ordinary suite.
   {
-    flag fNoEphSav = is.fNoEphFound, fPathSetSav = is.fSwissPathSet;
-    QWebSocketServer srvReq("eph-required", QWebSocketServer::NonSecureMode);
-    byte bProtoReq = eph::kProtoVersion;
-    uint32_t dwCapsReq = 0;
-    char szVerReq[64];
-    QByteArray baReqReq;
-    QWebSocket *pconnReq = NULL;
+    EPHQUERY eqOob;
+    int isrcSrv = IEphSrcFromKey("server");
 
-    is.fSwissPathSet = fTrue;
-    us.fEphemFiles = fTrue; us.nSwissEph = 5;
-    is.fNoEphFound = fTrue;
-    Check(FEphSrvRequiredQt(), "required: the server backend with no "
-      "local ephemeris");
-    us.nSwissEph = 0;
-    Check(!FEphSrvRequiredQt(), "not required: a local backend is "
-      "selected");
-    us.nSwissEph = 5;
-    is.fNoEphFound = fFalse;
-    Check(!FEphSrvRequiredQt(), "not required: a local ephemeris exists");
-    is.fNoEphFound = fTrue;
-
-    // The dialog against a server that answers: one attempt, welcomed,
-    // no ladder, no exit.
-    Check(srvReq.listen(QHostAddress::LocalHost),
-      "the required-mode loopback listens");
-    sprintf2(S(szVerReq), "astrolog-ephd required-test");
-    WireEphLoopbackQt(&srvReq, &bProtoReq, &dwCapsReq, szVerReq, &baReqReq,
-      &pconnReq);
-    sprintf2(S(sz), "localhost:%d", (int)srvReq.serverPort());
-    FCloneSz(sz, &us.szEphSrv);
     EphSrvFinalizeQt();
-    ResetRequiredSrvTestQt();
-    SetRequiredEphSrvTestQt(1, 1, 30000);
-    EphSrvStartupQt();
-    Check(NEphSrvStateTestQt() == 2 && CRequiredTriesSrvTestQt() == 1,
-      "required mode: the dialog welcomed in one attempt (%d)",
-      CRequiredTriesSrvTestQt());
-    Check(FRequiredShownSrvTestQt(), "the dialog latched itself shown");
-    EphSrvFinalizeQt();
+    EphSourceSet("server,swiss");
+    Check(isrcSrv >= 0, "the registry carries the server source");
+    if (isrcSrv >= 0) {
+      EphQueryInit(&eqOob, 2451545.0);
+      FEphQueryAdd(&eqOob, SE_AST_OFFSET + 1, 0, oEar, NULL);
+      Check(!PephsrcGet(isrcSrv)->FSubmit(&eqOob),
+        "an asteroid's side-call index is refused by the server source, "
+        "not addressed into its plan");
+      Check(eqOob.rgisrc[0] == ephSrcNone,
+        "and the object stays open for the source behind it");
 
-    // The ladder against a port nothing listens on: the attempts tick by,
-    // the give-up returns instead of exiting (the suite's hook), and the
-    // dialog stays latched shown.
+      // The ordinary case still goes through, so the refusal is about
+      // the index and not about queries.
+      EphQueryInit(&eqOob, 2451545.0);
+      FEphQueryAdd(&eqOob, oSun, 0, oEar, NULL);
+      Check(FBetween(eqOob.rgobj[0], 0, objMax-1),
+        "a normal object is inside the plan's addressing");
+    }
+    EphSrvFinalizeQt();
+    EphSourceSet("swiss");
+  }
+
+  // Startup with the server selected and NOTHING listening (phase 6e).
+  // This is what replaced required-server mode, so it is what has to be
+  // pinned: startup must not block and must not exit. The old path did
+  // both -- a modal dialog, an hour-long retry ladder, and
+  // EXIT_NO_EPHEMERIS on give-up -- because a selection was one backend
+  // and an unreachable one left nothing to cast from. The chain ended
+  // that: a source that cannot answer is offered past, and the failure is
+  // reported where it happens.
+  //
+  // "Did not exit" is not directly assertable from inside the process, so
+  // this asserts the two things whose absence the exit depended on: the
+  // call RETURNS, and it returns fast. A build that still climbed the
+  // ladder would sit here for its hour and the suite's watchdog would say
+  // so; a build that exited would take the whole run with it, which is
+  // its own loud failure.
+  {
+    QElapsedTimer timNoSrv;
+    char szStatNoSrv[cchSzMax];
+    int msNoSrv;
+
+    EphSrvFinalizeQt();
+    ClearWinSrvTestQt();
+    EphSourceSet("server,swiss");
     sprintf2(S(sz), "localhost:1");   // Nothing listens on port 1.
-    FCloneSz(sz, &us.szEphSrv);
-    ResetRequiredSrvTestQt();
-    SetRequiredNoExitSrvTestQt(fTrue);
-    SetRequiredEphSrvTestQt(1, 1, 40);
+    FEphParamSet(epServerUrl, sz);
+    timNoSrv.start();
     EphSrvStartupQt();
-    Check(CRequiredTriesSrvTestQt() >= 1 && FRequiredShownSrvTestQt(),
-      "the give-up made %d attempts and returned, not exited",
-      CRequiredTriesSrvTestQt());
+    msNoSrv = (int)timNoSrv.elapsed();
+    Check(msNoSrv < 2000 * nScaleTest,
+      "startup with the server unreachable returns at once (%d ms)",
+      msNoSrv);
+    Check(NEphSrvStateTestQt() != 2,
+      "and is not welcomed by a server that is not there (%d)",
+      NEphSrvStateTestQt());
+
+    // And it says so when asked, rather than having said it at startup.
+    SzEphSrvStatusQt(S(szStatNoSrv));
+    Check(*szStatNoSrv != chNull,
+      "the status line carries the state for a dialog to show (\"%.60s\")",
+      szStatNoSrv);
+
+    // The chain is what makes the above safe: the Swiss files behind the
+    // server still answer, so the cast is not lost with the connection.
+    EphSourceSet("swiss");
+    Check(FEqSz(us.szEphemSource, "swiss"), "and a local source still casts");
     EphSrvFinalizeQt();
-    ResetRequiredSrvTestQt();
-    FCloneSz(NULL, &us.szEphSrv);
-    is.fNoEphFound = fNoEphSav;
-    is.fSwissPathSet = fPathSetSav;
+    FEphParamSet(epServerUrl, NULL);
   }
 
   // TLS (EPHEMERIS_SERVER_PRODUCTION_PLAN.md Phase 1): the same server
@@ -19323,8 +21401,7 @@ static void TestEphSrvLiveQt()
       OraclePinUtQt(1990, 6, 15, 12.0);
       ciCore.lon = 122.3; ciCore.lat = 47.6;
       us.fSidereal = fFalse; us.objCenter = oEar; us.fTopoPos = fFalse;
-      us.fEphemFiles = fTrue;
-      us.nSwissEph = 0;
+      EphSourceSet("swiss");
       CastChart(0);
       SnapshotEphQt(&snLocal);
 
@@ -19332,8 +21409,8 @@ static void TestEphSrvLiveQt()
       EphSrvFinalizeQt();
       ClearWinSrvTestQt();
       sprintf2(S(sz), "wss://localhost:%d", portTls);
-      FCloneSz(sz, &us.szEphSrv);
-      us.nSwissEph = 5;
+      FEphParamSet(epServerUrl, sz);
+      EphSourceSet("server,swiss");
       EphSrvStartupQt();
       {
         QElapsedTimer tim;
@@ -19379,9 +21456,9 @@ LRestore:
   }
   EphSrvFinalizeQt();
   ClearWinSrvTestQt();
-  us.fEphemFiles = fEphemSav;
-  us.nSwissEph = nSwissSav;
-  us.fNoNetwork = fNoNetSav;
+  EphSourceSet(baChainSav.constData());
+  FEphParamSet(epServerUrl, baAddrSav.isEmpty() ? NULL :
+    baAddrSav.constData());
   us.fSidereal = fSidSav; us.fSidereal2 = fSid2Sav;
   us.fProgress = fProgSav;
   us.objCenter = objCenterSav;
@@ -19390,7 +21467,8 @@ LRestore:
   AdjustRestrictions();
   rgTypSwiss[0] = nTypSav; rgObjSwiss[0] = nObjSav;
   rgPntSwiss[0] = nPntSav; rgFlgSwiss[0] = nFlgSav;
-  FCloneSz(fAddrSav ? baAddrSav.constData() : NULL, &us.szEphSrv);
+  FEphParamSet(epServerUrl, baAddrSav.isEmpty() ? NULL :
+    baAddrSav.constData());
   is.fNoEphFile = fNoEphFileSav;
   ciCore = ciSav;
   ciMain = ciMainSav;   // The scenarios move it too (review T11).
@@ -19399,8 +21477,1072 @@ LRestore:
 }
 
 
+// ---- Ephemeris source registry, phase 3 (EPHEMERIS_PLUGINS_PLAN.md 4) ----
+//
+// The unit net of increment 3a: the source registry's swiss source answers
+// through FSwissPlanet(), the same decision and execution pair
+// ComputeEphem()'s Swiss branch has always used, and the six reals a host
+// read hands back must be the BYTES of a direct FSwissPlanet() call with
+// the same arguments. The scenario list is the live-parity group's
+// (tropical geocentric, sidereal, heliocentric, topocentric, true node, an
+// unusual centre, a custom node/apsis object, a second sidereal mode, a
+// 1900 instant where delta-t's tidal term is live), laid over a matrix of
+// objects and four instants each. One check per scenario and instant,
+// naming the first object whose bytes moved.
+//
+// This is not the live-parity group's question -- there the local cast is
+// the oracle and the server the claimant -- but the shape is the same:
+// compare whole answers, as bytes, over the flag paths the program really
+// takes.
+
+// A chain whose every source is unavailable must SAY SO. This is the one
+// failure that looks exactly like a success: every body reads 0Ari00'00",
+// no error is raised, and the houses are right, because they come from the
+// time and place rather than from an ephemeris. CLAUDE.md names that
+// reading as the project's own trap; until 2026-09-18 the host walked such
+// a chain, answered nothing and drew the chart anyway.
+//
+// Reported by the Prometheia project from OUTSIDE: they cast through
+// "-bE server" in a build with no transport, got a chart rather than a
+// refusal, and could not tell from the output that anything was wrong.
+static void TestEphNoSourceQt()
+{
+  flag fNoEphSav = is.fNoEphFile;
+  EPHQUERY eq;
+  int rgisrc[cEphSrcBuiltIn], cisrc;
+
+  Group("No source could answer");
+
+  // A chain naming only a source this build does not register at all.
+  // CEphChainSrc skips a key it cannot resolve, so the walk has nothing to
+  // ask and must not report success.
+  {
+    EphSelBorrow bChain("horizons");
+    cisrc = CEphChainSrc(us.szEphemSource, rgisrc, cEphSrcBuiltIn);
+    EphQueryInit(&eq, 2451545.0);
+    FEphQueryAdd(&eq, oSun, 0, oEar, NULL);
+    Check(!FEphSubmitChain(&eq, rgisrc, cisrc),
+      "a chain of nothing this build knows answers nothing (%d sources)",
+      cisrc);
+    Check(eq.rgisrc[0] == ephSrcNone,
+      "and leaves the object unclaimed rather than claiming a zero row");
+  }
+
+  // And a source that IS registered but cannot serve: its own reason is
+  // carried out, because "no source could answer" without a why is nearly
+  // as unhelpful as silence.
+  //
+  // "prometheia" and not "server", deliberately. The first draft used the
+  // server source with its URL cleared, and it FAILED -- by connecting to
+  // a prometheiad another agent had left running on this machine's default
+  // port and answering the query correctly. A net that reaches the network
+  // is a net whose verdict depends on who else is using the machine. This
+  // one asks about a source that is unavailable for a reason no daemon can
+  // change: its library is not compiled in.
+  // The REASON string is not asserted here, and the honest statement of
+  // why is more useful than a leg that pretends to check it. It is written
+  // only when the walk REACHES a source and that source declines -- and in
+  // this binary every registered source is available: the Qt transport is
+  // bound, so "server" answers; "prometheia" resolves to an index outside
+  // cEphSrcBuiltIn when its library is absent and the walk skips it on
+  // bounds before asking. The reason path belongs to the console build,
+  // where "server" is registered and has no transport at all:
+  //
+  //   ./astrolog -bE server -qa 1 1 2000 12:00 0 0e0 0n0
+  //   No ephemeris source could answer this chart: server (There is no
+  //   transport in this build.). Every body reads 0Ari00'00".
+  //
+  // Two earlier drafts of this leg did claim to check it. The first set
+  // the server's URL to empty and PASSED BY CONNECTING to a prometheiad
+  // another agent had left running on this machine's default port. The
+  // second asked about "prometheia" and got an empty reason for the bounds
+  // reason above, which is the walk being right and the test being wrong.
+  printf("  (the reason string is exercised by the console build, which "
+    "has no transport; see the comment here)\n");
+
+  // The other half, or the two assertions above would pass on a host that
+  // never answers anything at all.
+  {
+    EphSelBorrow bChain("swiss");
+    cisrc = CEphChainSrc(us.szEphemSource, rgisrc, cEphSrcBuiltIn);
+    EphQueryInit(&eq, 2451545.0);
+    FEphQueryAdd(&eq, oSun, 0, oEar, NULL);
+    Check(FEphSubmitChain(&eq, rgisrc, cisrc) &&
+      eq.rgisrc[0] != ephSrcNone,
+      "and a chain that CAN answer still does");
+  }
+  is.fNoEphFile = fNoEphSav;
+}
+
+
+static void TestEphemRegistryQt()
+{
+  static CONST int rgyea[] = {1900, 1990, 2020, 2050};
+  static CONST int rgobj[] = {oSun, oMoo, oEar, oMer, oVen, oMar, oJup,
+    oSat, oUra, oNep, oPlu, oChi, oCer, oVes, oNod, oSou, oLil, oVul};
+  static CONST char *rgszScen[] = {"tropical geocentric", "sidereal",
+    "heliocentric", "topocentric", "true node",
+    "centered on Mars (swe_calc_pctr)",
+    "a custom object that is Jupiter's perihelion (swe_nod_aps)",
+    "sidereal on the solar system plane", "a 1900 instant"};
+  CI ciCoreSav = ciCore, ciMainSav = ciMain;
+  flag fIgnoreSav = ignore[custLo];
+  int nTypSav = rgTypSwiss[0], nObjSav = rgObjSwiss[0],
+    nPntSav = rgPntSwiss[0], nFlgSav = rgFlgSwiss[0];
+  real jd, r1, r2, r3, r4, r5, r6, h1, h2, h3, h4, h5, h6;
+  EPHQUERY eq;
+  int iy, iScen, iObj, obj, cent, cBad, iBad, iSour;
+  flag fHost, fDirect, fBad;
+
+  Group("Ephemeris source registry");
+  {
+    // The selection: the chain "swiss", one source long -- the
+    // delegation this group is about.
+    EphSelBorrow bChain("swiss");
+    Borrow bSid(us.fSidereal, fFalse), bSid2(us.fSidereal2, fFalse);
+    Borrow bTopo(us.fTopoPos, fFalse), bTrueN(us.fTrueNode, fFalse);
+    Borrow bCtr(us.objCenter, (int)oEar), bMoon(us.fMoonMove, fFalse);
+    Borrow bTrue(us.fTruePos, fFalse), bBary(us.fBarycenter, fFalse);
+    Borrow bNoNut(us.fNoNutation, fFalse);
+    Borrow bZoff(us.rZodiacOffset, 0.0), bZall(us.rZodiacOffsetAll, 0.0);
+    Borrow bElv(us.elvDef, 0.0);
+    // The registry is the same five sources in every build. Key lookup is
+    // how a chain is named, so a typo'd key must be -1, not 0.
+    Check(CEphSrc() == cEphSrcBuiltIn, "the registry holds the %d built-in "
+      "sources (%d)", cEphSrcBuiltIn, CEphSrc());
+    Check(IEphSrcFromKey("swiss") == 0 && IEphSrcFromKey("jpl") == 1 &&
+      IEphSrcFromKey("moshier") == 2 && IEphSrcFromKey("matrix") == 3 &&
+      IEphSrcFromKey("server") == 4 + cEphSrcPrometheia &&
+      IEphSrcFromKey("none") == 5 + cEphSrcPrometheia &&
+      IEphSrcFromKey("nonesuch") < 0,
+      "every source resolves by its key, and a bad key resolves to none "
+      "(the phase 7 source, when compiled in, sits at index 4, and the "
+      "phase 6 server after it)");
+    Check(FEqSz(us.szEphemSource, "swiss"),
+      "the selection IS the chain, and its head is the swiss source");
+
+    for (iScen = 0; iScen < 9; iScen++) {
+      us.fSidereal = fFalse; us.fSidereal2 = fFalse;
+      us.fTopoPos = fFalse; us.fTrueNode = fFalse;
+      us.objCenter = oEar;
+      ignore[custLo] = fTrue;
+      cent = oEar;
+      // The Jupiter-perihelion custom of the live-parity group's scenario
+      // 6: rgTypSwiss 2 (another object), perihelion point.
+      if (iScen == 6) {
+        ignore[custLo] = fFalse;
+        rgTypSwiss[0] = 2; rgObjSwiss[0] = oJup; rgPntSwiss[0] = 3;
+        rgFlgSwiss[0] = 0;
+      }
+      switch (iScen) {
+      case 1: us.fSidereal = fTrue; break;
+      case 2: cent = oSun; break;
+      case 3: us.fTopoPos = fTrue; break;
+      case 4: us.fTrueNode = fTrue; break;
+      case 5: cent = oMar; break;
+      case 7: us.fSidereal = fTrue; us.fSidereal2 = fTrue; break;
+      }
+      for (iy = 0; iy < 4; iy++) {
+        OraclePinUtQt(iScen == 8 ? 1900 : rgyea[iy], 6, 15, 12.0);
+        ciCore.lon = 122.3; ciCore.lat = 47.6;
+        // Cast first: is.T is CastChart()'s own cook of ciCore, and
+        // JulianDayFromTime() reads it -- the same shape the numeric
+        // oracle group uses.
+        CastChart(0);
+        jd = JulianDayFromTime(is.T);
+        cBad = 0; iBad = -1; fBad = fFalse;
+        for (iObj = 0; iObj <= (iScen == 6 ? 0 : (int)(sizeof(rgobj) /
+            sizeof(int)) - 1); iObj++) {
+          obj = iScen == 6 ? custLo : rgobj[iObj];
+          // The library is history-dependent on a first call: measured,
+          // a FSwissPlanet(oLil) at a pctr centre shifts the NEXT pctr
+          // call by ~1e-8 degrees, and that call's own second invocation
+          // is stable again. Casts are deterministic because they make
+          // one call per object; this net makes two, so warm the object
+          // first and compare host against a direct call with the same
+          // history behind it.
+          FSwissPlanet(obj, jd, cent, &r1, &r2, &r3, &r4, &r5, &r6);
+          // The host's answer: a one-object query down the derived chain.
+          EphQueryInit(&eq, jd);
+          FEphQueryAdd(&eq, obj, 0, cent, NULL);
+          FEphSubmit(&eq);
+          fHost = FEphRead(&eq, obj, &h1, &h2, &h3, &h4, &h5, &h6);
+          // The oracle: the call the source delegates to, directly.
+          fDirect = FSwissPlanet(obj, jd, cent, &r1, &r2, &r3, &r4, &r5, &r6);
+          if (fDirect != fHost) {
+            cBad++; if (!fBad) { iBad = obj; fBad = fTrue; }
+            continue;
+          }
+          if (!fDirect)
+            continue;
+          // The six reals, as bytes, in FSwissPlanet()'s own argument
+          // order -- which is what FEphRead() hands back.
+          for (iSour = 0; iSour < 6; iSour++) {
+            real rH, rD;
+            switch (iSour) {
+            case 0: rH = h1; rD = r1; break;
+            case 1: rH = h2; rD = r2; break;
+            case 2: rH = h3; rD = r3; break;
+            case 3: rH = h4; rD = r4; break;
+            case 4: rH = h5; rD = r5; break;
+            default: rH = h6; rD = r6; break;
+            }
+            if (memcmp(&rH, &rD, sizeof(real)) != 0) {
+              cBad++; if (!fBad) { iBad = obj; fBad = fTrue; }
+              break;
+            }
+          }
+        }
+        Check(cBad == 0, "%s, year %d: the host's answers are the bytes of "
+          "the direct calls over %d objects (%d differ; first: %s)",
+          rgszScen[iScen], iScen == 8 ? 1900 : rgyea[iy],
+          iScen == 6 ? 1 : (int)(sizeof(rgobj) / sizeof(int)), cBad,
+          iBad >= 0 ? szObjName[iBad] : "");
+      }
+      if (iScen == 6) {
+        rgTypSwiss[0] = nTypSav; rgObjSwiss[0] = nObjSav;
+        rgPntSwiss[0] = nPntSav; rgFlgSwiss[0] = nFlgSav;
+      }
+    }
+    ignore[custLo] = fIgnoreSav;
+  }
+
+  // The walk: a source that refuses an object leaves it to the next
+  // source, the notice says so once, and a chain that answers nothing
+  // reads as failure. The none source refuses every object, so a chain of
+  // [none, swiss] is the walk with a fallback serving everything, and a
+  // chain of [none] alone is the walk with nothing behind it.
+  {
+    OraclePinUtQt(1990, 6, 15, 12.0);
+    ciCore.lon = 122.3; ciCore.lat = 47.6;
+    CastChart(0);
+    jd = JulianDayFromTime(is.T);
+    {
+      int rgisrc[2];
+      EPHQUERY eq2;
+
+      rgisrc[0] = IEphSrcFromKey("none");
+      rgisrc[1] = IEphSrcFromKey("swiss");
+      EphQueryInit(&eq2, jd);
+      FEphQueryAdd(&eq2, oMoo, 0, oEar, NULL);
+      FEphQueryAdd(&eq2, oNod, 0, oEar, NULL);
+      Check(FEphSubmitChain(&eq2, rgisrc, 2), "a chain whose head refuses "
+        "everything is answered by its second source");
+      Check(FEphRead(&eq2, oMoo, &h1, &h2, &h3, &h4, &h5, &h6) &&
+        FSwissPlanet(oMoo, jd, oEar, &r1, &r2, &r3, &r4, &r5, &r6) &&
+        memcmp(&h1, &r1, sizeof(real)) == 0,
+        "the fallback's answer is the direct call's, bytes again");
+      Check(eq2.rgisrc[0] == rgisrc[1], "the fallback's provenance names "
+        "the second source");
+      Check(FEphFallbackNotice(), "a fallback serving something raises the "
+        "notice");
+      EphQueryInit(&eq2, jd);
+      FEphQueryAdd(&eq2, oMoo, 0, oEar, NULL);
+      Check(!FEphSubmitChain(&eq2, rgisrc, 1), "a chain that reaches only "
+        "none answers nothing");
+      Check(!FEphRead(&eq2, oMoo, &h1, &h2, &h3, &h4, &h5, &h6),
+        "an unanswered object reads as failure");
+      Check(!FEphFallbackNotice(), "nothing served means no notice");
+    }
+
+    // The selection IS the chain now, and the predicates read it.
+    // Each of the seven chains the old fields could name, applied for
+    // real, says which rates are real, whether the legacy cast answers,
+    // and where the cast's Swiss-family bit comes from.
+    {
+      struct { CONST char *szChain, *szHead; flag fSpeeds, fLegacy;
+        int nSwiss; } const rgmap[] = {
+        {"swiss", "swiss", fTrue, fFalse, 0},
+        {"moshier", "moshier", fTrue, fFalse, 1},
+        {"jpl", "jpl", fTrue, fFalse, 2},
+        {"horizons,jpl", "horizons", fTrue, fFalse, 2},
+        {"server,swiss", "server", fTrue, fFalse, 0},
+        {"matrix", "matrix", fFalse, fTrue, 0},
+        {"none", "none", fFalse, fTrue, 0}};
+      int im;
+      for (im = 0; im < (int)(sizeof(rgmap) / sizeof(*rgmap)); im++) {
+        EphSelBorrow bChain(rgmap[im].szChain);
+        Check(FEqSz(us.szEphemSource, rgmap[im].szChain) &&
+          FSrcChainHead(rgmap[im].szHead),
+          "the chain \"%s\" reads back, head and all",
+          rgmap[im].szChain);
+        Check(FEphSpeeds() == rgmap[im].fSpeeds &&
+          FEphLegacyCast() == rgmap[im].fLegacy,
+          "and its predicates say rates %s, legacy cast %s",
+          rgmap[im].fSpeeds ? "yes" : "no", rgmap[im].fLegacy ? "yes" : "no");
+        Check(NSwissEphem() == rgmap[im].nSwiss,
+          "and its Swiss-family bit is %d", rgmap[im].nSwiss);
+      }
+      // The side calls walk the user's order, ending at the Swiss files
+      // when the chain names nothing that serves them.
+      {
+        EPHQUERY eq2;
+        EphSelBorrow bChain("matrix");
+        EphQueryInit(&eq2, jd);
+        FEphQueryAdd(&eq2, oMoo, 0, oEar, NULL);
+        Check(FEphSubmitSide(&eq2),
+          "a side call under a matrix selection is answered, by the Swiss "
+          "files it has always ended at");
+        Check(eq2.rgisrc[0] == IEphSrcFromKey("swiss"),
+          "with the Swiss files source's own provenance");
+      }
+    }
+
+    // The 4b command line, against the live selection: the legacy
+    // spellings toggle a parse-time shadow and re-derive the chain;
+    // consecutive spellings keep toggling each other's result.
+    {
+      struct { CONST char *szSw, *szChain; } const rglegacy[] = {
+        {"=b", "swiss"}, {"_b", "none"}, {"=bs", "moshier"},
+        {"=bj", "jpl"}, {"=bJ", "horizons,jpl"}, {"=bS", "server,swiss"},
+        {"=bm", "swiss"}};
+      int isw;
+      char *rgsz[5];
+      flag fOk;
+
+      for (isw = 0; isw < (int)(sizeof(rglegacy) / sizeof(*rglegacy));
+          isw++) {
+        EphSourceSet("swiss");
+        rgsz[0] = (char *)szAppNameCore;
+        rgsz[1] = (char *)rglegacy[isw].szSw;
+        rgsz[2] = NULL;
+        fOk = FProcessSwitches(2, rgsz, NULL);
+        Check(fOk, "\"%s\" parses", rglegacy[isw].szSw);
+        if (fOk)
+          Check(FEqSz(us.szEphemSource, rglegacy[isw].szChain),
+            "\"%s\" selects the chain that spelling always meant (%s)",
+            rglegacy[isw].szSw, us.szEphemSource);
+      }
+      // A SEQUENCE keeps the Matrix bit. The shadow is the authority
+      // across consecutive -b spellings, and it stopped being one:
+      // EphSourceSetShadow() bumps the selection's generation, the
+      // parser did not claim it, so the NEXT spelling rebuilt the
+      // shadow from the chain TEXT -- and that round trip cannot carry
+      // fMatrix, since every head the triple cannot name derives
+      // {files, 0, no-matrix}. "=bm _b" therefore became "none", and a
+      // chain of "none" computes nothing: a whole chart of 0Ari00'00"
+      // with no warning. That is the order the PRE-BRANCH writer
+      // emitted for a Matrix selection, so it is what an old settings
+      // file replays (phase 8 review, E1).
+      {
+        struct { CONST char *szSw1, *szSw2, *szSw3, *szSw4; } const
+          rgseq[] = {
+          {"=bm", "_b", NULL, NULL},
+          {"-bm", "-bU", "-b", NULL},
+          {"_bs", "=bm", "_bU", "_b"}};
+        // Its own array: the enclosing rgsz[] holds five, and the
+        // longest sequence here needs six -- argv[0], four switches and
+        // the NULL. Writing that NULL through rgsz[5] was a stack
+        // overflow, and only AddressSanitizer saw it; the suite passed.
+        char *rgszSeq[6];
+        int iseq, c;
+
+        for (iseq = 0; iseq < (int)(sizeof(rgseq)/sizeof(*rgseq)); iseq++) {
+          EphSourceSet("swiss");
+          rgszSeq[0] = (char *)szAppNameCore;
+          c = 1;
+          rgszSeq[c++] = (char *)rgseq[iseq].szSw1;
+          if (rgseq[iseq].szSw2 != NULL)
+            rgszSeq[c++] = (char *)rgseq[iseq].szSw2;
+          if (rgseq[iseq].szSw3 != NULL)
+            rgszSeq[c++] = (char *)rgseq[iseq].szSw3;
+          if (rgseq[iseq].szSw4 != NULL)
+            rgszSeq[c++] = (char *)rgseq[iseq].szSw4;
+          rgszSeq[c] = NULL;
+          Check(FProcessSwitches(c, rgszSeq, NULL), "\"%s ...\" parses",
+            rgseq[iseq].szSw1);
+          Check(FSrcChainHead("matrix"),
+            "\"%s ...\" keeps the Matrix selection rather than losing it "
+            "to \"none\" (%s)", rgseq[iseq].szSw1, SzSet(us.szEphemSource));
+        }
+      }
+
+      // And consecutive toggles compose, as the live fields used to:
+      // the shadow re-syncs from the chain the previous spelling wrote.
+      EphSourceSet("server,swiss");
+      rgsz[0] = (char *)szAppNameCore;
+      rgsz[1] = (char *)"-bS"; rgsz[2] = NULL;
+      Check(FProcessSwitches(2, rgsz, NULL), "-bS from the server");
+      Check(FEqSz(us.szEphemSource, "none"),
+        "a plain -bS toggle from the server turns it off, files with it");
+      rgsz[1] = (char *)"-bS";
+      Check(FProcessSwitches(2, rgsz, NULL), "and again selects it");
+      Check(FEqSz(us.szEphemSource, "server,swiss"),
+        "the second -bS is the server again");
+      EphSourceSet("swiss");
+    }
+
+    // -bE itself: the chain is set, not toggled, and the shadow follows
+    // the chain's head; "" restores the default; a chain may name
+    // sources this build does not compile, which the walk will skip,
+    // while a key no source defines is refused.
+    {
+      char *rgsz[5];
+      rgsz[0] = (char *)szAppNameCore;
+      rgsz[1] = (char *)"=bE"; rgsz[2] = (char *)"moshier"; rgsz[3] = NULL;
+      Check(FProcessSwitches(3, rgsz, NULL), "-bE moshier parses");
+      Check(FEqSz(us.szEphemSource, "moshier"),
+        "-bE moshier selects Moshier");
+      rgsz[2] = (char *)"server,swiss,moshier";
+      Check(FProcessSwitches(3, rgsz, NULL), "the plan's own chain parses");
+      Check(FEqSz(us.szEphemSource, "server,swiss,moshier"),
+        "the fallback order is carried whole");
+      rgsz[2] = (char *)"swiss";
+      Check(FProcessSwitches(3, rgsz, NULL), "-bE swiss parses");
+      Check(FEqSz(us.szEphemSource, SzEphSourceDefault()),
+        "-bE swiss is the default");
+      rgsz[2] = (char *)"";
+      Check(FProcessSwitches(3, rgsz, NULL), "-bE with an empty chain");
+      Check(FEqSz(us.szEphemSource, SzEphSourceDefault()),
+        "an empty -bE restores the default chain");
+
+      // A key no source defines is a typo, and refused: the chain's
+      // head would fall through to the Swiss files, so an accepted
+      // "mosheir" would cast from Swiss and be written back into the
+      // settings file. A key this build does not COMPILE is a different
+      // thing and loads, because the walk skips it. And the refusal is
+      // checked against the registry's own names plus the future keys,
+      // so the two lists cannot drift apart.
+      rgsz[2] = (char *)"mosheir";
+      Check(!FProcessSwitches(3, rgsz, NULL),
+        "a source key no source defines is refused");
+      Check(FEqSz(us.szEphemSource, SzEphSourceDefault()),
+        "and a refused chain leaves the selection alone");
+      rgsz[2] = (char *)"swiss,bogus,moshier";
+      Check(!FProcessSwitches(3, rgsz, NULL),
+        "a bad key anywhere in the chain is refused, not just its head");
+      Check(FEqSz(us.szEphemSource, SzEphSourceDefault()),
+        "and that refusal leaves the selection alone too");
+      rgsz[2] = (char *)"prometheia,swiss";
+      Check(FProcessSwitches(3, rgsz, NULL),
+        "a source this build does not compile still names a chain");
+      Check(FEqSz(us.szEphemSource, "prometheia,swiss"),
+        "and the walk, not the parser, is what skips it");
+      rgsz[2] = (char *)"swiss";
+      Check(FProcessSwitches(3, rgsz, NULL), "back to the default again");
+      {
+        static CONST char *rgszFuture[] = {
+          "horizons",
+#ifndef PROMETHEIA
+          "prometheia",
+#endif
+        };
+        int isrc, i;
+
+        for (isrc = 0; isrc < CEphSrc(); isrc++)
+          Check(FEphSrcKeyKnown(PephsrcGet(isrc)->szKey),
+            "every registry name is a key -bE accepts (%s)",
+            PephsrcGet(isrc)->szKey);
+
+        // And the converse, for the only keys the registry does not
+        // supply: the three of section 4.2 whose plugins are later
+        // phases'. A typo among those three would make a typo'd chain
+        // ACCEPTABLE, which is the hole the validation exists to close,
+        // and no registry name would contradict it. Spelt out here so
+        // that removing one when its plugin lands is forced rather than
+        // remembered -- the count is asserted, so a key that becomes a
+        // real source and is left in the future list fails this.
+        for (i = 0; i < (int)(sizeof(rgszFuture)/sizeof(*rgszFuture)); i++) {
+          Check(FEphSrcKeyKnown(rgszFuture[i]),
+            "-bE still accepts the not-yet-compiled source %s",
+            rgszFuture[i]);
+          Check(IEphSrcFromKey(rgszFuture[i]) < 0, "%s is not registered "
+            "yet -- when its plugin lands the registry supplies the key, "
+            "so drop it from rgszEphSrcFuture[]", rgszFuture[i]);
+        }
+      }
+
+      // -bP writes one parameter, and "" restores its default. A
+      // parameter line maps to its own field and nothing else; the
+      // -bW/-bT spellings write the same two parameters.
+      rgsz[0] = (char *)szAppNameCore;
+      rgsz[1] = (char *)"-bP";
+      rgsz[2] = (char *)"server.url";
+      rgsz[3] = (char *)"wss://probe.example:47190"; rgsz[4] = NULL;
+      Check(FProcessSwitches(4, rgsz, NULL), "-bP server.url parses");
+      Check(FEqSz(us.rgszEphParam[epServerUrl], "wss://probe.example:47190"),
+        "the parameter carries its value");
+      rgsz[3] = (char *)"";
+      Check(FProcessSwitches(4, rgsz, NULL), "-bP with an empty value");
+      Check(!FSzSet(us.rgszEphParam[epServerUrl]),
+        "and \"\" is the parameter's default");
+      rgsz[2] = (char *)"bogus.key"; rgsz[3] = (char *)"v";
+      Check(!FProcessSwitches(4, rgsz, NULL),
+        "an unknown source.param is refused, like an unknown switch");
+      rgsz[2] = (char *)"server.url";
+      rgsz[3] = (char *)"wss://probe2.example";
+      Check(FProcessSwitches(4, rgsz, NULL), "-bW's parameter form again");
+      Check(FEqSz(us.rgszEphParam[epServerUrl], "wss://probe2.example"),
+        "-bW writes the parameter");
+      FEphParamSet(epServerUrl, NULL);
+    }
+
+    // The settings round trip: the chain and the parameters survive a
+    // save, a poison back to the defaults, and a replay -- by the file,
+    // not by the switch calls above.
+    {
+      QByteArray baFileOutSav(SzSet(is.szFileOut));
+      flag fFileOutSav = is.szFileOut != NULL, fNoWriteSav = us.fNoWrite;
+      int nWriteFormatSav = us.nWriteFormat, i;
+      char szPath[cchSzMax];
+
+      SzScratchPathQt(S(szPath), "ephsrc", ".as");
+      us.fNoWrite = fFalse;
+      us.nWriteFormat = 'd';
+      FCloneSz(szPath, &is.szFileOut);
+      EphSourceSet("moshier,jpl");
+      FEphParamSet(epJplFile, "de431.eph");
+      {
+        Check(FOutputSettings(), "the settings writer wrote the selection");
+        EphSourceSet("swiss");
+        FEphParamSet(epJplFile, NULL);
+        i = CReplaySettingsQt(szPath, FWantEphSrcQt);
+        Check(i > 0, "the selection lines replay (%d)", i);
+        Check(FEqSz(us.szEphemSource, "moshier,jpl"),
+          "the chain replays");
+        Check(FEqSz(us.rgszEphParam[epJplFile], "de431.eph"),
+          "and the jpl file parameter replays with it");
+      }
+      FCloneSz(fFileOutSav ? baFileOutSav.constData() : NULL, &is.szFileOut);
+      us.nWriteFormat = nWriteFormatSav;
+      us.fNoWrite = fNoWriteSav;
+      remove(szPath);
+    }
+
+    // The fallback with the sources' own bits: with the ephemeris
+    // directories gone, the swiss source fails every object (its
+    // delegated call still asks the Swiss files) and the moshier source
+    // behind it answers from the analytic formulas, whose delegated
+    // call carries the Moshier bit. The notice says a fallback served;
+    // the answer is the bytes of a direct call under that same bit.
+    {
+      char *rgpszSav[10];
+      static char szNoEph[] = "/nvm/work/eph3-net/noeph";
+      EPHQUERY eq2;
+      flag fNoEphFileSav = is.fNoEphFile;
+      int iPath;
+      // An EXPLICIT directory with no ephemeris in it, not an empty
+      // list: SwissEnsurePath() falls back to exe-relative defaults
+      // when no -Yi names one, and those still find the bundled files.
+      // The suite's own ephemeris-path group makes the same demand.
+      rgpszSav[0] = us.rgszPath[0];
+      us.rgszPath[0] = szNoEph;
+      for (iPath = 1; iPath < 10; iPath++) {
+        rgpszSav[iPath] = us.rgszPath[iPath];
+        us.rgszPath[iPath] = NULL;
+      }
+      is.fSwissPathSet = fFalse;   // Force the emptied path on the library.
+      is.fNoEphFile = fTrue;       // The failed source's report is data,
+                                   // not a popup for this run to eat.
+      {
+        int rgisrc2[2];
+        rgisrc2[0] = IEphSrcFromKey("swiss");
+        rgisrc2[1] = IEphSrcFromKey("moshier");
+        // Chiron: nothing behind the Swiss files covers it -- the
+        // library's own silent Moshier fallback covers the planets, so
+        // a planet is the wrong object for this leg (measured: the Sun
+        // still answers with the files gone). With no files, the swiss
+        // source fails it and the moshier source behind it fails it
+        // too: the walk advances, and nothing answers.
+        EphQueryInit(&eq2, jd);
+        FEphQueryAdd(&eq2, oChi, 0, oEar, NULL);
+        Check(!FEphSubmitChain(&eq2, rgisrc2, 1), "the swiss source alone, "
+          "with no files behind it, answers nothing for Chiron");
+        EphQueryInit(&eq2, jd);
+        FEphQueryAdd(&eq2, oChi, 0, oEar, NULL);
+        Check(!FEphSubmitChain(&eq2, rgisrc2, 2), "with the files gone, "
+          "Chiron fails through the swiss source to the moshier source "
+          "and neither answers");
+        Check(!FEphFallbackNotice(), "nothing served, no notice");
+      }
+      for (iPath = 0; iPath < 10; iPath++)
+        us.rgszPath[iPath] = rgpszSav[iPath];
+      is.fSwissPathSet = fFalse;   // The next ensure re-derives the real
+                                   // path; the saved flag names the
+                                   // emptied one now.
+      is.fNoEphFile = fNoEphFileSav;
+
+      // Each source's bit is its own, not the setting's: the moshier
+      // source answering under a swiss selection carries the Moshier
+      // flag, so its bytes are the Moshier call's -- measurably NOT the
+      // swiss call's (the two engines disagree in the fourth decimal of
+      // an arcsecond, which is what makes the borrow load-bearing).
+      {
+        int rgisrc3[1];
+        rgisrc3[0] = IEphSrcFromKey("moshier");
+        EphQueryInit(&eq2, jd);
+        FEphQueryAdd(&eq2, oSun, 0, oEar, NULL);
+        Check(FEphSubmitChain(&eq2, rgisrc3, 1), "the moshier source "
+          "answers under a swiss selection");
+        Check(FEphRead(&eq2, oSun, &h1, &h2, &h3, &h4, &h5, &h6),
+          "the moshier source's row reads");
+        {
+          EphSelBorrow bChainMos("moshier");
+          FSwissPlanet(oSun, jd, oEar, &r1, &r2, &r3, &r4, &r5, &r6);
+          FSwissPlanet(oSun, jd, oEar, &r1, &r2, &r3, &r4, &r5, &r6);
+        }
+        Check(memcmp(&h1, &r1, sizeof(real)) == 0, "the moshier source's "
+          "answer is the Moshier call's, bytes again");
+        {
+          EphSelBorrow bChainSwi("swiss");
+          FSwissPlanet(oSun, jd, oEar, &r1, &r2, &r3, &r4, &r5, &r6);
+        }
+        Check(memcmp(&h1, &r1, sizeof(real)) != 0, "and it is measurably "
+          "not the swiss call's -- the bit is the source's own");
+      }
+    }
+  }
+
+  ciCore = ciCoreSav;
+  ciMain = ciMainSav;
+}
+
+// The Ephemeris Settings dialog's live wiring: what OK applies, what a
+// refused value leaves behind, what Connect can honestly say, and that
+// what OK applies survives the settings writer and a fresh read. Driven
+// from outside the dialog function through the object names the rc
+// builder gives every control, the same discipline the Generate
+// Animation and replace-file groups use, so the group asserts what a
+// user sees rather than the dialog's internals.
+static void TestEphemDialogQt()
+{
+  char szChainSav[cchSzMax], szFileSav[cchSzMax], szTokSav[cchSzMax];
+  char szHead[cchSzDef], szPath[cchSzMax];
+  int iep, iepFile = -1, iepTok = -1;
+
+  Group("Ephemeris settings dialog");
+
+  // A file parameter and a token one, found by asking their SOURCES
+  // rather than by scanning the table for a kind. The kind used to
+  // identify one row each, and stopped when the Prometheia parameters
+  // were corrected to the file kind they always were -- at which point
+  // "the last epkFile row" was a perturber kernel that no dialog showed.
+  for (iep = 0; iep < CEphParamOfSrc("jpl"); iep++)
+    if (rgephparam[IepOfSrc("jpl", iep)].ep.nKind == epkFile)
+      iepFile = IepOfSrc("jpl", iep);
+  for (iep = 0; iep < CEphParamOfSrc("server"); iep++)
+    if (rgephparam[IepOfSrc("server", iep)].ep.nKind == epkToken)
+      iepTok = IepOfSrc("server", iep);
+  Check(iepFile >= 0 && iepTok >= 0,
+    "the table carries a file parameter and a token one");
+  sprintf2(S(szChainSav), "%s", SzSet(us.szEphemSource));
+  sprintf2(S(szFileSav), "%s", SzSet(us.rgszEphParam[iepFile]));
+  sprintf2(S(szTokSav), "%s", SzSet(us.rgszEphParam[iepTok]));
+
+  // What the dialog builds: the registry itself as the list, the whole
+  // chain in the edit with its head's row selected, the state in the
+  // status line, and parameter rows labelled by the generated table.
+  {
+    char szWhy[cchSzDef];
+    SzEphChainHead(us.szEphemSource, S(szHead));
+    int isrcHead = IEphSrcFromKey(szHead);
+    QString strChain = QString::fromUtf8(SzSet(us.szEphemSource));
+
+    DriveModalQt(ShowEphemDialogQt, [&](QWidget *pw) {
+      QListWidget *plist = pw->findChild<QListWidget *>("dlEp_src");
+      QLineEdit *peChain = pw->findChild<QLineEdit *>("deEp_chain");
+      QLabel *plStatus = pw->findChild<QLabel *>("dsEp_st");
+      QList<QLabel *> rgpl = pw->findChildren<QLabel *>("dsEp_p");
+      QList<QLineEdit *> rgpe = pw->findChildren<QLineEdit *>("deEp_p");
+      QList<QPushButton *> rgppb = pw->findChildren<QPushButton *>("dbEp_b");
+      int i, j;
+
+      Check(plist != NULL && plist->count() == CEphSrc(),
+        "the source list is the registry itself (%d rows)",
+        plist == NULL ? 0 : plist->count());
+      for (i = 0; plist != NULL && i < plist->count() && i < CEphSrc();
+        i++) {
+        QString strRow = plist->item(i)->text();
+        Check(strRow.startsWith(QString::fromUtf8(PephsrcGet(i)->szName)),
+          "list row %d leads with the source's own name (\"%s\")", i,
+          strRow.toLocal8Bit().constData());
+        // An unavailable row carries the reason its own callback gives,
+        // so a user can see why it cannot serve before picking it.
+        if (!PephsrcGet(i)->FAvailable(S(szWhy)))
+          Check(strRow.contains(" - "),
+            "an unavailable row carries its reason (\"%s\")",
+            strRow.toLocal8Bit().constData());
+      }
+      Check(isrcHead < 0 || (plist != NULL && plist->currentItem() != NULL &&
+        plist->currentItem()->data(Qt::UserRole).toInt() == isrcHead),
+        "the chain's head has its row selected");
+      Check(peChain != NULL && peChain->text() == strChain,
+        "the chain edit is the whole chain as set (\"%s\")",
+        peChain == NULL ? "" : peChain->text().toLocal8Bit().constData());
+      Check(plStatus != NULL &&
+        plStatus->text().startsWith(QString("%1:").arg(szHead)),
+        "the status line names the head and its state (\"%s\")",
+        plStatus == NULL ? "" : plStatus->text().toLocal8Bit().constData());
+
+      Check(rgpl.size() == 4 && rgpe.size() == 4 && rgppb.size() == 4,
+        "four parameter rows are built (%d labels, %d edits, %d buttons)",
+        rgpl.size(), rgpe.size(), rgppb.size());
+      // The rows are the CHAIN HEAD'S OWN parameters, in the generated
+      // table's order, and a row past that source's count is hidden
+      // rather than showing another source's. Both builds used a
+      // hand-written list of four indexes across two sources until
+      // 2026-09-18, which is why a catalog and a perturber kernel had no
+      // way in from any dialog and a JPL file row sat beside a server
+      // token no selection could use together.
+      {
+        int rgiepExp[4], cExp = CEphParamRows(rgiepExp, 4);
+        Check(cExp == CEphParamOfSrc(szHead),
+          "the rows are exactly the head's parameters (%d of %d)", cExp,
+          CEphParamOfSrc(szHead));
+        for (i = cExp; i < rgpl.size() && i < rgpe.size(); i++)
+          Check(!rgpl[i]->isVisible() && !rgpe[i]->isVisible(),
+            "row %d is hidden: this source has no such parameter", i);
+      }
+      for (i = 0; i < rgpl.size() && i < rgpe.size() && i < rgppb.size();
+        i++) {
+        // Each live row is identified by its label, not its position, so
+        // which parameters the dialog shows stays the dialog's choice.
+        QString strLabel = rgpl[i]->text();
+        int iepRow = -1;
+        if (!rgpl[i]->isVisible())
+          continue;
+        Check(strLabel.endsWith(':'),
+          "row %d's label is a caption (\"%s\")", i,
+          strLabel.toLocal8Bit().constData());
+        for (j = 0; j < cEphParam; j++)
+          if (strLabel == QString("%1:").arg(rgephparam[j].ep.szLabel))
+            iepRow = j;
+        Check(iepRow >= 0, "row %d's label is the table's own (\"%s\")", i,
+          strLabel.toLocal8Bit().constData());
+        if (iepRow < 0)
+          continue;
+        Check(FEqSz(rgephparam[iepRow].szSrc, szHead),
+          "row %d's parameter belongs to the head source (%s, not %s)", i,
+          rgephparam[iepRow].szSrc, szHead);
+        Check(rgpe[i]->text() == QString::fromUtf8(
+          SzSet(us.rgszEphParam[iepRow])),
+          "row %d opens on its parameter's value", i);
+        Check(rgppb[i]->isVisible() ==
+          (rgephparam[iepRow].ep.nKind == epkPath ||
+          rgephparam[iepRow].ep.nKind == epkFile),
+          "row %d offers Browse only for a path (visible %d)", i,
+          rgppb[i]->isVisible());
+        if (rgephparam[iepRow].ep.nKind == epkToken)
+          Check(rgpe[i]->echoMode() == QLineEdit::PasswordEchoOnEdit,
+            "the token row is masked until it takes focus");
+      }
+      if (!FClickButtonQt(pw, "IDCANCEL"))
+        pw->close();
+    });
+  }
+
+  // A long chain is stored WHOLE, not truncated (phase 8 review, E4).
+  // The dialog validated the full text and then copied it through a
+  // 255-byte field, so a chain over 254 characters was accepted and a
+  // different, shorter one stored -- ending in a partial key. The
+  // settings file that came out refused to load ("Unknown ephemeris
+  // source 'swi'"), and a refused line ABORTS the load, so every setting
+  // after it was dropped and no chart was drawn.
+  {
+    QString strLong;
+    char szHeadLong[cchSzDef];
+    int iRep;
+
+    // Valid keys throughout, repeated well past the old ceiling.
+    strLong = "swiss";
+    for (iRep = 0; strLong.length() < 400; iRep++)
+      strLong += (iRep & 1) ? ",moshier" : ",matrix";
+    EphSourceSet("swiss");
+    DriveModalQt(ShowEphemDialogQt, [&](QWidget *pw) {
+      QLineEdit *peChain = pw->findChild<QLineEdit *>("deEp_chain");
+      if (peChain != NULL)
+        peChain->setText(strLong);
+      if (!FClickButtonQt(pw, "IDOK"))
+        pw->close();
+    });
+    Check(FEqSz(SzSet(us.szEphemSource),
+      strLong.toLocal8Bit().constData()),
+      "a %d-character chain is stored whole (%d stored)",
+      strLong.length(), (int)CchSz(SzSet(us.szEphemSource)));
+    // And it still ends in a whole key, which is what a truncation broke.
+    SzEphChainHead(us.szEphemSource, S(szHeadLong));
+    Check(FEphSrcKeyKnown(szHeadLong),
+      "and its head is still a key this build defines (%s)", szHeadLong);
+    EphSourceSet(szChainSav);
+  }
+
+  // Picking a source KEEPS THE FALLBACK TAIL (phase 8 review, E3). The
+  // composer stopped its tail pointer ON the comma, so the token scan
+  // that follows could not advance and broke before appending anything:
+  // a user with "server,swiss,moshier" who clicked another row to look
+  // at it and pressed OK was left with that source alone, its fallbacks
+  // silently gone. Asked through the dialog rather than the composer, so
+  // it covers what a user actually does.
+  {
+    EphSourceSet("server,swiss,moshier");
+    DriveModalQt(ShowEphemDialogQt, [&](QWidget *pw) {
+      QListWidget *plist = pw->findChild<QListWidget *>("dlEp_src");
+      QLineEdit *peChain = pw->findChild<QLineEdit *>("deEp_chain");
+      int iJpl = IEphSrcFromKey("jpl"), i, iRow = -1;
+
+      if (plist == NULL || peChain == NULL || iJpl < 0) { pw->close(); return; }
+      for (i = 0; i < plist->count(); i++)
+        if (plist->item(i)->data(Qt::UserRole).toInt() == iJpl)
+          iRow = i;
+      if (iRow >= 0)
+        plist->setCurrentRow(iRow);
+      // The picked key, then the old chain's TAIL -- the old head is
+      // replaced, not kept, which is this composer's stated contract.
+      // Before the fix the tail went too and this read just "jpl".
+      Check(peChain->text() == QString("jpl,swiss,moshier"),
+        "picking a source keeps the fallbacks behind it (\"%s\")",
+        peChain->text().toLocal8Bit().constData());
+      pw->close();
+    });
+    EphSourceSet(szChainSav);
+  }
+
+  // Picking a source in the list re-makes the parameter rows (phase 8
+  // review, D5). They were built once at open and never again, so with
+  // the shipped default -- "swiss", which declares NO parameters -- every
+  // row was hidden and picking the Ephemeris Server left no way to type
+  // an address in that visit. Worse in the other direction: opening on
+  // "jpl" left its "JPL file" row on screen after picking the server, so
+  // a URL typed there was written to epJplFile on OK.
+  {
+    EphSourceSet("jpl");
+    DriveModalQt(ShowEphemDialogQt, [&](QWidget *pw) {
+      QListWidget *plist = pw->findChild<QListWidget *>("dlEp_src");
+      QList<QLabel *> rgpl = pw->findChildren<QLabel *>("dsEp_p");
+      int iSrv = IEphSrcFromKey("server"), i, iRowSrv = -1;
+
+      if (plist == NULL || rgpl.isEmpty() || iSrv < 0) {
+        pw->close(); return;
+      }
+      // Opened on jpl: one row, and it is jpl's.
+      Check(rgpl[0]->isVisible() && rgpl[0]->text() ==
+        QString("%1:").arg(rgephparam[epJplFile].ep.szLabel),
+        "opened on jpl, row 1 is the JPL file (\"%s\")",
+        rgpl[0]->text().toLocal8Bit().constData());
+
+      for (i = 0; i < plist->count(); i++)
+        if (plist->item(i)->data(Qt::UserRole).toInt() == iSrv)
+          iRowSrv = i;
+      Check(iRowSrv >= 0, "the server has a row to pick");
+      if (iRowSrv >= 0)
+        plist->setCurrentRow(iRowSrv);
+
+      // Picked the server: the rows are ITS parameters now, not jpl's.
+      Check(rgpl[0]->isVisible() && rgpl[0]->text() ==
+        QString("%1:").arg(rgephparam[epServerUrl].ep.szLabel),
+        "after picking the server, row 1 is its address (\"%s\")",
+        rgpl[0]->text().toLocal8Bit().constData());
+      Check(rgpl.size() > 1 && rgpl[1]->isVisible() && rgpl[1]->text() ==
+        QString("%1:").arg(rgephparam[epServerToken].ep.szLabel),
+        "and row 2 is its token");
+      pw->close();
+    });
+    EphSourceSet(szChainSav);
+  }
+
+  // Picking a row and OK: the picked key becomes the chain's head with
+  // the old chain riding behind it, and the picked source is not also
+  // duplicated somewhere in that tail.
+  {
+    int isrcMosh = IEphSrcFromKey("moshier");
+    CONST char *pch;
+    Check(isrcMosh >= 0, "the registry carries moshier");
+    if (isrcMosh >= 0) {
+      DriveModalQt(ShowEphemDialogQt, [&](QWidget *pw) {
+        QListWidget *plist = pw->findChild<QListWidget *>("dlEp_src");
+        if (plist != NULL)
+          for (int j = 0; j < plist->count(); j++)
+            if (plist->item(j)->data(Qt::UserRole).toInt() == isrcMosh) {
+              plist->setCurrentRow(j);
+              break;
+            }
+        if (!FClickButtonQt(pw, "IDOK"))
+          pw->close();
+      });
+      SzEphChainHead(us.szEphemSource, S(szHead));
+      Check(FEqSz(szHead, "moshier"),
+        "a row picked and OKed becomes the chain's head (%s)", szHead);
+      pch = strstr(us.szEphemSource, "moshier");
+      Check(pch == us.szEphemSource && strstr(pch+1, "moshier") == NULL,
+        "and the chain behind it keeps its order without a duplicate "
+        "(\"%s\")", us.szEphemSource);
+    }
+  }
+
+  // OK on a chain naming a key no source defines: refused inline, the
+  // dialog left open with the text as typed, the selection untouched.
+  // The warning box the refusal raises is closed by a net of the
+  // visitor's own, started only once the dialog is in hand -- a net
+  // armed before the drive would race DriveModalQt's own poll and close
+  // the dialog itself -- and it closes message boxes only, so it can
+  // never take the dialog out from under the checks that follow.
+  {
+    char szBefore[cchSzMax];
+    QVector<QString> rgstrBox;
+    sprintf2(S(szBefore), "%s", us.szEphemSource);
+    DriveModalQt(ShowEphemDialogQt, [&](QWidget *pw) {
+      QLineEdit *peChain = pw->findChild<QLineEdit *>("deEp_chain");
+      QTimer tClose;
+      QObject::connect(&tClose, &QTimer::timeout, [&]() {
+        QMessageBox *pmb = qobject_cast<QMessageBox *>(
+          QApplication::activeModalWidget());
+        if (pmb == NULL)
+          return;
+        rgstrBox.append(pmb->text());
+        pmb->close();
+      });
+      if (peChain != NULL)
+        peChain->setText("swiss,bogus,moshier");
+      tClose.start(50 * nScaleTest);
+      FClickButtonQt(pw, "IDOK");
+      tClose.stop();
+      Check(pw->isVisible(), "a refused chain leaves the dialog open");
+      pw->close();
+    });
+    Check(FEqSz(us.szEphemSource, szBefore),
+      "and the selection is untouched (\"%s\")", us.szEphemSource);
+    Check(rgstrBox.size() == 1 && rgstrBox[0].contains("bogus"),
+      "one box names the offending token (%d: \"%s\")", rgstrBox.size(),
+      rgstrBox.isEmpty() ? "" : rgstrBox[0].toLocal8Bit().constData());
+  }
+
+  // Parameters typed into the dialog apply on OK, and what OK applies
+  // survives the writer and a fresh read: dialog terms, -bE and -bP
+  // emission, replay, same state.
+  {
+    QByteArray baFileOutSav(SzSet(is.szFileOut));
+    flag fFileOutSav = is.szFileOut != NULL;
+    int nWriteFormatSav = us.nWriteFormat, cLine;
+    flag fNoWriteSav = us.fNoWrite;
+
+    // One source at a time: the rows are the chain head's own, so a file
+    // parameter and a token one belonging to different sources are two
+    // visits rather than one. Each types into the row its own label
+    // names, so neither depends on row order.
+    {
+      struct { CONST char *szChain; int iep; CONST char *szVal; } rgvis[] = {
+        {"jpl", iepFile, "eph5-file-value"},
+        {"server", iepTok, "eph5-token-value"}
+      };
+      int iVis;
+
+      for (iVis = 0; iVis < 2; iVis++) {
+        int iepWant = rgvis[iVis].iep;
+        CONST char *szValWant = rgvis[iVis].szVal;
+        EphSourceSet(rgvis[iVis].szChain);
+        DriveModalQt(ShowEphemDialogQt, [&](QWidget *pw) {
+          QList<QLabel *> rgpl = pw->findChildren<QLabel *>("dsEp_p");
+          QList<QLineEdit *> rgpe = pw->findChildren<QLineEdit *>("deEp_p");
+          for (int i = 0; i < rgpl.size() && i < rgpe.size(); i++)
+            if (rgpl[i]->isVisible() && rgpl[i]->text() ==
+              QString("%1:").arg(rgephparam[iepWant].ep.szLabel))
+              rgpe[i]->setText(QString::fromUtf8(szValWant));
+          if (!FClickButtonQt(pw, "IDOK"))
+            pw->close();
+        });
+        Check(FEqSz(SzSet(us.rgszEphParam[iepWant]), szValWant),
+          "the %s parameter typed in the dialog applies on OK (\"%s\")",
+          rgephparam[iepWant].szSrc, SzSet(us.rgszEphParam[iepWant]));
+        // OK recasts, and a recast with the server selected starts the
+        // legacy Qt adapter -- ComputeEphem() still reaches it through
+        // its own branch rather than through the registry until phase
+        // 6's transport lands. Put it back after every visit, or the
+        // connection outlives this group and the next one's loopback
+        // reads this group's HELLO before its own REQUEST.
+        EphSrvFinalizeQt();
+      }
+    }
+
+    SzScratchPathQt(S(szPath), "eph5round", ".as");
+    us.fNoWrite = fFalse;
+    us.nWriteFormat = 'd';
+    FCloneSz(szPath, &is.szFileOut);
+    Check(FOutputSettings(), "FOutputSettings() wrote a settings file");
+
+    // Wipe in memory, so anything the file failed to carry stays wrong.
+    EphSourceSet("swiss");
+    FEphParamSet(iepFile, "");
+    FEphParamSet(iepTok, "");
+    SzEphChainHead(us.szEphemSource, S(szHead));
+    Check(FEqSz(szHead, "swiss") && !FSzSet(us.rgszEphParam[iepFile]) &&
+      !FSzSet(us.rgszEphParam[iepTok]), "the wipe took");
+
+    cLine = CReplaySettingsQt(szPath, FWantEphQt);
+    Check(cLine == 3, "the file carries one -bE and two -bP lines (%d)",
+      cLine);
+    SzEphChainHead(us.szEphemSource, S(szHead));
+    Check(FEqSz(szHead, "server"),
+      "the chain a dialog OK set survives save and load (%s)", szHead);
+    Check(FEqSz(SzSet(us.rgszEphParam[iepFile]), "eph5-file-value") &&
+      FEqSz(SzSet(us.rgszEphParam[iepTok]), "eph5-token-value"),
+      "and both parameters do");
+
+    remove(szPath);
+    FCloneSz(fFileOutSav ? baFileOutSav.constData() : NULL, &is.szFileOut);
+    us.nWriteFormat = nWriteFormatSav;
+    us.fNoWrite = fNoWriteSav;
+  }
+
+  // Connect's honest degradation, read inside the click before the
+  // refresh timer can take the line back: a key this build's registry
+  // does not resolve has no transport to try, and the line says so
+  // rather than pretending. The server source is REGISTERED now (phase
+  // 6) -- what it lacks in this build is a transport, which is a
+  // different sentence from "no such source" and has to read as one.
+  {
+    char szHeadBefore[cchSzDef];
+    SzEphChainHead(us.szEphemSource, S(szHeadBefore));
+    DriveModalQt(ShowEphemDialogQt, [&](QWidget *pw) {
+      QLineEdit *peChain = pw->findChild<QLineEdit *>("deEp_chain");
+      QLabel *plStatus = pw->findChild<QLabel *>("dsEp_st");
+      if (peChain != NULL && plStatus != NULL) {
+        peChain->setText("server");
+        FClickButtonQt(pw, "dbEp_ct");
+        // The Qt build BINDS a transport now (phase 6c), so the honest
+        // line is that the server is not reachable, not that this build
+        // cannot reach one. It must also not claim to be online, and it
+        // must name an address rather than printing a null for the user
+        // who never set one -- which it did until the default branch
+        // was reachable.
+        Check(plStatus->text().contains("Ephemeris Server") &&
+          !plStatus->text().contains("online") &&
+          !plStatus->text().contains("(null)"),
+          "a bound transport that cannot reach a server says so, with an "
+          "address (\"%s\")",
+          plStatus->text().toLocal8Bit().constData());
+        peChain->setText("nosuchsource");
+        FClickButtonQt(pw, "dbEp_ct");
+        Check(plStatus->text().contains("not a source this program defines"),
+          "an unknown key is refused (\"%s\")",
+          plStatus->text().toLocal8Bit().constData());
+      }
+      if (!FClickButtonQt(pw, "IDCANCEL"))
+        pw->close();
+    });
+    SzEphChainHead(us.szEphemSource, S(szHead));
+    Check(FEqSz(szHead, szHeadBefore),
+      "Connect never touched the chain (%s, was %s)", szHead, szHeadBefore);
+  }
+
+  // This group drove the dialog with the server selected, and OK casts --
+  // which starts the adapter. Put it back, or the next group inherits a
+  // connector it did not start and its own WELCOME limits are not the
+  // ones it set (measured: the request-bytes legs of the server group
+  // fail, and only when this group ran first).
+  EphSrvFinalizeQt();
+
+  // Back where the suite was, through the same accessors the dialog used.
+  EphSourceSet(szChainSav);
+  FEphParamSet(iepFile, szFileSav);
+  FEphParamSet(iepTok, szTokSav);
+  RecastAndRedrawQt();
+  printf("  what Ephemeris Settings applies is what it shows, a refusal\n"
+         "  leaves the dialog open, and what it sets survives the writer\n");
+}
+
 static CONST QTTESTENTRY rgqttestQt[] = {
   {"dialogs",              TestDialogsQt},
+  {"ephemeris-dialog",     TestEphemDialogQt},
   {"popup-net",            TestPopupNetQt},
   {"about-version",        TestAboutVersionQt},
   {"chart-header-qt",      TestChartHeaderQt},
@@ -19447,9 +22589,14 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"settings-strings",     TestSettingsStringsQt},
   {"registry",             TestRegistryQt},
   {"relationship",         TestRelationshipModeQt},
-  {"ephemeris-list",       TestEphemerisListQt},
+#ifdef JPLWEB
+  {"horizons",             TestHorizonsQt},
+#endif
   {"ephem-server",         TestEphSrvQt},
   {"ephem-server-live",    TestEphSrvLiveQt},
+  {"ephem-registry",       TestEphemRegistryQt},
+  {"ephem-no-source",      TestEphNoSourceQt},
+  {"prometheia",           TestPrometheiaQt},
   {"chart-list",           TestChartListFilterQt},
   {"info-time",            TestChartInfoTimeQt},
   {"info-coord",           TestChartInfoCoordQt},

@@ -467,11 +467,20 @@ void DisplaySwitches(void)
   PrintS(" _Aa <aspect> <angle>: Change the actual angle of an aspect.");
   PrintS("\nSwitches which affect how a chart is computed:");
 #ifdef EPHEM
-  PrintS(" _b: Use ephemeris files for more accurate location computations.");
+  PrintS(" _bE <src[,src..]>: Select ephemeris source(s) in fallback order,");
+  PrintS("  e.g. _bE swiss or _bE server,swiss,moshier; unavailable sources");
+  PrintS("  are skipped when a chart is cast, not when they are selected.");
+  PrintS(" _bP <source.param> <value>: Set one ephemeris source parameter,");
+  PrintS("  e.g. _bP server.url wss://host or _bP jpl.file de431.eph; \"\"");
+  PrintS("  restores the parameter's own default.");
 #endif
   PrintS(" _b0: Display locations and times to the nearest second.");
   PrintS(" _b1: Display locations/times to nearest millisecond instead.");
   PrintS(" _b2: Display ':00' part of time/location/zone only if non-zero.");
+  PrintS(
+    "  The older backend spellings still select too: _b, _bs, _bj, _bJ,");
+  PrintS("  _bS, _bm, _bW, and _bT (one line for all of them, for looking");
+  PrintS("  up a settings file that uses one; _bE is the one to type).");
 #ifdef SWISS
   PrintS(
     " _bj: Use more accurate JPL ephemeris file instead of Swiss Ephemeris.");
@@ -479,10 +488,8 @@ void DisplaySwitches(void)
     " _bs: Use less accurate Moshier formulas instead of Swiss Ephemeris.");
 #endif
 #ifdef MATRIX
-  if (!us.fNoOldCalc) {
-    PrintS(" _bm: Use inaccurate Matrix formulas when ephemeris unavailable.");
-    PrintS(" _bU: Use inaccurate Matrix formulas for fixed stars only.");
-  }
+  PrintS(" _bm: Use inaccurate Matrix formulas when ephemeris unavailable.");
+  PrintS(" _bU: Use inaccurate Matrix formulas for fixed stars only.");
 #endif
 #ifdef JPLWEB
   PrintS(" _bJ: Use most accurate JPL Web query instead of Swiss Ephemeris.");
@@ -664,12 +671,10 @@ void DisplaySwitchesRare(void)
     "  barycentric, true node, true position, or topocentric for object.");
 #endif
 #ifdef MATRIX
-  if (!us.fNoOldCalc) {
-    PrintS(
-      " _YE <obj> <semi-major axis> <eccentricity (3)> <inclination (3)>");
-    PrintS("  <perihelion (3)> <ascending node (3)> <time offset (3)>:");
-    PrintS("  Change orbit of object to be the given elements.");
-  }
+  PrintS(
+    " _YE <obj> <semi-major axis> <eccentricity (3)> <inclination (3)>");
+  PrintS("  <perihelion (3)> <ascending node (3)> <time offset (3)>:");
+  PrintS("  Change orbit of object to be the given elements.");
 #endif
 #ifdef SWISS
   PrintS(" _YU <obj> <name>: Change position of star to sefstars.txt entry.");
@@ -1486,7 +1491,7 @@ flag ComputeArabic(int ind, real *obj, real *objalt, real *dir, real *dist,
     }
     rLat = rDist = rDir = rDirAlt = rDirDist = 0.0;
     if (i >= 0) {
-      rDir = FCmSwissAny() ? ret[i] : (rDegMax + 1.0);
+      rDir = FEphSpeeds() ? ret[i] : (rDegMax + 1.0);
       if (us.fVelocity)
         rDir /= (rDegMax + 1.0);
       if (us.fHouse3D) {

@@ -75,6 +75,7 @@
 #define dlgGraphics                     223
 #define dlgAbout                        224
 #define dlgObjectSel                    225
+#define dlgEphem                        226
 #define dbAs_RA                         1001
 #define dbAs_RA0                        1002
 #define dbAs_RA1                        1003
@@ -229,7 +230,6 @@
 #define dcr5                            1151
 #define dcr6                            1152
 #define dcr7                            1153
-#define dcSe_b                          1154
 #define dcSe_c                          1155
 #define dcSe_s                          1156
 #define dcTrDay                         1157
@@ -693,6 +693,23 @@
 #define dxPr_p                          1583
 #define dxPr_pc                         1584
 #define dxPr_pv                         1734
+#define dlEp_src                        1735
+#define deEp_chain                      1736
+#define dsEp_st                         1737
+#define dbEp_ct                         1738
+#define dsEp_p1                         1739
+#define dsEp_p2                         1740
+#define dsEp_p3                         1741
+#define dsEp_p4                         1742
+#define deEp_p1                         1743
+#define deEp_p2                         1744
+#define deEp_p3                         1745
+#define deEp_p4                         1746
+#define dbEp_b1                         1747
+#define dbEp_b2                         1748
+#define dbEp_b3                         1749
+#define dbEp_b4                         1750
+#define dsEp_ds                         1751
 #define dxSe_10                         1585
 #define dxSe_A3                         1586
 #define dxSe_Ap                         1587
@@ -1174,14 +1191,15 @@
 #define cmdZoomIn                       40363
 #define cmdZoomOut                      40364
 #define cmdObjectSel                    40365
+#define cmdEphem                        40366
 
 // Next default values for new objects
 // 
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
-#define _APS_NEXT_RESOURCE_VALUE        226
-#define _APS_NEXT_COMMAND_VALUE         40366
-#define _APS_NEXT_CONTROL_VALUE         1735
+#define _APS_NEXT_RESOURCE_VALUE        227
+#define _APS_NEXT_COMMAND_VALUE         40367
+#define _APS_NEXT_CONTROL_VALUE         1752
 #define _APS_NEXT_SYMED_VALUE           102
 #endif
 #endif

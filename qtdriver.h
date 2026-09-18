@@ -181,6 +181,7 @@ void ShowStarRestrictDialogQt();
 void ShowTransitRestrictDialogQt();
 void ShowObject2DialogQt();
 void ShowCalcDialogQt();
+void ShowEphemDialogQt();
 void ShowDisplayDialogQt();
 void ShowMoonRestrictDialogQt();
 void ShowMoonObjectDialogQt();

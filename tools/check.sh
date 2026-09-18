@@ -73,12 +73,25 @@ gen  "dialogs from astrolog.rc"  qtrcdlg.h   python3 tools/rc2qt.py astrolog.rc
 gen  "accelerators"              qtrcaccel.h python3 tools/rc_accel.py astrolog.rc
 gen  "command ids"               qtrccmd.h   python3 tools/rc_cmd.py astrolog.rc resource.h
 gen  "settings fields"           settingsfields.h python3 tools/gen_settings_fields.py astrolog.h
+gen  "ephemeris parameters"      ephparam.h python3 tools/gen-eph-params.py --stdout
+# Appendix A's registries as JSON, for a second implementation to vendor:
+# generated from the prose, and the codec test below requires ephproto.h's own
+# constants to agree with the file, so prose, file and code cannot drift.
+gen  "protocol v4 registries"    ephsrv/registries.json python3 tools/gen-registries.py --stdout
+# The protocol v4 conformance fixtures (EPHEMERIS_PLUGINS_PLAN.md 3.10) are a
+# directory, not one file, so the generator checks itself -- contents and the
+# set's own checksum.
+step "protocol v4 fixtures"      python3 tools/ephproto4-fixtures.py --check
+step "protocol v4 codec"         sh -c 'make -s ephproto_test && ASAN_OPTIONS=detect_leaks=0 ./ephproto_test ephsrv/conformance'
+# The protocol header is vendored and compiled by the other implementation,
+# so it has to stand on its own: no Astrolog header, C++20, -Werror.
+step "protocol header vendorable" tools/ci-assert-vendorable.sh
 for a in rc_audit rc_mnemonic_audit rc_field_audit rc_lookup_audit \
          rc_flagtype_audit rc_casttype_audit rc_context_audit \
          backend_parity_audit \
          defaults_audit registry_audit settings_coverage_audit \
          line_endings_audit fixture_coverage_audit qt_srcs_audit \
-         vcxproj_audit; do
+         horizons_audit star_identity_audit vcxproj_audit; do
   step "$a" python3 "tools/$a.py"
 done
 step "build: console and Qt"     make -j4

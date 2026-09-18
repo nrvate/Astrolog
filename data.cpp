@@ -72,29 +72,18 @@ US us = {
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 
   // Main flags
-  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-#ifdef EPHEM
-  1,
-#else
-  0,
-#endif
-  0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 
-  // Main subflags: fLoopInit, fSabian, fSeconds, fSecond1K, fSecondHide,
-  // then fMatrixPla (on only when no ephemeris is compiled in), then
-  // fMatrixStar through fListAuto, fProgConverse among them. Two entries fewer than before
-  // when fPlacalcAst and fPlacalcPla sat between them.
-  0, 0, 0, 0, 0,
-#ifdef EPHEM
-  0,
-#else
-  1,
-#endif
-  0, 0, 0, 0, 0, 0, 0, 0, 0,
+  // Main subflags: fLoopInit through fSecondHide, then fMatrixStar
+  // through fListAuto, fProgConverse among them. fMatrixPla sat here
+  // (on only when no ephemeris was compiled in) until the selection
+  // re-plumbed; three entries fewer than before fPlacalcAst and
+  // fPlacalcPla, and four fewer than upstream.
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 
   // Obscure flags
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0,
-  1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 
   // Value settings
   ddDecanR,
@@ -104,7 +93,6 @@ US us = {
   1,
   0,
   rcNone,
-  0,
   DEFAULT_SYSTEM,
   hmPrime,
   DEFAULT_ASPECTS,
@@ -130,19 +118,33 @@ US us = {
   NULL,
   NULL,
   NULL,
-  NULL,
-  NULL,   // szEphSrvToken
 
   // Value subsettings
   0, 5, 200, cPart, 22, 0.0, 0.0, rDayInYear, 1.0, 0.5, ccNone, ccNone,
   24, 0, 0, rInvalid, 0.0, 0.0, 0.0, oEar, oEar, 0, 0, BIODAYS, 0, 0, 0,
 
-  // AstroExpressions
+  // AstroExpressions. The original initializer sat two entries short of
+  // the struct's 54 expression hooks -- szExpListY and szExpADB silently
+  // zero-initialized, which is what they were anyway -- and is exact now,
+  // because a positional list that is not exact cannot take two more
+  // members below it without eating them.
   NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
   NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
   NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
   NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
-  NULL, NULL, NULL, NULL};
+  NULL, NULL, NULL, NULL, NULL, NULL,
+
+  // The ephemeris selection (EPHEMERIS_PLUGINS_PLAN.md 5.1), appended
+  // after every positional slot above so none of them can shift. The
+  // chain is NULL here -- a string constant cannot initialize a char*
+  // without a -Wwrite-strings warning the warning audit owns -- and
+  // InitProgram() applies the default (SzEphSourceDefault(): "swiss"
+  // under EPHEM, "matrix" without it) before any file or switch loads.
+  // Every parameter starts at its source's own default (NULL, which is
+  // ephparam.h's "" for each row); the NULL list is one per generated
+  // parameter, so it grows when ephparam.h does.
+  NULL,
+  {NULL, NULL, NULL, NULL, NULL, NULL}};
 
 IS is = {
 #ifdef SWITCHES

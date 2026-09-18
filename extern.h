@@ -143,14 +143,14 @@ extern void FinalizeProgram P((flag));
 #define FProperEphem2(o) (!(us.nRel <= rcTransit ? ignore2[o] : ignore[o]) && \
   !(gs.fAlt && ((o) == oMoo || (o) == oFor)))
 
-#define FCmSwissAny() (us.fEphemFiles)
-#define FCmSwissEph() (us.fEphemFiles && us.nSwissEph <= 0)
-#define FCmSwissMosh() (us.fEphemFiles && us.nSwissEph == 1)
-#define FCmSwissJPL() (us.fEphemFiles && us.nSwissEph == 2)
-#define FCmSwissStar() (us.fEphemFiles && !us.fMatrixStar)
-#define FCmMatrix() (!us.fEphemFiles && us.fMatrixPla)
-#define FCmJPLWeb() (us.fEphemFiles && us.nSwissEph >= 3)
-#define FCmSrv() (us.fEphemFiles && us.nSwissEph == 5)
+// The FCm* family is gone (EPHEMERIS_PLUGINS_PLAN.md 4.1): the
+// selection is the chain, and its two questions are functions now --
+// FEphSpeeds() for "the rates columns are real rates" and
+// FEphLegacyCast() for "the Matrix-or-None legacy cast answers" -- both
+// in ephem.cpp. What the old FCmSwissStar() asked ("stars through the
+// Swiss path, unless -bU") is FEphSpeeds() && !us.fMatrixStar at its
+// three sites, and what FCmSrv() and FCmJPLWeb() asked about the cast's
+// backend is FSrcChainHead("server") / FSrcChainHead("horizons").
 
 extern US us;
 extern IS is;
@@ -467,6 +467,13 @@ extern int NInputRange P((CONST char *, int, int, int));
 extern real RInputRange P((CONST char *, real, real, int));
 extern flag FInputData P((CONST char *));
 #ifdef JPLWEB
+// The Horizons query and its reply, split apart so each can be exercised
+// without a network: the builder takes its instant and site as arguments
+// rather than reading ciCore, and the parser takes an open stream, so a
+// RECORDED reply drives the very same parser the client uses.
+extern void SzUrlJPLHorizons P((int, CONST CI *, flag, real, real, real,
+  char *, int));
+extern flag FParseJPLHorizons P((FILE *, PT3R *, char *, int));
 extern flag GetJPLHorizons P((int,
   real *, real *, real *, real *, real *, real *, char *));
 #endif
@@ -559,9 +566,64 @@ extern flag FSkipEphem P((int, int, flag));
 extern flag FSwissPlanetSpec P((int, int, SWISSSPEC *));
 extern flag FSwissPlanet
   P((int, real, int, real *, real *, real *, real *, real *, real *));
+
+// The ephemeris source registry (ephem.h, ephem.cpp, ephswiss.cpp):
+// EPHEMERIS_PLUGINS_PLAN.md section 4.
+extern int CEphParamOfSrc P((CONST char *));
+extern int IepOfSrc P((CONST char *, int));
+extern int CEphParamRows P((int *, int));
+extern int CEphParamRowsOf P((CONST char *, int *, int));
+extern void EphSrvTransportSet P((CONST EPHTRANS *));
+extern CONST EPHTRANS *PephtransGet P((void));
+extern int CEphSrc P((void));
+extern EPHSRCDEF *PephsrcGet P((int));
+extern int IEphSrcFromKey P((CONST char *));
+extern flag FEphSrcKeyKnown P((CONST char *));
+extern flag FEphSrcKeyKnownN P((CONST char *, int));
+extern flag FSrcChainHead P((CONST char *));
+extern flag FEphSpeeds P((void));
+extern flag FEphLegacyCast P((void));
+extern int CEphChainSrc P((CONST char *, int *, int));
+extern int NEphSourceGen P((void));
+extern void EphQueryInit P((EPHQUERY *, real));
+extern flag FEphQueryAdd P((EPHQUERY *, int, int, int, char *));
+extern flag FEphFallbackNotice P((void));
+extern CONST char *SzEphNoSourceWhy P((void));
+extern flag FEphChainConnecting P((void));
+extern int NSwissEphem P((void));
+extern int SwissSetEphemCast P((int));
+extern void SwissRestoreEphemCast P((int));
+extern flag FEphSubmitChain P((EPHQUERY *, CONST int *, int));
+extern flag FEphSubmit P((EPHQUERY *));
+extern flag FEphSubmitSide P((EPHQUERY *));
+extern flag FEphRead
+  P((CONST EPHQUERY *, int, real *, real *, real *, real *, real *, real *));
+extern flag FEphReadRaw P((CONST EPHQUERY *, int, real *));
+
+// The selection state (EPHEMERIS_PLUGINS_PLAN.md 5.1): the chain
+// us.szEphemSource holds, the parameter values us.rgszEphParam[]
+// carries, the default, and the shadow of the three old fields the
+// legacy spellings toggle, which re-derives the chain after each one.
+extern CONST char *SzEphSourceDefault P((void));
+extern void SzEphChainHead P((CONST char *, char *, int));
+extern void EphSourceChanged P((void));
+extern int IEphParamFromKey P((CONST char *));
+extern flag FEphParamSet P((int, CONST char *));
+extern flag FEphParamDefaulted P((int));
+extern void EphShadowFromChain P((flag *, int *, flag *));
+extern void EphSourceSet P((CONST char *));
+extern void EphSourceSetShadow P((flag, int, flag));
+
+// The fixed stars' decision-and-execution pair, the FSwissPlanet()
+// analogue for one star: resolve nothing here -- the caller hands the
+// resolved Swiss Ephemeris name -- and return the entry point's own six
+// in rg[6], unwritten when the star failed.
+extern void SwissStarSpec P((SWISSSPEC *));
+extern flag FSwissStar P((char *, real, real *));
 extern void SwissHouse P((real, real, real, int,
   real *, real *, real *, real *, real *, real *, real *, real *));
 extern real RObliquityTrue P((real));
+extern void SwissEnsurePath P((void));
 extern void SwissComputeStars P((real, flag));
 extern flag SwissComputeStar P((real, ES *));
 extern flag SwissComputeStarSort P((real, ES *));
@@ -1156,7 +1218,8 @@ extern void MousePosQt P((int *, int *));
 // ComputeEphem()'s loop asks the server for the whole cast; the per-object
 // read inside it, the server analogue of the GetJPLHorizons() call site,
 // answers six reals, the same ones FSwissPlanet() and GetJPLHorizons() fill.
-extern void SrvPrefetchQt P((real, int, int));
+extern void SrvPrefetchQt P((real, int, int, CONST EPHQUERY *));
+extern void EphSrvTransportBindQt P((void));
 extern flag FSrvPlanetQt P((int, real,
   real *, real *, real *, real *, real *, real *));
 extern void EphSrvStartupQt P((void));
@@ -1261,6 +1324,7 @@ extern flag API DlgRestrict P((HWND, uint, WORD, LONG));
 extern flag API DlgStar     P((HWND, uint, WORD, LONG));
 extern flag API DlgMoons    P((HWND, uint, WORD, LONG));
 extern flag API DlgCalc     P((HWND, uint, WORD, LONG));
+extern flag API DlgEphem    P((HWND, uint, WORD, LONG));
 extern flag API DlgDisplay  P((HWND, uint, WORD, LONG));
 extern flag API DlgTransit  P((HWND, uint, WORD, LONG));
 extern flag API DlgProgress P((HWND, uint, WORD, LONG));

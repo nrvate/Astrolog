@@ -2261,6 +2261,78 @@ static int NSwA(CONST char *szSwitch, PARSEIN *pin)
   return 2;
 }
 
+// -bE: the selection's own spelling (EPHEMERIS_PLUGINS_PLAN.md 5.2): the
+// fallback chain as a comma list of source keys, primary first. Setting
+// it is idempotent -- the chain is set, not toggled -- and every legacy
+// spelling beside it re-derives the chain from its own shadow (NSwb). ""
+// restores the default chain. A key this build does not compile is not
+// an error -- the walk skips it, the same rule an unavailable source
+// follows -- but a key no source defines is refused, because the chain's
+// head falls through to the Swiss files and a silent typo would both
+// cast from the wrong source and be written back into the settings.
+
+static int NSwbE(CONST char *szSwitch, PARSEIN *pin)
+{
+  char szErr[cchSzMax];
+  CONST char *pch, *pchTok;
+
+  if (FErrorArgc("bE", pin->argc, 1))
+    return tcError;
+  if (FSzSet(pin->argv[1]))
+    for (pchTok = pin->argv[1];; pchTok = pch + 1) {
+      for (pch = pchTok; *pch && *pch != ','; pch++)
+        ;
+      if (pch == pchTok) {
+        PrintError("The -bE chain needs a source key between its commas, "
+          "like \"-bE swiss\" or \"-bE server,swiss,moshier\".");
+        return tcError;
+      }
+      if (!FEphSrcKeyKnownN(pchTok, (int)(pch - pchTok))) {
+        // The key is quoted in the message through its range, never
+        // copied: a token can be any length, and a truncated copy could
+        // name a different key than the one the user typed.
+        sprintf2(S(szErr), "Unknown ephemeris source '%.*s'",
+          (int)(pch - pchTok), pchTok);
+        PrintError(szErr);
+        return tcError;
+      }
+      if (*pch != ',')
+        break;
+    }
+  EphSourceSet(pin->argv[1]);
+  return 1;
+}
+
+
+// -bP: one parameter of one source, "source.param", and its value. ""
+// restores the parameter's declared default (ephparam.h). An unknown key
+// is refused the way an unknown switch is: a settings file this build
+// cannot name is better refused than silently dropped.
+
+static int NSwbP(CONST char *szSwitch, PARSEIN *pin)
+{
+  char szErr[cchSzDef];
+  int iep;
+
+  if (FErrorArgc("bP", pin->argc, 2))
+    return tcError;
+  iep = IEphParamFromKey(pin->argv[1]);
+  if (iep < 0) {
+    sprintf2(S(szErr), "Unknown ephemeris parameter '%s'", pin->argv[1]);
+    PrintError(szErr);
+    return tcError;
+  }
+  FEphParamSet(iep, pin->argv[2]);
+  // No mirror back into us.szEphSrv/us.szEphSrvToken here, on purpose:
+  // the legacy spellings mirror INTO the parameters when they are
+  // written, and these lines must map to their own fields and nothing
+  // else. The settings sweep is the proof: it sets both representations
+  // of the server address to different markers, saves, and requires
+  // both back, which a reader that let -bP clobber -bW would fail.
+  return 2;
+}
+
+
 // The -b ephemeris-selection family: the digit suffixes, -bW and -bT (the
 // server's address and token, not backend choices) stand alone; every other spelling
 // also turns ephemeris files on, exactly as the retired case fell
@@ -2268,7 +2340,23 @@ static int NSwA(CONST char *szSwitch, PARSEIN *pin)
 
 static int NSwb(CONST char *szSwitch, PARSEIN *pin)
 {
+  // The legacy spellings toggle a parse-time shadow of the three fields
+  // they always toggled -- {files, n, matrix} -- and re-derive the chain
+  // from it after each one (EphSourceSetShadow). The shadow re-syncs
+  // from the chain whenever the chain was set by any other way in
+  // between -- -bE, a dialog, another file -- which the generation
+  // counter (NEphSourceGen) sees, so a toggle always starts from what
+  // is actually selected while consecutive spellings in one line keep
+  // toggling each other's result, exactly as the live fields used to.
+  static flag fFiles, fMatrix;
+  static int nSwiss;
+  static int nGen = -1;
   char ch1 = szSwitch[1];
+
+  if (nGen != NEphSourceGen()) {
+    EphShadowFromChain(&fFiles, &nSwiss, &fMatrix);
+    nGen = NEphSourceGen();
+  }
 
   if (ch1 == '0') {
     SwitchF(us.fSeconds);
@@ -2280,44 +2368,28 @@ static int NSwb(CONST char *szSwitch, PARSEIN *pin)
     SwitchF(us.fSecondHide);
     return 0;
   } else if (ch1 == 'j')
-    us.nSwissEph = FSwitchF(us.nSwissEph == 2) * 2;
+    nSwiss = FSwitchF(nSwiss == 2) * 2;
   else if (ch1 == 's')
-    us.nSwissEph = FSwitchF(us.nSwissEph == 1);
+    nSwiss = FSwitchF(nSwiss == 1);
   else if (ch1 == 'p' || ch1 == 'a') {
     // The Placalc backend is gone, but its two spellings stay ACCEPTED:
     // the settings writer emitted "_bp" and "_ba" into every file saved
     // before it went, and a saved file must keep loading. The off forms
-    // are silent. A request to turn
-    // it on -- "=bp", or a bare "-bp" toggle -- is answered with what
-    // actually happens, once, rather than refused: refusing would abort
-    // loading a settings file over an engine that no longer exists.
-    // Neither form reaches the fEphemFiles toggle below.
+    // are silent. A request to turn it on -- "=bp", or a bare "-bp"
+    // toggle -- is answered with what actually happens, once, rather
+    // than refused: refusing would abort loading a settings file over
+    // an engine that no longer exists. Neither form reaches the files
+    // toggle at the bottom.
     if (FSwitchF(fFalse))
       PrintWarning("The Placalc ephemeris has been removed; "
         "the Swiss Ephemeris is used instead.");
     return 0;
   } else if (ch1 == 'm') {
-    // A subswitch refused by its -0 guard must not fall out of the chain
-    // and reach the fEphemFiles toggle below, which would turn the
-    // working backend off with nothing in its place -- under the shipped
-    // "=0b", a plain "-bm" then casts every body at 0Ari00'00" silently.
-    // Refuse the whole switch, as fNoGraphics and fNoRead do. Only a
-    // request to turn the
-    // backend ON is refused: the settings writer emits "_bm" into every
-    // saved file, and that must stay loadable under "=0b".
-    if (us.fNoOldCalc && FSwitchF(us.fMatrixPla)) {
-      ErrorArgv("bm");
-      return tcError;
-    }
-    SwitchF(us.fMatrixPla);
+    SwitchF(fMatrix);
   } else if (ch1 == 'U')
     SwitchF(us.fMatrixStar);
   else if (ch1 == 'J') {
-    if (us.fNoNetwork && FSwitchF(us.nSwissEph == 3)) {
-      ErrorArgv("bJ");
-      return tcError;
-    }
-    us.nSwissEph = FSwitchF(us.nSwissEph == 3) * 3;
+    nSwiss = FSwitchF(nSwiss == 3) * 3;
   }
   else if (ch1 == 'S') {
     // The Ephemeris Server backend, selected like the other -b backends.
@@ -2331,42 +2403,34 @@ static int NSwb(CONST char *szSwitch, PARSEIN *pin)
         "the Swiss Ephemeris is used instead.");
     return 0;
 #endif
-    if (us.fNoNetwork && FSwitchF(us.nSwissEph == 5)) {
-      // Not ErrorArgv()'s "not allowed now", which left a user nowhere:
-      // -0n is a one-way lock -- NSwZero() ignores "_0n" -- and the shipped
-      // astrolog.as sets it and is read before any -i file or the command
-      // line, so no switch can lift it. Name the setting and the one
-      // remedy there is.
-      PrintError("The Ephemeris Server needs network access, which \"=0n\" "
-        "turns off, and -0n cannot be undone once it is set. Change \"=0n\" "
-        "to \"_0n\" in the settings file that sets it -- the astrolog.as "
-        "beside the program is read first.");
-      return tcError;
-    }
-    us.nSwissEph = FSwitchF(us.nSwissEph == 5) * 5;
-    // Selecting the server turns ephemeris files ON; it does not toggle
-    // them. Every -b suffix falls through to the fEphemFiles toggle below,
-    // and FCmSrv() needs both, so under a settings file that already had
-    // files on -- nrvate.as, and most saved files -- "-bS" selected the
-    // server and switched files off in the same stroke: the backend sat
-    // selected, never connected, and said nothing. -bS is this fork's
-    // spelling, so this is ours to fix; upstream's -bj and -bJ keep the
-    // toggle. Turning the server off still falls through, as those do.
-    if (us.nSwissEph == 5) {
-      us.fEphemFiles = fTrue;
+    nSwiss = FSwitchF(nSwiss == 5) * 5;
+    // Selecting the server turns the files shadow ON; it does not
+    // toggle it. Every -b suffix falls through to the files toggle
+    // below, and the old FCmSrv() needed both, so under a settings file
+    // that already had files on -- nrvate.as, and most saved files --
+    // "-bS" selected the server and switched files off in the same
+    // stroke: the backend sat selected, never connected, and said
+    // nothing. -bS is this fork's spelling, so this is ours to fix;
+    // upstream's -bj and -bJ keep the toggle. Turning the server off
+    // still falls through, as those do.
+    if (nSwiss == 5) {
+      fFiles = fTrue;
+      EphSourceSetShadow(fFiles, nSwiss, fMatrix);
+      nGen = NEphSourceGen();   // ours; see below
       return 0;
     }
   }
   else if (ch1 == 'W') {
     // The server address, a ws:// URL or host:port. This sets where the
     // backend connects, not which backend runs, so it is the one -b
-    // suffix that does NOT fall through to the fEphemFiles toggle below.
+    // suffix that does NOT fall through to the files toggle below.
     if (FErrorArgc("bW", pin->argc, 1))
       return tcError;
-    // An empty address is the default (localhost on the protocol's port),
-    // not garbage: the settings writer emits -bW "" for it, and a file
-    // that failed to load its own output would be no format at all.
-    FCloneSz(*SzSet(pin->argv[1]) ? pin->argv[1] : NULL, &us.szEphSrv);
+    // An empty address is the default (localhost on the protocol's
+    // port), not garbage: the settings writer emitted -bW "" for it,
+    // and a file that failed to load its own output would be no format
+    // at all. The legacy field is gone; the parameter is the setting.
+    FEphParamSet(epServerUrl, pin->argv[1]);
     return 1;
   }
   else if (ch1 == 'T') {
@@ -2375,10 +2439,20 @@ static int NSwb(CONST char *szSwitch, PARSEIN *pin)
     // choice, and "" is none.
     if (FErrorArgc("bT", pin->argc, 1))
       return tcError;
-    FCloneSz(*SzSet(pin->argv[1]) ? pin->argv[1] : NULL, &us.szEphSrvToken);
+    FEphParamSet(epServerToken, pin->argv[1]);
     return 1;
   }
-  SwitchF(us.fEphemFiles);
+  SwitchF(fFiles);
+  EphSourceSetShadow(fFiles, nSwiss, fMatrix);
+  // Claim the generation this call just made. Without it the NEXT -b
+  // spelling sees a generation it does not recognise and rebuilds the
+  // shadow from the chain TEXT -- and that round trip cannot carry
+  // fMatrix, because every head the triple cannot name derives
+  // {files, 0, no-matrix}. So "=bm _b" turned a Matrix selection into
+  // "none" and drew a chart of 0Ari00'00" with no warning at all, and
+  // that is exactly the order the pre-branch writer emitted for a
+  // Matrix selection.
+  nGen = NEphSourceGen();
   return 0;
 }
 
@@ -3855,8 +3929,14 @@ static int NSwZero(CONST char *szSwitch, PARSEIN *pin)
     case 'i': us.fNoRead     = fTrue; break;
     case 'q': us.fNoQuit     = fTrue; break;
     case 'X': us.fNoGraphics = fTrue; break;
-    case 'b': us.fNoOldCalc  = fTrue; break;
-    case 'n': us.fNoNetwork  = fTrue; break;
+    // 'b' and 'n' locked the old engines out -- Matrix formulas and the
+    // network backends, which the dialogs omitted. Both engines are
+    // retired spellings of the chain now (the -bE selection and the
+    // matrix/none sources), so there is nothing left to lock, and the
+    // spellings are inert: accepted so saved files load, doing nothing,
+    // registered in tools/inert_option_audit.py.
+    case 'b': break;
+    case 'n': break;
     case '~': us.fNoExp      = fTrue; break;
     default: FErrorSubswitch("0", ch1, fTrue); return tcError;
     }
@@ -4131,6 +4211,10 @@ static CONST SWITCHDEF rgswitchdef[] = {
   {"1",    0,           NSwOne}, {"10",   0,           NSwOne0},
   {"2",    0,           NSwTwo}, {"20",   0,           NSwTwo0},
   {"4",    0,           NSwFour},
+  // -bE and -bP are the selection's own spellings (EPHEMERIS_PLUGINS_PLAN.md
+  // 5.2) and sit ahead of the bare -b row, which would otherwise prefix-
+  // match them first.
+  {"bE",   grfSwPrefix, NSwbE},  {"bP",   grfSwPrefix, NSwbP},
   {"b",    grfSwPrefix, NSwb},
   {"c",    grfSwPrefix, NSwc},
   {"s",    grfSwPrefix, NSws},

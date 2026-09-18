@@ -83,22 +83,13 @@ def joined(body):
     return out
 
 
-# Qt-only rows appended past the Windows resource: dialogs the Qt build
-# extends with controls Windows' does not have. The resource file stays
-# the Windows oracle; the extension lives here, so regenerating never
-# loses a row the .rc does not carry.
-QT_ONLY_ROWS = {
-    "dlgCalc": [
-        '  {ctlLabel,  "Server Address:", "dlSe_W", -1, 5,246,80,8},',
-        '  {ctlEdit,   "", "deSe_W", -1, 95,243,100,13},',
-        '  {ctlLabel,  "Server Token:", "dlSe_T", -1, 5,262,80,8},',
-        '  {ctlEdit,   "", "deSe_T", -1, 95,259,100,13},',
-    ],
-}
-# The extended dialogs reach below the Windows resource's own height.
-QT_ONLY_HEIGHT = {
-    "dlgCalc": 274,
-}
+# Qt-only rows appended past the Windows resource used to live here: the
+# Calculation Settings dialog's server address and token, the two controls
+# this port added that Windows' resource did not have. They are gone since
+# the Ephemeris Settings dialog took both over (EPHEMERIS_PLUGINS_PLAN.md
+# 5.4), and with them the extension point: every dialog the Qt build lays
+# out is the resource's own now, so a row Windows does not have is a
+# divergence to justify, not a table entry to append.
 
 
 def controls(body):
@@ -140,16 +131,11 @@ def emit(name, w, h, body, out):
         text = text.replace('""', '\\"').replace("\\", "\\\\")
         out.append('  {%-10s "%s", "%s", %d, %d,%d,%d,%d},' %
                    (kind + ",", text, prefix, index, x, y, cx, cy))
-    # Qt-only rows, appended past the Windows resource: the Qt build
-    # extends some dialogs with controls Windows' does not have. The
-    # resource file stays the Windows oracle; the extension lives here.
-    for row in QT_ONLY_ROWS.get(name, []):
-        out.append(row)
     out.append("};")
     out.append("#define cctl%s (int)(sizeof(rgctl%s) / sizeof(RCCTL))" %
                (name[3:], name[3:]))
     out.append("#define dx%s %d" % (name[3:], w))
-    out.append("#define dy%s %d" % (name[3:], QT_ONLY_HEIGHT.get(name, h)))
+    out.append("#define dy%s %d" % (name[3:], h))
     out.append("")
 
 

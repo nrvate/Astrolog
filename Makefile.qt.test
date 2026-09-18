@@ -55,6 +55,15 @@ CPPFLAGS = -MMD -MP -DQT -DQTTEST -O -fPIC -std=gnu++17 -Wno-write-strings -Wno-
  -Wno-comment $(QT_CFLAGS)
 RM = rm -f
 
+# The Prometheia plugin's optional dependency; see Makefile.srcs for the
+# detection and for why a machine without the package builds exactly as
+# it always has.
+CPPFLAGS += $(PROMETHEIA_FLAGS)
+LIBS += $(PROMETHEIA_LIBS)
+
+# Stamp the plugin state this dir was built with; see Makefile.srcs.
+$(call prometheia-stamp,$(OBJDIR))
+
 $(NAME): $(OBJS)
 # LDEXTRA is empty for every ordinary build and exists for one case:
 # a hand-installed Qt6 whose libraries are not on the runtime linker

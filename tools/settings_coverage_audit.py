@@ -43,6 +43,7 @@ SETTINGS = {
     "Custom":    "Object Customization",
     "CustomS":   "Fixed Star Customization",
     "Display":   "Display Settings",
+    "Ephem":     "Ephemeris Settings",
     "File":      "File Settings",
     "Graphics":  "Graphics Settings",
     "Object":    "Object Settings",

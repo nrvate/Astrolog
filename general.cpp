@@ -714,7 +714,7 @@ void EnsureStarBright()
   int i;
   real rMode;
 
-  rMode = FCmSwissStar() ? 1.0 : 0.0;
+  rMode = (FEphSpeeds() && !us.fMatrixStar) ? 1.0 : 0.0;
   if (rStarBrightDef[0] != rMode) {
     rStarBrightDef[0] = rMode;
 
@@ -732,7 +732,7 @@ void EnsureStarBright()
 
 #ifdef SWISS
     // Swiss Ephemeris reads star brightnesses from an external file.
-    if (FCmSwissStar())
+    if (FEphSpeeds() && !us.fMatrixStar)
       SwissComputeStars(0.0, fTrue);
 #endif
   }

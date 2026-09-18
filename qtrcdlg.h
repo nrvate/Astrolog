@@ -479,7 +479,6 @@ static CONST RCCTL rgctlTransit[] = {
 static CONST RCCTL rgctlCalc[] = {
   {ctlButton, "OK", "IDOK", -1, 145,224,50,14},
   {ctlButton, "Cancel", "IDCANCEL", -1, 145,206,50,14},
-  {ctlCombo,  "", "dcSe_b", -1, 95,5,100,75},
   {ctlCombo,  "", "dcSe_s", -1, 95,20,100,100},
   {ctlCombo,  "", "dcSe_c", -1, 60,35,75,205},
   {ctlEdit,   "", "deSe_h", -1, 60,50,45,13},
@@ -506,7 +505,6 @@ static CONST RCCTL rgctlCalc[] = {
   {ctlRadio,  "Object on &Midheaven", "dr", 3, 10,195,90,10},
   {ctlEdit,   "", "deSe_", 1, 65,205,40,13},
   {ctlCheck,  "Use &Start of Planet's Sign", "dxSe_", 10, 10,220,95,10},
-  {ctlLabel,  "Calculation Method:", "IDC_STATIC", -1, 5,5,86,8},
   {ctlLabel,  "Zodiac Offset / Ayanamsa:", "IDC_STATIC", -1, 5,20,86,8},
   {ctlLabel,  "House System:", "IDC_STATIC", -1, 5,35,50,8},
   {ctlLabel,  "Central Planet:", "IDC_STATIC", -1, 5,50,50,8},
@@ -516,14 +514,10 @@ static CONST RCCTL rgctlCalc[] = {
   {ctlGroup,  "Solar Chart Setting", "IDC_STATIC", -1, 5,165,105,70},
   {ctlGroup,  "3D Houses Plane", "IDC_STATIC", -1, 115,160,80,44},
   {ctlIcon,   "", "icon", 3, 115,212,20,20},
-  {ctlLabel,  "Server Address:", "dlSe_W", -1, 5,246,80,8},
-  {ctlEdit,   "", "deSe_W", -1, 95,243,100,13},
-  {ctlLabel,  "Server Token:", "dlSe_T", -1, 5,262,80,8},
-  {ctlEdit,   "", "deSe_T", -1, 95,259,100,13},
 };
 #define cctlCalc (int)(sizeof(rgctlCalc) / sizeof(RCCTL))
 #define dxCalc 203
-#define dyCalc 274
+#define dyCalc 242
 
 // dlgChart -- 261 x 247 dialog units, from astrolog.rc
 #define szTitleChart "Chart Settings"
@@ -1907,4 +1901,35 @@ static CONST RCCTL rgctlObjectSel[] = {
 #define cctlObjectSel (int)(sizeof(rgctlObjectSel) / sizeof(RCCTL))
 #define dxObjectSel 344
 #define dyObjectSel 316
+
+// dlgEphem -- 262 x 240 dialog units, from astrolog.rc
+#define szTitleEphem "Ephemeris Settings"
+static CONST RCCTL rgctlEphem[] = {
+  {ctlButton, "OK", "IDOK", -1, 207,221,50,14},
+  {ctlButton, "Cancel", "IDCANCEL", -1, 152,221,50,14},
+  {ctlButton, "Connec&t", "dbEp_ct", -1, 5,221,50,14},
+  {ctlLabel,  "&Primary Source:", "IDC_STATIC", -1, 5,5,60,8},
+  {ctlList,   "", "dlEp_src", -1, 5,14,252,66},
+  {ctlLabel,  "", "dsEp_ds", -1, 5,84,252,16},
+  {ctlLabel,  "&Fallback Order:", "IDC_STATIC", -1, 5,104,70,8},
+  {ctlEdit,   "", "deEp_chain", -1, 5,114,252,13},
+  {ctlLabel,  "", "", -1, 5,129,210,8},
+  {ctlLabel,  "", "dsEp_st", -1, 5,140,252,8},
+  {ctlLabel,  "Parameters:", "IDC_STATIC", -1, 5,152,60,8},
+  {ctlLabel,  "", "dsEp_p", 1, 5,164,100,8},
+  {ctlEdit,   "", "deEp_p", 1, 110,162,126,13},
+  {ctlButton, "...", "dbEp_b", 1, 240,161,18,14},
+  {ctlLabel,  "", "dsEp_p", 2, 5,178,100,8},
+  {ctlEdit,   "", "deEp_p", 2, 110,176,126,13},
+  {ctlButton, "...", "dbEp_b", 2, 240,175,18,14},
+  {ctlLabel,  "", "dsEp_p", 3, 5,192,100,8},
+  {ctlEdit,   "", "deEp_p", 3, 110,190,126,13},
+  {ctlButton, "...", "dbEp_b", 3, 240,189,18,14},
+  {ctlLabel,  "", "dsEp_p", 4, 5,206,100,8},
+  {ctlEdit,   "", "deEp_p", 4, 110,204,126,13},
+  {ctlButton, "...", "dbEp_b", 4, 240,203,18,14},
+};
+#define cctlEphem (int)(sizeof(rgctlEphem) / sizeof(RCCTL))
+#define dxEphem 262
+#define dyEphem 240
 

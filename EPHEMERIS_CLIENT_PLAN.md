@@ -1,8 +1,9 @@
 # Ephemeris Client Plan
 
 The client half of the ephemeris server project. The server's design and
-protocol are the authority in EPHEMERIS_SERVER_PLAN.md (its §4 is byte-law);
-this document expands that plan's Part II into a standalone client
+protocol are the authority in EPHEMERIS_SERVER_PLAN.md -- the protocol
+itself is EPHEMERIS_PLUGINS_PLAN.md §3 since version 4, with
+ephsrv/ephproto.h its codec; this document expands that plan's Part II into a standalone client
 specification, incorporating what building the server taught us. It is
 written to be implemented without reading this project's conversation.
 
@@ -581,3 +582,18 @@ Each increment lands green (build both binaries, suite) before the next.
    always followed by "Failed to parse command line". Verified live: a
    plain `-bS` connects to the local server, and the shipped `astrolog.as`
    prints the new refusal.
+
+
+**Version 4 (2026-09-17).** The client speaks protocol version 4 and builds
+ONE REQUEST per cast: a profile per distinct Swiss call FSwissPlanetSpec()
+decides on (ephsrv/ephswiss.h ProfileFromSwiss), an object per body
+(ObjectFromSwiss), and a split into further requests only when WELCOME's
+maxObjs or maxProfiles says so -- where version 3 had to send one request
+per flag group, because its REQUEST carried one iflag for all of it. The
+window cache keys on the server's own key (§3.7: the datasetId and the
+question block's bytes) plus the precision, so a new dataset drops the
+windows it could invalidate. Animation prefetch goes out with priority 1;
+a window evicted with its answer in flight is CANCELled. Casts are
+bit-identical to the local Swiss path, which the suite's live group checks
+scenario by scenario, as before. EPHEMERIS_PLUGINS_PLAN.md work log item 2
+has the rest.

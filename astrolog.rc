@@ -393,6 +393,7 @@ BEGIN
         MENUITEM "Include &Fixed Stars\tU",     cmdResStar
         MENUITEM SEPARATOR
         MENUITEM "Calculation Settin&gs...\tAlt+S", cmdSettingCalc
+        MENUITEM "E&phemeris Settings...", cmdEphem
         MENUITEM "&Display Settings...\tAlt+B", cmdDisplay
     END
     POPUP "&Chart"
@@ -1703,7 +1704,6 @@ FONT 8, "MS Shell Dlg", 400, 0, 0x1
 BEGIN
     DEFPUSHBUTTON   "OK",IDOK,145,224,50,14
     PUSHBUTTON      "Cancel",IDCANCEL,145,206,50,14
-    COMBOBOX        dcSe_b,95,5,100,75,CBS_DROPDOWN | WS_VSCROLL | WS_TABSTOP
     COMBOBOX        dcSe_s,95,20,100,100,CBS_DROPDOWN | WS_VSCROLL | WS_TABSTOP
     COMBOBOX        dcSe_c,60,35,75,205,CBS_DROPDOWN | WS_VSCROLL | WS_TABSTOP
     EDITTEXT        deSe_h,60,50,45,13,ES_AUTOHSCROLL
@@ -1735,7 +1735,6 @@ BEGIN
     CONTROL         "Object on &Midheaven",dr03,"Button",BS_AUTORADIOBUTTON,10,195,90,10
     EDITTEXT        deSe_1,65,205,40,13,ES_AUTOHSCROLL
     CONTROL         "Use &Start of Planet's Sign",dxSe_10,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,10,220,95,10
-    LTEXT           "Calculation Method:",IDC_STATIC,5,5,86,8
     LTEXT           "Zodiac Offset / Ayanamsa:",IDC_STATIC,5,20,86,8
     LTEXT           "House System:",IDC_STATIC,5,35,50,8
     LTEXT           "Central Planet:",IDC_STATIC,5,50,50,8
@@ -3143,6 +3142,36 @@ BEGIN
 END
 
 
+dlgEphem DIALOGEX 32, 32, 262, 240
+STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
+CAPTION "Ephemeris Settings"
+FONT 8, "MS Shell Dlg", 400, 0, 0x1
+BEGIN
+    DEFPUSHBUTTON   "OK",IDOK,207,221,50,14
+    PUSHBUTTON      "Cancel",IDCANCEL,152,221,50,14
+    PUSHBUTTON      "Connec&t",dbEp_ct,5,221,50,14
+    LTEXT           "&Primary Source:",IDC_STATIC,5,5,60,8
+    LISTBOX         dlEp_src,5,14,252,66,LBS_NOTIFY | LBS_NOINTEGRALHEIGHT | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "",dsEp_ds,5,84,252,16
+    LTEXT           "&Fallback Order:",IDC_STATIC,5,104,70,8
+    EDITTEXT        deEp_chain,5,114,252,13,ES_AUTOHSCROLL
+    LTEXT           "Comma separated source keys, tried in order, e.g. \"swiss,moshier\".",IDC_STATIC,5,129,210,8
+    LTEXT           "",dsEp_st,5,140,252,8
+    LTEXT           "Parameters:",IDC_STATIC,5,152,60,8
+    LTEXT           "",dsEp_p1,5,164,100,8
+    EDITTEXT        deEp_p1,110,162,126,13,ES_AUTOHSCROLL
+    PUSHBUTTON      "...",dbEp_b1,240,161,18,14
+    LTEXT           "",dsEp_p2,5,178,100,8
+    EDITTEXT        deEp_p2,110,176,126,13,ES_AUTOHSCROLL
+    PUSHBUTTON      "...",dbEp_b2,240,175,18,14
+    LTEXT           "",dsEp_p3,5,192,100,8
+    EDITTEXT        deEp_p3,110,190,126,13,ES_AUTOHSCROLL
+    PUSHBUTTON      "...",dbEp_b3,240,189,18,14
+    LTEXT           "",dsEp_p4,5,206,100,8
+    EDITTEXT        deEp_p4,110,204,126,13,ES_AUTOHSCROLL
+    PUSHBUTTON      "...",dbEp_b4,240,203,18,14
+END
+
 /////////////////////////////////////////////////////////////////////////////
 //
 // Accelerator
@@ -3815,6 +3844,10 @@ BEGIN
 END
 
 dlgObjectSel AFX_DIALOG_LAYOUT
+BEGIN
+    0
+END
+dlgEphem AFX_DIALOG_LAYOUT
 BEGIN
     0
 END

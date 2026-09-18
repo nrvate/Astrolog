@@ -1,0 +1,10 @@
+# request	welcome	expect	note
+# set-sha256 is sha256 over the non-comment lines below, each with its trailing newline
+# set-sha256 f1a36d5b92601d2215545543e2d84ff9de3fe95c2252453158a4524c247837e3
+request_corrkind_shared_profile	welcome_corrkind	error11	one heliocentric profile at mask 7 reaches a BODY and an ORBIT POINT; 0x0014 grants the mask to the point alone, and section 2 refuses the whole request
+request_corrkind_split_profiles	welcome_corrkind	served	the same two objects across two profiles: mask 1 for the body, mask 7 for the point. This is what a client does when the kinds sharing a profile disagree
+request_corrkind_unreferenced_profile	welcome_corrkind	error11	an unreferenced heliocentric profile at mask 7 is checked against 0x0004 alone, which lists only 0 and 1 there -- 0x0014's grant to orbit points cannot reach a profile no object uses
+request_corrkind_segments	welcome_corrkind	error11	representation = 1 changes nothing: the same request, the same object list, the same verdict as request_corrkind_shared_profile
+request_corrkind_shared_profile	welcome_corrkind_empty	error11	0x0014 with no entries is exactly 0x0004, so the orbit point loses the grant and the refusal now has two causes rather than one
+request_corrkind_split_profiles	welcome_corrkind_empty	error11	and the split form is refused too against that WELCOME, which is what makes the pair above a test of 0x0014 rather than of profiles
+request_basic	welcome_swiss	served	a positive control: a table whose every row said error11 would pass a reader that refused everything

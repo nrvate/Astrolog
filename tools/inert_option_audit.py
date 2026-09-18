@@ -41,6 +41,12 @@ ALLOWED = {
     "-d":      "a text chart selector; a graphics render ignores it",
     "-5":      "chart-list behaviour, not drawing",
     "-k0":     "Ansi text colouring, not drawing",
+    "-0b":     "the old-engine lock, accepted so saved settings load; it "
+               "gates which backends the dialogs offer, and the casts "
+               "here are Swiss-files ones either way",
+    "-0n":     "the network lock, accepted so saved settings load; it "
+               "gates which remote backends are offered, and no remote "
+               "backend is selected in any cast here",
 }
 
 BASES = ("-XG", "-XW", "-g", "-Xw 800 400")

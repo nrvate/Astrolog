@@ -12,7 +12,8 @@
 #      /proc fd count is stable across a barrage of requests spread over
 #      the farm (FD_TOL slack);
 #   d. an asteroid whose file is absent comes back as a clean per-object
-#      failure (retFlag < 0) without killing the connection.
+#      failure -- no rows, an A.17 code and its text -- without killing the
+#      connection.
 #
 # Knobs (env):
 #   FARM_N      asteroid count to synthesize      (default 100000)
@@ -142,20 +143,20 @@ fdbusy() { ls "/proc/$SRV_PID/fd" 2>/dev/null | wc -l; }
 # A handful of ids that REALLY resolve (the real se00005.se1 at ast0/se00005)
 # plus misses across the farm's tail, so the barrage mixes opens, header
 # rejections and clean per-object errors.
-BARRAGE_IDS="5,6,7,8,9,10,11,12,13,14"
+BARRAGE_IDS="20000005,20000006,20000007,20000008,20000009,20000010,20000011,20000012,20000013,20000014"
 # One round of each request kind first: the first answer opens the files a
 # request needs, which is the steady state, not a leak. Counted from
 # before any request, the check measured those opens.
 "$ROOT/eph_wsclient" --port "$PORT" --objs "$BARRAGE_IDS" --jd 2451545.0 \
   --step 600 --count 1 --quiet > /dev/null 2>&1 || true
-"$ROOT/eph_wsclient" --port "$PORT" --objs 100000 --jd 2451545.0 \
+"$ROOT/eph_wsclient" --port "$PORT" --objs 20100000 --jd 2451545.0 \
   --step 600 --count 1 --quiet > /dev/null 2>&1 || true
 FD0=$(fdbusy)
 i=0
 while [ "$i" -lt "$BARRAGE" ]; do
   # a miss from the high tail every third request
   if [ $((i % 3)) -eq 0 ]; then
-    "$ROOT/eph_wsclient" --port "$PORT" --objs "$((100000 + i))" --jd 2451545.0 \
+    "$ROOT/eph_wsclient" --port "$PORT" --objs "$((20100000 + i))" --jd 2451545.0 \
       --step 600 --count 1 --quiet > /dev/null 2>&1 || true
   else
     "$ROOT/eph_wsclient" --port "$PORT" --objs "$BARRAGE_IDS" --jd 2451545.0 \
@@ -170,11 +171,14 @@ awk -v g="$GROWTH" -v t="$FD_TOL" 'BEGIN { exit !(g <= t && g >= -t) }' \
   || { echo "SOAK FAIL: fd count moved by $GROWTH over the barrage"; exit 1; }
 
 # d. A missing asteroid: per-object failure, request succeeds.
-"$ROOT/eph_wsclient" --port "$PORT" --objs "$((FARM_N + 12345))" --jd 2451545.0 \
+"$ROOT/eph_wsclient" --port "$PORT" --objs "$((20000000 + FARM_N + 12345))" --jd 2451545.0 \
   --step 600 --count 1 --out "$SCRATCH/miss.txt" --quiet
-MISSFLAG=$(awk '{print $3}' "$SCRATCH/miss.txt")
-[ "$MISSFLAG" = "-1" ] \
-  || { echo "SOAK FAIL: missing asteroid returned retFlag $MISSFLAG, wanted -1"; exit 1; }
-echo "missing asteroid: clean per-object failure (retFlag -1), connection lived"
+# The client's line: idx label errCode rowsOk flags columns. A missing file
+# is A.17 code 4 (data unavailable) with no rows computed.
+MISSERR=$(awk '{print $3}' "$SCRATCH/miss.txt")
+MISSROWS=$(awk '{print $4}' "$SCRATCH/miss.txt")
+[ "$MISSERR" = "4" ] && [ "$MISSROWS" = "0" ] \
+  || { echo "SOAK FAIL: missing asteroid returned error $MISSERR with $MISSROWS rows, wanted error 4 and none"; exit 1; }
+echo "missing asteroid: clean per-object failure (error 4, no rows), connection lived"
 
 echo "SOAK PASS: farm of $FARM_N files, startup ${STARTUP_S}s, zero scans, fds stable"

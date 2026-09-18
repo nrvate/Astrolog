@@ -230,6 +230,7 @@ CONST RCCMD rgcmdQt[] = {
   {"Include D&warfs",              40294},  // cmdResDwarf
   {"Include &Fixed Stars",         40297},  // cmdResStar
   {"Calculation Settin&gs...",     40334},  // cmdSettingCalc
+  {"E&phemeris Settings...",       40366},  // cmdEphem
   {"&Display Settings...",         40071},  // cmdDisplay
   {"Standard Radi&x",              40043},  // cmdChartList
   {"House &Wheel",                 40057},  // cmdChartWheel
@@ -372,4 +373,4 @@ CONST RCCMD rgcmdQt[] = {
   {"Uninstall File E&xtensions",   40357},  // cmdUnsetup
   {"&About Astrolog...",           40105},  // cmdHelpAbout
 };
-CONST int ccmdQt = 366;
+CONST int ccmdQt = 367;

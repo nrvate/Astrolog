@@ -1,0 +1,102 @@
+# file	direction	type	expect	note
+# set-sha256 is sha256 over each .hex file's bytes, in the order of the rows below
+# set-sha256 d904e3586c25dc0eeedb0cebb316be92f04b086c2e4d96ae4d2e3bf92337c72d
+hello_min.hex	c2s	1	ok	no token, no caps
+hello_token_caps.hex	c2s	1	ok	token and f32|cancel|lookup|segments caps
+hello_future_client.hex	c2s	1	ok	a version-9 client: envelope 9, protoMax 9, protoMin 4; the server answers v4
+welcome_swiss.hex	s2c	2	ok	astrolog-ephd-like capabilities
+welcome_prometheia.hex	s2c	2	ok	prometheiad-like, with segments
+request_basic.hex	c2s	3	ok	Sun and Moon, TT hourly grid, geocentric
+welcome_corrkind.hex	s2c	2	ok	0x0014 carrying only exceptions: an orbit point from the Sun's centre or the barycentre honours the full mask where a body cannot
+welcome_corrkind_empty.hex	s2c	2	ok	0x0014 with n = 0: legal, and means exactly what its absence means
+welcome_corrkind_unknown_bits.hex	s2c	2	ok	unknown observer and kind bits in 0x0014 are IGNORED, because both registries are open and a future member must not break an older client
+welcome_corrkind_reserved.hex	s2c	2	malformed	a 0x0014 mask with a bit above 0x07: reserved, MUST be zero, and 3.1 says reject rather than normalise
+request_corrkind_shared_profile.hex	c2s	3	ok	one heliocentric profile at mask 7 referenced by a BODY and an ORBIT POINT: well formed, and a server whose 0x0014 grants the mask to the point but not the body refuses it whole with ERROR 11
+request_corrkind_split_profiles.hex	c2s	3	ok	the same two objects across TWO heliocentric profiles, mask 1 for the body and mask 7 for the orbit point: the served form of the case above, and what a client does when kinds disagree
+request_corrkind_segments.hex	c2s	3	ok	the shared-profile case again at representation = 1: a segments request is the same request with the same object list, so it is judged identically -> ERROR 11 under welcome_corrkind. The profile is RECTANGULAR because segments require it (the parser refuses a spherical one as unsupported before any capability is consulted), which is the only thing that differs from request_corrkind_shared_profile
+request_corrkind_unreferenced_profile.hex	c2s	3	ok	a second profile no object references: checked against 0x0004 alone, since nothing is computed from it -- so under welcome_corrkind this is ERROR 11, because 0x0004 lists only masks 0 and 1 for a heliocentric observer and 0x0014's grant to heliocentric ORBIT POINTS cannot reach a profile no object uses
+request_cast_profiles.hex	c2s	3	ok	one cast: three profiles (geo; helio; topocentric Fagan-Bradley on the invariable plane with the ayanamsa column) and all six object kinds
+request_deadline.hex	c2s	3	ok	a prefetch window with a 250 ms deadline: advisory, and outside the cache key
+request_list_ut.hex	c2s	3	ok	instant list in UT1, server's delta T
+request_backward_grid.hex	c2s	3	ok	negative step (animation running backwards)
+request_user_zodiac.hex	c2s	3	ok	user ayanamsha anchored at J2000
+request_segments.hex	c2s	3	ok	segments over 30 days, rectangular, 0.1 arcsec target
+request_pins.hex	c2s	3	ok	precession model plus critical ephemeris and catalog pins, ascending tags
+data_chunk0_meta.hex	s2c	4	ok	f64, sigma+ayanamsa columns, a partial object with a NaN row
+data_chunk1_nometa_f32.hex	s2c	4	ok	a later f32 chunk without metadata
+segdata_moon.hex	s2c	15	ok	one degree-2 segment spanning 31 days, no zodiac
+segdata_sidereal_ayanamsa.hex	s2c	15	ok	tropical coefficients with the profile's ayanamsa series beside them
+request_deltat_table.hex	c2s	3	ok	a UT1 grid with the client's own delta T table (TT instants, ascending)
+request_dataset_pin.hex	c2s	3	ok	a critical datasetId pin
+data_star_nodistance.hex	s2c	4	ok	a star without a parallax: noDistance and ratesApprox
+data_meta_unknown_flag.hex	s2c	4	ok	META with a flag bit and a corrApplied bit past bit 2: tolerated
+data_chunk_future_flag.hex	s2c	4	ok	a chunkFlags bit this version does not define: tolerated
+error_unregistered_code.hex	s2c	5	ok	an ERROR code past the registry: still an error, still retryable
+error_rate_limited.hex	s2c	5	ok	ERROR 6, retryable, retry in 1500 ms
+error_version_closing.hex	s2c	5	ok	ERROR 8, closing
+error_v3_legacy.hex	s2c	5	ok	ERROR 8 to a version-3 client in that client's own layout (envelope version 3)
+cancel.hex	c2s	8	ok	cancel request 4
+ping.hex	c2s	6	ok	
+pong.hex	s2c	7	ok	
+lookup_prefix.hex	c2s	9	ok	prefix, hypotheticals and stars included
+lookup_batch.hex	c2s	9	ok	four names in one message; maxMatches is the budget for the WHOLE answer
+lookup_result_lilith.hex	s2c	10	ok	three kinds answer one name
+lookup_result_batch.hex	s2c	10	ok	four queries answered in order, one with no match, the message budget spent
+lookup_result_future_kind.hex	s2c	10	ok	a match of an unregistered kind, skipped by its matchLen, between two readable ones
+lookup_result_bad_matchlen.hex	s2c	10	malformed	matchLen disagrees with a match the reader can read
+env_bad_magic.hex	c2s	6	malformed	magic 0x1EF1
+env_reserved_nonzero.hex	c2s	6	malformed	envelope reserved u16 = 1
+env_flag_bit.hex	c2s	6	malformed	envelope flag bit 3
+hello_min_gt_max.hex	c2s	1	malformed	protoMin 5 > protoMax 4
+ping_payload.hex	c2s	6	malformed	PING with a payload
+trailing_bytes.hex	c2s	3	malformed	one byte after the TLV area
+tlv_unsorted.hex	c2s	3	malformed	tags 0x8001 before 0x0003
+tlv_duplicate.hex	c2s	3	malformed	tag 0x0003 twice
+tlv_total_mismatch.hex	c2s	3	malformed	TLV totalLen 4 with no entries
+str8_bad_utf8.hex	c2s	3	malformed	zodiac bytes 0xC3 0x28
+str8_control.hex	c2s	3	malformed	star name with a newline
+deltat_signalling_nan.hex	c2s	3	malformed	delta T 0x7FF0000000000001
+site_nan.hex	c2s	3	malformed	canonical NaN in a site field (allowed only in delta T)
+ntime_zero.hex	c2s	3	malformed	grid nTime 0
+step_zero_many.hex	c2s	3	malformed	stepNs 0 with nTime 2
+step_nonzero_one.hex	c2s	3	malformed	stepNs 1 day with nTime 1
+step_overflow.hex	c2s	3	malformed	(nTime-1) x |stepNs| overflows i64
+time_out_of_range.hex	c2s	3	malformed	jd1 = 2e8
+profiles_zero.hex	c2s	3	malformed	nProfiles 0
+objects_zero.hex	c2s	3	malformed	nObj 0
+profile_index_range.hex	c2s	3	malformed	object names profile 1 of 1
+profile_reserved.hex	c2s	3	malformed	profile reserved byte 1
+object_reserved.hex	c2s	3	malformed	object head reserved u16 = 1
+observer_body_unused.hex	c2s	3	malformed	observerBody 5 with a geocentric observer
+site_unused.hex	c2s	3	malformed	a site with a heliocentric observer
+site_lat_range.hex	c2s	3	malformed	site latitude 91
+tropical_with_plane.hex	c2s	3	malformed	zodiac "" with siderealPlane 1
+user_zodiac_no_anchor.hex	c2s	3	malformed	zodiac user with a zero anchor epoch
+anchor_unused.hex	c2s	3	malformed	anchor set with a named zodiac
+speeds_not_bool.hex	c2s	3	malformed	speeds = 2
+elements_no_terms.hex	c2s	3	malformed	elements with nTerms 0
+equinox_jd_unused.hex	c2s	3	malformed	equinoxJd set with equinox J2000
+seg_err_with_samples.hex	c2s	3	malformed	segTargetErrArcsec 1 with representation 0
+max_degree_with_samples.hex	c2s	3	malformed	maxDegreeHint 8 with representation 0
+deltat_table_and_value.hex	c2s	3	malformed	a delta T table and a finite deltaTSec
+deltat_table_unsorted.hex	c2s	3	malformed	a delta T table whose instants descend
+deltat_table_one_entry.hex	c2s	3	malformed	a delta T table of one entry
+sidereal_on_the_equator.hex	c2s	3	malformed	a sidereal zodiac with plane = equator
+request_id_zero.hex	c2s	3	malformed	a REQUEST with requestId 0
+hello_request_id.hex	c2s	1	malformed	a HELLO with requestId 1
+lookup_id_zero.hex	c2s	9	malformed	a LOOKUP with requestId 0
+lookup_no_queries.hex	c2s	9	malformed	a LOOKUP carrying no query at all
+lookup_budget_zero.hex	c2s	9	malformed	maxMatches 0: a budget of nothing
+lookup_result_no_queries.hex	s2c	10	malformed	a LOOKUP_RESULT answering no query
+data_chunk0_no_meta.hex	s2c	4	malformed	DATA chunk 0 with the meta flag clear
+segdata_chunk0_no_meta.hex	s2c	15	malformed	SEGDATA chunk 0 with the meta flag clear
+lookup_match_profile.hex	s2c	10	malformed	a LOOKUP_RESULT match whose object names profile 1
+unknown_critical_tag.hex	c2s	3	unsupported	critical REQUEST tag 0x8FFF
+observer_unregistered.hex	c2s	3	unsupported	observer 9
+correction_bit_unregistered.hex	c2s	3	unsupported	corrections bit 8
+kind_unregistered.hex	c2s	3	unsupported	object kind 6
+segments_spherical.hex	c2s	3	unsupported	segments with form 0
+segments_list.hex	c2s	3	unsupported	segments over an instant list
+segments_columns.hex	c2s	3	unsupported	segments with the ayanamsa column
+elements_centre_unregistered.hex	c2s	3	unsupported	elements centre 2 (A.21 has 0 and 1)
+zodiac_unregistered.hex	c2s	3	unsupported	zodiac token "martian"

@@ -56,6 +56,16 @@ LIBS = -lm -lX11 -ldl -pthread -s
 CPPFLAGS = -MMD -MP -O -std=gnu++17 -Wno-write-strings -Wno-narrowing -Wno-comment
 RM = rm -f
 
+# The Prometheia plugin's optional dependency; see Makefile.srcs for the
+# detection and for why a machine without the package builds exactly as
+# it always has.
+CPPFLAGS += $(PROMETHEIA_FLAGS)
+LIBS += $(PROMETHEIA_LIBS)
+
+# Stamp the plugin state the root objects were built with; the console
+# build's OBJDIR is empty, so the stamp lives at the root. See Makefile.srcs.
+$(call prometheia-stamp,$(OBJDIR))
+
 # "make" alone builds two binaries on Linux: upstream's X11 one and this
 # fork's Qt port, side by side. The maintainer's rule, 2026-09-04.
 #
@@ -97,6 +107,7 @@ endif
 # surprising before. (The UBSan build was missing from the list until
 # 2026-09-05, so "removes every build" was one short of true.)
 clean: clean-console
+	$(RM) ephproto_test
 	$(MAKE) -f Makefile.qt clean
 	$(MAKE) -f Makefile.qt.test clean
 	$(MAKE) -f Makefile.qt.asan clean
@@ -197,6 +208,15 @@ wcli:
 .PHONY: ephsrv
 ephsrv:
 	$(MAKE) -f Makefile.ephsrv
+
+# The protocol version 4 codec against its conformance fixtures
+# (EPHEMERIS_PLUGINS_PLAN.md 3.9). Unlike the server it needs no Swiss
+# fork -- the codec is header-only -- so make check runs it on any
+# checkout, under AddressSanitizer and UBSan: the truncation sweep in it is
+# only a memory-safety check with a sanitizer behind it.
+ephproto_test: ephsrv/ephproto_test.cpp ephsrv/ephproto.h ephsrv/ephswiss.h
+	g++ -std=gnu++17 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined \
+	  -fno-sanitize-recover=all -I ephsrv -I . -o $@ ephsrv/ephproto_test.cpp
 
 # Every build this fork has, in the order the pre-commit checks want them.
 all: $(NAME) qt qt-test win wcli

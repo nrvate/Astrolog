@@ -605,6 +605,10 @@ void InitProgram()
   SetCI(ciDefa, MM, DD, YY, TT, 0, DEFAULT_ZONE, DEFAULT_LONG, DEFAULT_LAT);
   is.S = stdout;
   ClearB((pbyte)szStarCustom, sizeof(szStarCustom));
+  // The ephemeris selection's default chain (data.cpp leaves it NULL, so
+  // the positional initializer cannot convert a string constant to
+  // char*): "swiss" under EPHEM, the Matrix legacy cast without it.
+  EphSourceSet(NULL);
   InitRestrictions(fTrue);
   // Before any switch, so these hold the compiled defaults the settings
   // writer compares against (data.cpp, by ruler1Def).
@@ -727,6 +731,9 @@ void FinalizeProgram(flag fSkip)
   DeallocatePIf(grid);
   for (i = 0; i < 10; i++)
     DeallocatePIf(us.rgszPath[i]);
+  DeallocatePIf(us.szEphemSource);
+  for (i = 0; i < cEphParam; i++)
+    DeallocatePIf(us.rgszEphParam[i]);
   DeallocatePIf(us.szADB);
   DeallocatePIf(us.szStarsColor);
   DeallocatePIf(us.szAstColor);
@@ -981,6 +988,21 @@ LBegin:
   // button and keeps upstream's behaviour, which is why this is guarded
   // rather than moved into InitProgram().
   InitRestrictions(fTrue);
+#endif
+#ifdef QT
+  // Bind the Ephemeris Server's transport BEFORE the first cast, not when
+  // a window is first created. BeginQt() binds it too, and that is early
+  // enough for anything the GUI does -- but a chart asked for on the
+  // COMMAND LINE is cast here, by Action(), and in a text chart no window
+  // is created first. So "astrolog-qt -bE server -qa ..." used to cast
+  // with no transport registered at all: every body 0Ari00'00", and the
+  // server saw a connection open afterwards and never be asked anything,
+  // which is exactly what the Prometheia project reported seeing from
+  // their daemon's log.
+  //
+  // Binding is only registering a function table; it opens no connection
+  // and costs nothing when the source is unselected.
+  EphSrvTransportBindQt();
 #endif
   if (fT) {
     if (!is.fNoSwitches && us.fLoopInit) {

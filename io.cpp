@@ -598,7 +598,7 @@ flag FOutputData(void)
         rT = planetalt[i] < 0.0 && planetalt[i] > -1.0 ?
           planetalt[i] : RFract(RAbs(planetalt[i]));
         fprintf(file, "%4d %13.9f,", (int)planetalt[i], rT*60.0);
-        rT = i > oNorm ? 999.0 : (i == oMoo && !us.fEphemFiles ? 0.0026 :
+        rT = i > oNorm ? 999.0 : (i == oMoo && !FEphSpeeds() ? 0.0026 :
           PtLen(space[i]));
         fprintf(file, " %13.9f %13.9f\n", ret[i], rT);
       }
@@ -1609,6 +1609,7 @@ CONST char *szPntSwiss[] = {"", "n", "s", "p", "a"};
 flag FOutputSettings()
 {
   char sz[cchSzMax];
+  int iep;
   FILE *file;
   int i;
   char szForce[cchSzDef];
@@ -1792,44 +1793,36 @@ flag FOutputSettings()
   sprintf2(S(sz), "%cb2     ", ChDashF(us.fSecondHide)); PrintFSz();
   PrintF(
     "; Don't display :00 seconds [\"_b2\" shows anyway, \"=b2\" skips   ]\n");
-  // The ephemeris backend is three fields (astrolog.h, "-b" state table)
-  // and all three have to be written, or a chart cast with Moshier, JPL
-  // or Matrix comes back as Swiss.
-  // Order is load-bearing twice: every "-b" suffix also toggles
-  // fEphemFiles, so the plain "=b"/"_b" line has to come last to settle
-  // it; and the four nSwissEph spellings are mutually exclusive toggles
-  // that each clear the field, so one forced line carries the choice.
-  // These also precede the "=0b" and "=0n" lines below on purpose, so a
-  // saved file applies its backend before locking the old engines out.
-  sprintf2(S(sz), "%-8s", us.nSwissEph == 1 ? "=bs" : us.nSwissEph == 2 ?
-    "=bj" : us.nSwissEph == 3 ? "=bJ" : us.nSwissEph == 5 ? "=bS" :
-    "_bs"); PrintFSz();
-  PrintF(
-    "; Ephemeris backend         "
-    "[\"_bs\" Swiss \"=bs\" Mosh \"=bj\" JPL \"=bJ\" web \"=bS\" serv]\n");
-  // Written in pieces, never through sprintf2(): the address is user
-  // text, and a truncated one loses its closing quote, so the next word
-  // becomes a switch. Same discipline as the -Y5i line below.
-  PrintF("-bW "); PrintQuotedParamSz(file, us.szEphSrv); PrintF("\n");
-  PrintF(
-    "; Ephemeris server address  [ws:// URL or host:port; \"\" is "
-    "localhost:47190]\n");
-  PrintF("-bT "); PrintQuotedParamSz(file, us.szEphSrvToken); PrintF("\n");
-  PrintF(
-    "; Ephemeris server token    [for a server that requires one; \"\" is "
-    "none]\n");
-  sprintf2(S(sz), "%cbm     ", ChDashF(us.fMatrixPla)); PrintFSz();
-  PrintF(
-    "; Use Matrix formulas       [\"=bm\" uses them, \"_bm\" doesn't   ]\n");
+  // The selection's own spellings (EPHEMERIS_PLUGINS_PLAN.md 5.3): one
+  // -bE line for the chain, then one -bP line per parameter that sits
+  // away from its default. No order dependence: these are the only
+  // lines the selection has. The chain is written even at its default,
+  // so a round trip always carries it; the parameters are written only
+  // when set, and "" or NULL -- the default -- writes nothing, which is
+  // why the sweep's poison-to-empty reads back as still default rather
+  // than lost. The -bU Matrix-stars flag is the one legacy -b spelling
+  // still written: it is a preference beside the selection, not part
+  // of it.
   sprintf2(S(sz), "%cbU     ", ChDashF(us.fMatrixStar)); PrintFSz();
   PrintF(
     "; Matrix fixed stars only   [\"=bU\" uses them, \"_bU\" doesn't   ]\n");
-  sprintf2(S(sz), "%cb      ", ChDashF(us.fEphemFiles)); PrintFSz();
+  PrintF("-bE "); PrintQuotedParamSz(file, SzSet(us.szEphemSource));
+  PrintF("\n");
   PrintF(
-    "; Use ephemeris files       [\"=b\" uses them, \"_b\" doesn't      ]\n");
-  sprintf2(S(sz), "%c0b     ", ChDashF(us.fNoOldCalc)); PrintFSz();
+    "; Ephemeris source chain    [\"swiss\"; \"server,swiss,moshier\" orders "
+    "the fallback]\n");
+  for (iep = 0; iep < cEphParam; iep++) {
+    if (FEphParamDefaulted(iep))
+      continue;
+    sprintf2(S(sz), "-bP %s.%s ", rgephparam[iep].szSrc,
+      rgephparam[iep].ep.szKey);
+    PrintFSz();
+    PrintQuotedParamSz(file, us.rgszEphParam[iep]);
+    PrintF("\n");
+  }
   PrintF(
-    "; Disable old calculations  [\"=0b\" disables them, \"_0b\" allows ]\n");
+    "; Ephemeris parameters      [\"-bP server.url <address>\" sets one; "
+    "\"\" is its default]\n");
   sprintf2(S(sz), "%cv0     ", ChDashF(us.fVelocity)); PrintFSz();
   PrintF(
     "; Show average velocities   [\"=v0\" average, \"_v0\" does absolute]\n");
@@ -2040,9 +2033,6 @@ flag FOutputSettings()
   sprintf2(S(sz), "-YP %d   ", us.nArabicNight); PrintFSz();
   PrintF(
     "; Arabic part formula       [\"1\" is fixed, \"0\" checks if night ]\n");
-  sprintf2(S(sz), "%c0n     ", ChDashF(us.fNoNetwork)); PrintFSz();
-  PrintF(
-    "; Internet Web queries      [\"=0n\" disables them, \"_0n\" allows ]\n");
 
   PrintF("\n-Yw "); FormatR(S(sz), us.rStation, 5); PrintFSz();
   PrintF("       ; Stationary movement threshold  [0.0 is never \"S\"]\n");
@@ -4019,29 +4009,29 @@ static void FJPLCachePut(CONST char *szUrl, CONST PT3R *pt,
 // vectors. Similar to FSwissPlanet() but does a JPL Horizons Web query
 // instead of calling Swiss Ephemeris to compute the position.
 
-flag GetJPLHorizons(int id, real *obj, real *objalt, real *dir, real *dist,
-  real *diralt, real *dirlen, char *szOut)
+// Compose the Horizons query for one body at one instant. Split out of
+// GetJPLHorizons() so that it takes its instant and its site as ARGUMENTS
+// rather than reading ciCore and us: that is what lets a recorded reply be
+// replayed against the client offline, because a fixture is only worth
+// something if the question that produced it can be reproduced exactly.
+// EPHEMERIS_PLUGINS_PLAN.md phase 6h.
+//
+// The three instants are the query's own: t-5min, t, t+6min at a 5 minute
+// step, so one request returns exactly 3 rows and the rates below are a
+// finite difference across the outer two. That batching is why the fixture
+// corpus needs one request per body rather than one per body per instant.
+void SzUrlJPLHorizons(int id, CONST CI *pciBase, flag fTopo, real lonSite,
+  real latSite, real elvSite, char *szUrl, int cchUrl)
 {
-  char szUrl[cchSzLine*2], szLine[cchSzLine], szName[cchSzMax],
-    szMon[3][4], *pch, *pch2, ch;
+  char szLine[cchSzLine], szMon[3][4], *pch, *pch2, ch;
   CI ci[3];
-  PT3R pt[3];
-  FILE *file;
-  real sec[3], len[3], rT;
-  int hr[3], min[3], phase = -1, i;
+  real sec[3], rSec;
+  int hr[3], min[3], i;
   flag fSemicolon;
-
-  if (us.fNoNetwork) {    // Don't allow if -0n set.
-    if (!is.fNoEphFile) {
-      is.fNoEphFile = fTrue;
-      PrintWarning("Internet features are disabled.");
-    }
-    return fFalse;
-  }
 
   // Determine time range to get ephemeris for.
   for (i = 0; i < 3; i++) {
-    ci[i] = ciCore;
+    ci[i] = *pciBase;
     AddTime(&ci[i], 2, 0);     // Sanitize time if hour out of range
     if (i <= 0)
       AddTime(&ci[i], 2, -5);  // Subtract 5 minutes
@@ -4050,16 +4040,34 @@ flag GetJPLHorizons(int id, real *obj, real *objalt, real *dir, real *dist,
     sprintf2(S(szMon[i]), "%.3s", szMonth[ci[i].mon]);
     for (pch = szMon[i]; *pch; pch++)
       *pch = ChCap(*pch);
+    // Minute and second both come from ONE seconds-past-the-hour value,
+    // nudged once. They used to be computed from two different roundings
+    // of the same quantity -- the minute truncated from RFract()*60, the
+    // second from RFract()*3600 + rSmall -- and the two disagreed by a
+    // whole minute wherever the subtraction lost the last bits. 12:00
+    // minus five minutes is 11.916666666666666, whose RFract()*60 is
+    // 54.99999999999997, so the query asked for 11:54:00 while meaning
+    // 11:55:00. Both ends shifted, so the window kept its 11 minute
+    // span and its three rows at a 5 minute step -- and the MIDDLE row,
+    // the one the position is read from, landed one minute before the
+    // chart's own instant. Every Horizons position was a minute early;
+    // for the Moon that is about 33 arcseconds. The rates were unharmed,
+    // since they difference the outer two rows and that span is right
+    // either way, which is why nothing downstream ever looked wrong.
+    rSec = RFract(RAbs(ci[i].tim))*3600.0 + rSmall;
     hr[i] = NFloor(ci[i].tim);
-    min[i] = (int)(RFract(RAbs(ci[i].tim))*60.0);
-    sec[i] =  RMod(RFract(RAbs(ci[i].tim))*3600.0 + rSmall, 60.0);
+    min[i] = (int)(rSec / 60.0);
+    sec[i] = RMod(rSec, 60.0);
   }
 
   // Compose URL to download from internet.
-  if (us.fTopoPos) {
-    sprintf2(S(szLine), "COORD_TYPE= 'GEODETIC'&"
+  if (fTopo) {
+    // No space after the "=": it went out raw and unencoded, because the
+    // hand encoder below only expands ' and ;. A space is not legal in a
+    // query string, and the value Horizons then read began with one.
+    sprintf2(S(szLine), "COORD_TYPE='GEODETIC'&"
       "SITE_COORD='%lf,%lf,%lf'&",
-      -ciCore.lon, ciCore.lat, us.elvDef / 1000.0);
+      -lonSite, latSite, elvSite / 1000.0);
   } else
     *szLine = chNull;
   fSemicolon = FBetween(id, nMillion, nMillion*2-1);
@@ -4068,7 +4076,7 @@ flag GetJPLHorizons(int id, real *obj, real *objalt, real *dir, real *dist,
   // plain text, so the parse below is unchanged -- verified by fetching
   // both with identical parameters and diffing: same target line, same
   // CSV rows, same $$SOE marker.
-  sprintf2(S(szUrl), "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&"
+  sprintf2(szUrl, cchUrl, "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&"
     "COMMAND='%d%s'&"
     "OBJ_DATA='YES'&"
     "MAKE_EPHEM='YES'&"
@@ -4080,7 +4088,7 @@ flag GetJPLHorizons(int id, real *obj, real *objalt, real *dir, real *dist,
     "QUANTITIES='21,31'&"
     "CSV_FORMAT='YES'",
     fSemicolon ? id - nMillion : id, fSemicolon ? ";" : "",
-    !us.fTopoPos ? "500" : "coord@399", szLine,
+    !fTopo ? "500" : "coord@399", szLine,
     ci[0].yea, szMon[0], ci[0].day, hr[0], min[0], sec[0],
     ci[2].yea, szMon[2], ci[2].day, hr[2], min[2], sec[2]);
   for (pch = szUrl; *pch; pch++)
@@ -4095,7 +4103,7 @@ flag GetJPLHorizons(int id, real *obj, real *objalt, real *dir, real *dist,
     // the character unencoded rather than writing past the end.
     for (pch2 = pch; *pch2; pch2++)
       ;
-    if (pch2 + 2 >= szUrl + cchSzLine*2)
+    if (pch2 + 2 >= szUrl + cchUrl)
       continue;
     for (pch2 += 2; pch2 >= pch; pch2--)
       *pch2 = *(pch2 - 2);
@@ -4106,18 +4114,21 @@ flag GetJPLHorizons(int id, real *obj, real *objalt, real *dir, real *dist,
       pch[1] = '3'; pch[2] = 'B';
     }
   }
-  // A reply we already have is the fastest and politest kind.
-  if (FJPLCacheGet(szUrl, pt, S(szName)))
-    goto LProcess;
+}
 
-  GetURL(szUrl, szFileJPLCore);
 
-  // Process downloaded file.
-  file = FileOpen(szFileJPLCore, 1, NULL, 0);
-  if (file == NULL) {
-    // Error message printed inside FileOpen().
-    return fFalse;
-  }
+// Read one Horizons "format=text" reply into its three rows and the target
+// name. Takes an open stream rather than a filename so that a RECORDED
+// reply can be driven through the very same parser the client uses -- the
+// whole point of the split. Returns false when the reply does not carry
+// three rows, which is what a Horizons error page, a truncated download and
+// an unknown body all look like from here.
+flag FParseJPLHorizons(FILE *file, PT3R *pt, char *szName, int cchName)
+{
+  char szLine[cchSzLine], *pch;
+  int phase = -1, i;
+
+  *szName = chNull;
   loop {
     if (!FReadSzLineSkip(file, szLine, cchSzLine))
       break;
@@ -4136,19 +4147,48 @@ flag GetJPLHorizons(int id, real *obj, real *objalt, real *dir, real *dist,
     } else if (phase < 0 && FEqRgch(szLine, "Target body name: ", 18, fTrue)) {
       // Search for JPL name of body this ephemeris is for.
       i = 0;
-      for (pch = szLine+18; *pch && i < cchSzMax-1 &&
+      for (pch = szLine+18; *pch && i < cchName-1 &&
         !(pch[0] == ' ' && (pch[1] == ' ' || pch[1] == '(')); pch++)
         szName[i++] = *pch;
       szName[i] = chNull;
     }
   }
+  return phase >= 3;
+}
+
+
+flag GetJPLHorizons(int id, real *obj, real *objalt, real *dir, real *dist,
+  real *diralt, real *dirlen, char *szOut)
+{
+  char szUrl[cchSzLine*2], szName[cchSzMax];
+  PT3R pt[3];
+  FILE *file;
+  real len[3], rT;
+  int i;
+  flag fOk;
+
+  SzUrlJPLHorizons(id, &ciCore, us.fTopoPos, ciCore.lon, ciCore.lat,
+    us.elvDef, S(szUrl));
+  // A reply we already have is the fastest and politest kind.
+  if (FJPLCacheGet(szUrl, pt, S(szName)))
+    goto LProcess;
+
+  GetURL(szUrl, szFileJPLCore);
+
+  // Process downloaded file.
+  file = FileOpen(szFileJPLCore, 1, NULL, 0);
+  if (file == NULL) {
+    // Error message printed inside FileOpen().
+    return fFalse;
+  }
+  fOk = FParseJPLHorizons(file, pt, S(szName));
   fclose(file);
 #ifdef WINANY
   _unlink(szFileJPLCore);
 #else
   remove(szFileJPLCore);
 #endif
-  if (phase < 3) {
+  if (!fOk) {
     if (!is.fNoEphFile) {
       is.fNoEphFile = fTrue;
       PrintWarning("Failed to get positions from " szFileJPLCore);

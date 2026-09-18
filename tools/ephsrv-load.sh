@@ -63,7 +63,7 @@ else
   grep -q "evt=listen port=" "$SCRATCH/ephd.log" || { echo "LOAD FAIL: server did not start"; exit 1; }
 fi
 
-IDS=$(python3 -c "b=[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22]+list(range(10005,10100)); print(','.join(map(str,b[:$BODIES])))")
+IDS=$(python3 -c "b=[10,301,199,299,4,5,6,7,8,9,399,20002060,20005145,20000001,20000002,20000003,20000004]+list(range(20000005,20000100)); print(','.join(map(str,b[:$BODIES])))")
 LOOPS=$(sed -nE 's/.* evt=config .* loops=([0-9]+).*/\1/p' "$SCRATCH/ephd.log" 2>/dev/null || true)
 
 cpu_ticks() { awk '{print $14 + $15}' "/proc/$EPHD_PID/stat"; }
