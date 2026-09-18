@@ -20479,7 +20479,7 @@ static void TestEphSrvLiveQt()
   CI ciSav = ciCore, ciMainSav = ciMain;
   QString strBin, strEphe;
   QProcess proc;
-  QByteArray baLog;
+  QByteArray baLog, strUrlEnv;
   EPHSNAPSHOT snLocal, snSrv;
   char sz[cchSzMax], szDiff[cchSzMax];
   int port, iScen, cDiff, cWarn, cReq;
@@ -20487,6 +20487,24 @@ static void TestEphSrvLiveQt()
   Group("Ephemeris server, live parity");
   SetNoPopupQt(fTrue);
 
+  // ASTROLOG_EPHSRV_URL points this group at a server that is ALREADY
+  // RUNNING instead of starting astrolog-ephd. It exists for the
+  // cross-project work: the whole group is "cast the same chart through a
+  // v4 server and through the local Swiss files, and compare", which is
+  // exactly the application-level question the Prometheia project asked
+  // for, and there is no reason the server at the other end has to be
+  // ours. Their daemon serves the protocol; that is the point of it.
+  //
+  // The parity tolerance is NOT relaxed when this is set, deliberately.
+  // Against astrolog-ephd the comparison is bit-identical because both
+  // sides are the same Swiss; against a different engine it will not be,
+  // and the group will say so in the numbers rather than being told in
+  // advance what to forgive.
+  strUrlEnv = qgetenv("ASTROLOG_EPHSRV_URL");
+  if (!strUrlEnv.isEmpty()) {
+    printf("  (ASTROLOG_EPHSRV_URL: using the server already at %s, not "
+      "starting one)\n", strUrlEnv.constData());
+  } else {
   strBin = QCoreApplication::applicationDirPath() + "/astrolog-ephd";
   if (!QFileInfo(strBin).isExecutable()) {
     printf("  skipped: %s is not built (make ephsrv needs the thread-safe "
@@ -20565,6 +20583,7 @@ static void TestEphSrvLiveQt()
   Check(baLog.contains(" evt=ephe path=") &&
     !baLog.contains(" evt=ephe path=\"\""),
     "the server found the ephemeris directory");
+  }
 
   // The chart: a fixed UT instant at a fixed place, no zone, no DST.
   OraclePinUtQt(1990, 6, 15, 12.0);
@@ -20575,7 +20594,10 @@ static void TestEphSrvLiveQt()
   // form failed that cast at once (EPHEMERIS_REVIEW.md C3).
   EphSrvFinalizeQt();
   ClearWinSrvTestQt();
-  sprintf2(S(sz), "localhost:%d", port);
+  if (!strUrlEnv.isEmpty())
+    sprintf2(S(sz), "%s", strUrlEnv.constData());
+  else
+    sprintf2(S(sz), "localhost:%d", port);
   FEphParamSet(epServerUrl, sz);
   EphSourceSet("swiss");
   CastChart(0);
