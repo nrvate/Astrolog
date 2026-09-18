@@ -19023,10 +19023,18 @@ static void TestPrometheiaOracleQt()
 
   // Leg 8: a planetary orbit point. Jupiter's ascending node through a
   // customized object (type 2, the Astrolog object index; point 1 is
-  // the north node): Swiss's planetary nodes carry aberration and
-  // deflection and NO light time (work log 0c), so the tight tier is
-  // against the plugin's mask 6, and mask 7 differs only by the
-  // light-time convention's ~0.3".
+  // the north node). Since prometheia's cf889eb (settled jointly for
+  // protocol 4; their docs/ORBIT-POINTS.md), that engine applies the
+  // correction bits to an orbit point exactly as to a body, so the
+  // plugin's node and Swiss's (its own treatment: aberration and
+  // deflection, never light time, per work log 0c) now differ by the
+  // correction treatment itself, ~10.5" on Jupiter -- their measured
+  // table puts light time at 0.0003" and the observer's velocity at
+  // 20.837" here, and the plugin's masks 6 and 7 differ by only 0.008".
+  // A same-subset cross-engine comparison is a courtesy, not a
+  // guarantee (3.5a), so both legs pin the measured figure with margin,
+  // against their engine at df0ae42; a leg tripping here again means
+  // the engine moved, which is the tripwire doing its work.
   {
     Borrow bSwiss(us.nSwissEph, nMode);
     Borrow bTyp(rgTypSwiss[oNorm - custLo], 2);
@@ -19040,15 +19048,15 @@ static void TestPrometheiaOracleQt()
       if (fCast) {
         sep = ROracleSepQt("Jupiter asc node, Swiss vs plugin mask 6",
           lonS, latS, lonP, latP);
-        Check(sep < 1.0, "Jupiter's node, same subset both sides, within "
-          "1\" (%.4f\")", sep);
+        Check(sep < 11.0, "Jupiter's node, cross-engine courtesy tier "
+          "(%.4f\")", sep);
       }
       fCast = FPromOneRowQt(eph::kTimeUT1, jd, &pfNode7, eph::kObjOrbitPoint,
         5, 0, 1, NULL, &lonP, &latP, &dAyan, &dT);
       if (fCast) {
         sep = ROracleSepQt("Jupiter asc node, Swiss vs plugin mask 7",
           lonS, latS, lonP, latP);
-        Check(sep < 2.0, "the planetary node's light-time convention "
+        Check(sep < 11.0, "the node's cross-engine courtesy tier, mask 7 "
           "(%.4f\")", sep);
       }
     } else
