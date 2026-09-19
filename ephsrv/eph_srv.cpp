@@ -1565,6 +1565,29 @@ static void ComputeObjectRows(swe_ctx *ctx, const eph::Request &req, uint32_t iO
     }
     if (c.kind == eph::swiss::kCallFixstar && !fRect && xx[2] > 1e8)
       m.flags |= eph::kMetaNoDistance;
+    // 3.1/3.5: every value this server emits is finite, or the row is the
+    // CANONICAL NaN in every column. Swiss can answer a finite-but-absurd
+    // question with a non-finite number -- a topocentric site 563 million
+    // kilometres below the Earth's centre is on the wire legally today -- and
+    // the row then carried a NEGATIVE NaN beside finite rates: a
+    // non-canonical NaN, half a failed row, and rowsOk counting it as a
+    // success. Three violations of our own spec in one row.
+    //
+    // Found because the floats drop made our own client reject it. Before
+    // that check the garbage crossed the wire and was believed. The other
+    // project found the same class of bug in their server the same way, from
+    // the same drop, which is the best argument for it that either of us has.
+    {
+      bool fFinite = true;
+      for (int iv = 0; iv < 6; iv++)
+        if (!std::isfinite(xx[iv])) { fFinite = false; break; }
+      if (!fFinite) {
+        for (uint32_t kk = 0; kk < nCols; kk++) dst[kk] = NAN;
+        if (m.errCode == eph::kOErrNone) m.errCode = eph::kOErrNumerical;
+        if (m.firstFailedRow == eph::kRowNone) m.firstFailedRow = r;
+        continue;
+      }
+    }
     memcpy(dst, xx, sizeof(xx));
     uint32_t k = 6;
     if (e->columnsPresent & eph::kColAyanamsa) {
