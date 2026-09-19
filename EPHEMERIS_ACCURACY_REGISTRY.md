@@ -236,7 +236,46 @@ The other 24 stars are within **0.56″** on both servers over the same two
 centuries (worst: Antares at 1900), and within 0.31″ at 2000. The two servers
 agree with each other to **0.007″** everywhere.
 
-**Why this is not a defect and is recorded anyway.** The error is smallest at
+**BEING ADOPTED.** Approved by the maintainer 2026-09-18. Ephemeris
+Prometheia moves these four on their orbits and we are following. The elements
+and the arithmetic landed at `7c05f7f`, netted against ORB6's own published
+ephemeris (15 epochs, θ and ρ within 0.01″, which is ORB6's printed rounding).
+Applying the offsets to star positions is the remaining piece.
+
+**Three conventions that have to be right, all found by a check failing rather
+than by reading.** Each cost an engine a real error:
+
+1. **ORB6's published θ is at the equinox of DATE; the catalogue's node Ω is at
+   the equinox its record names.** The difference is the precession of position
+   angle, 0.0056°/yr × sin α × sec δ — 0.13–0.19° over 25 years, and it
+   **changes sign** between the northern and southern systems, which is how it
+   was identified, since rounding cannot do that. Our check applies it; **the
+   offset applied to a star must not**, because ours is wanted in one fixed
+   frame and re-precessing the node per epoch puts the orbit in a frame that
+   moves.
+2. **The offset is laid in the tangent plane at the star's position AT THE
+   DATE, not at its catalogue place.** Proper motion turns the local north by
+   Δα·sin δ — 0.065° for α Cen by 2025, about 10 mas at the present separation
+   and more as it opens. Prometheia found this when they added θ to their own
+   check after we flagged the first convention; their separations-only check
+   could not see it, because ρ is exactly the coordinate neither convention
+   touches.
+3. **Do not do both.** Propagating a *shifted* J2000 place with ERFA's `pmsafe`
+   already keeps the offset aligned with the date's north, because the shifted
+   point moves at the same RA/Dec rates. Adding an explicit north-turn on top
+   double-counts, whichever sign is chosen.
+
+**And the per-star rule, which is not uniform**, because it depends on what the
+catalogue line already contains:
+
+- **Sirius A, Procyon A** — Hipparcos *orbital* solutions, so the line is
+  barycentric: add the whole offset from the barycentre.
+- **α Cen A** — a *component* solution at 1991.25, so the line already carries
+  the star's own motion there: add only the curvature the straight line misses.
+- **α Cen B** — placed from A plus the relative orbit, because B's own solution
+  is poor (±20–26 mas/yr).
+
+**Why this was not a defect and is recorded anyway.** The error is smallest at
 2000 and grows both ways, which is the signature of a straight line fitted
 through a curve at its catalogue epoch — not of an engine being wrong. Two
 independent implementations share it because they share the *model*, not the
