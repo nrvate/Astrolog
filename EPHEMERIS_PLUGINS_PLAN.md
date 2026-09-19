@@ -77,6 +77,45 @@ version 3, and this section is the design authority behind it.
   depends on what came before it, which is now closed in the harness
   itself.
 
+- **STATUS (2026-09-19, accuracy work; nothing structural changed).** The
+  protocol, the plugins and the selection are where the entry below left
+  them. What this day added was ACCURACY and the checks that hold it, in
+  collaboration with Ephemeris Prometheia, whose cross-test found most of
+  it. Ten commits, `13d3e5e`..`1b4e826`, all gated.
+
+  **Landed.** Registry 2.4's binary-star orbits are applied
+  (`ephsrv/ephstarorb.h`, shared by both Swiss copies like
+  `ephsidplane.h`), agreeing with their independent engine to 0.40 mas on
+  Sirius and 0.29 on alpha Cen A.
+
+  **Five defects, each fixed with a net proven to fail without it.** The
+  stars took Swiss's plane-2 origin while the planets took ours, 31.5"
+  apart in one chart (`1ecb8b9`); the eleven instant-defined zodiacs
+  reported a longitude that moved and a rate that did not (`46cf57d`);
+  the Moon's orbit points were answered from another body's centre at
+  impossible distances (`d3d8d76`); a retryable BUSY was treated as a
+  dead window, so a large chart fell back to local Swiss and said so
+  (`02bb758`); and the rates bound this server ADVERTISES was 1351 times
+  too small (`429c764`).
+
+  **Two gates could not see their own subject.** `ephsrv-golden.sh` had
+  no fixed stars at all and now has sixteen legs plus the inverse
+  assertion for the four with orbits (`3ff4cab`); and the configuration
+  the documentation tells people to run was gated nowhere, which is where
+  the BUSY defect had been hiding (`19f3cea`).
+
+  **Three findings are Swiss's, not ours**, measured and recorded rather
+  than fixed: registry 2.6, 2.7 and 2.8. The last generalises the other
+  two -- Swiss's rate columns are the derivative of the geometric,
+  mean-frame quantity while its positions are the transformed one -- and
+  the nutation case is proved in closed form.
+
+  **Open, and the maintainer's**: whether to correct the mean-apsis rate
+  column, which Swiss fills with a LATITUDE and which `ephsrv-golden.sh`
+  pins bit-exact on four legs. Phase 6h is deferred with a pickup
+  checklist; `tools/swetest-oracle.sh` has no fixed-star legs, which is
+  the same gap golden had and is not yet closed.
+
 - **STATUS (2026-09-18, phase 6 substantially landed).** Phases 2, 3, 4,
   5 and 7 are on this branch and gated, and phase 6 is most of the way
   through: **the server is a registered source reached through the chain,

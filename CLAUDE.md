@@ -71,11 +71,14 @@ Work happens on branch **`qt`**.
   The server links the thread-safe Swiss Ephemeris fork at
   `/shares/swisseph` (a sibling repo, not vendored), so a checkout
   without it builds everything else and the `ephem-server-live` suite
-  group skips itself with a printed reason. Its eight gates
+  group skips itself with a printed reason. Its nine gates
   (`tools/ephsrv-golden.sh`, `-soak.sh`, `-cache.sh`, `-bench.sh`,
-  `-robust.sh`, `-tls.sh`, `-ops.sh`, `-limits.sh`, and `-image.sh` where
-  there is Docker) are
-  run by hand, like everything else here.
+  `-robust.sh`, `-tls.sh`, `-ops.sh`, `-limits.sh`, `-rates.sh`, and
+  `-image.sh` where there is Docker) are
+  run by hand, like everything else here. `-rates.sh` is the newest
+  (2026-09-19) and asks the one question the others never did: whether a
+  row's three RATE columns describe its own three positions. Its oracle
+  is the server's own answers, so nothing outside is consulted.
 
 The port lives in `qtdriver.cpp` (window, canvas, menus) and
 `qtdialog.cpp` (dialogs), selected with `-DQT`, standing in for the
@@ -1120,6 +1123,18 @@ keystroke it doesn't handle. When Qt does need it, start it as
 On a private Xvfb display, `import -window root` is fine.
 
 ## CI, and what it will not let you do
+
+**`make check` and `./run-qt-tests.sh` are DIFFERENT CONFIGURATIONS.**
+`make check` runs the suite under `-Yi1 ephem`; the command this file
+documents above runs it under `-i nrvate.as`, which is what the hard rule
+names. For most of this project's life only the first was gated, and the
+second was failing: a cast needs one request per window, the server holds
+four unread, and nrvate.as casts enough objects to need five where
+`-Yi1 ephem` needs three -- so a retryable BUSY treated as a dead window
+(fixed 2026-09-19) could not be reached by the gated configuration at
+all. `make check-full` now runs the suite under both, 149 s for the
+second; `make check` still runs only the first, because trebling the
+pre-commit command is how a check stops being run.
 
 **`make check` is the pre-commit command**, since nothing runs on a
 push any more: about a minute and a half on this machine (measured

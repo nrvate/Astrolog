@@ -2,8 +2,9 @@
 
 The Swiss Ephemeris is this project's oracle: `tools/swetest-oracle.sh` asks
 it the same questions Astrolog asks, `tools/ephsrv-golden.sh` requires
-`astrolog-ephd` to match the fork bit for bit over 149 comparisons, and the
-numeric oracle group in the suite compares against the library directly.
+`astrolog-ephd` to match the fork bit for bit over 161 comparisons -- which
+include fixed stars since 2026-09-19, and did not before -- and the numeric
+oracle group in the suite compares against the library directly.
 That arrangement is deliberate and it stays.
 
 But **being bit-exact with Swiss is a means, not the goal.** A differential
