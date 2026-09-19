@@ -1,6 +1,6 @@
 # file	direction	type	expect	note
 # set-sha256 is sha256 over each .hex file's bytes, in the order of the rows below
-# set-sha256 cdbd7438570f29ce6ec1d947e7a4210cd3931f413c653801033f14a42df5aef6
+# set-sha256 07438c7fa6121d3ce558616a9c83f70d5d90b726a42b6d029e9eb91daedd9929
 hello_min.hex	c2s	1	ok	no token, no caps
 hello_token_caps.hex	c2s	1	ok	token and f32|cancel|lookup|segments caps
 hello_future_client.hex	c2s	1	ok	a version-9 client: envelope 9, protoMax 9, protoMin 4; the server answers v4
@@ -23,6 +23,10 @@ request_user_zodiac.hex	c2s	3	ok	user ayanamsha anchored at J2000
 request_segments.hex	c2s	3	ok	segments over 30 days, rectangular, 0.1 arcsec target
 request_pins.hex	c2s	3	ok	precession model plus critical ephemeris and catalog pins, ascending tags
 data_chunk0_meta.hex	s2c	4	ok	f64, sigma+ayanamsa columns, a partial object with a NaN row
+site_height_below_centre.hex	c2s	3	malformed	a topocentric site 563 million km below the Earth's centre -- the fuzzer's reproducer, and perfectly FINITE, which is why a finiteness check would not have caught it
+site_height_polar_radius.hex	c2s	3	malformed	exactly the WGS-84 polar radius below sea level: the observer is AT the centre, which is not above it
+site_height_deep_mine.hex	c2s	3	ok	4 km below sea level: deeper than any mine, and legitimate
+site_height_spacecraft.hex	c2s	3	ok	400 km up: the protocol does not adjudicate how high an observer may be, so there is no upper bound to trip
 data_inf_f64.hex	s2c	4	malformed	+Inf in one column: 3.1 says floats MUST be finite
 data_nan_noncanonical_f64.hex	s2c	4	malformed	NaN 0x7FF8000000000001: a NaN payload other than the canonical one
 data_nan_partial_row.hex	s2c	4	malformed	the CANONICAL NaN, but in one column of a row and not the rest: 3.5 says a failed row is NaN in every column, so no field permits this one

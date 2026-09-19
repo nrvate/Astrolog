@@ -90,8 +90,8 @@ version 3, and this section is the design authority behind it.
   | 6c the Qt transport, bound at startup | landed `c1c221b` |
   | 6d ComputeEphem's two `#ifdef QT` server branches deleted | landed `6ed60d5` |
   | 6e the required-server dialog, its ladder and exit 86 deleted | landed `05a0c21` |
-  | 6f the console transport (`eph_wsclient.cpp`'s framing, reusable) | **not started** -- the framing is in a PROGRAM, not a library, and ten gate scripts drive that program |
-  | 6g the WinHTTP transport (Win32) | **not started** -- low value while Qt is the shipped interface on every platform |
+  | 6f the console transport (`eph_wsclient.cpp`'s framing, reusable) | **DECLINED 2026-09-18 by the maintainer.** Not an omission: Qt is the shipped interface on every platform, and the console build is the CLI and the matrices' oracle, where nobody has asked to reach a remote ephemeris. The extraction cost is real -- the framing is in a PROGRAM, not a library, and ten gate scripts drive that program |
+  | 6g the WinHTTP transport (Win32) | **DECLINED 2026-09-18 by the maintainer**, same reasoning, and it additionally needs a Windows runner to test, which is the slowest loop in this project |
   | 6h the `horizons` plugin | **not started; no longer blocked.** The seam, the recorded corpus and the offline replay harness are landed (work-log item 22), and the rewrite is specified there in three steps. Four defects were found getting there, one of them a one-minute error in every position Horizons has ever returned |
 
   Phase 8's three reviews are done and their thirteen findings fixed
@@ -111,6 +111,8 @@ version 3, and this section is the design authority behind it.
 - **Where 6f-6h stand, so nobody re-surveys.** `eph_wsclient.cpp` is a
   standalone PROGRAM with `main()`, not a library, and its socket and
   WebSocket framing are file-static -- so 6f is an extraction before it
+  (both are DECLINED as of 2026-09-18; the survey below is kept because a
+  decision needs its evidence, not because the work is queued)
   is a transport, and ten gate scripts drive that program and must not
   regress. 6g is low value while Qt is the shipped Windows interface and
   the Win32 build is only the oracle. 6h is the larger one: the Horizons

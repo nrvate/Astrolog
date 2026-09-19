@@ -438,6 +438,34 @@ def fixtures():
     def onerow(v, prec=0):
         return data_chunk(0, 0, 1, 1, prec, 0b101, 0, m1, [[list(v)]])
     fin = [1.0, 2.0, 3.0, 0.1, 0.2, 0.3]
+    # ---- 3.4: a topocentric site has to be somewhere (the site drop) ------
+    # The height was bounded by nothing, so a site below the Earth's centre
+    # was well formed -- and both servers answered it with a non-canonical
+    # NaN and called it a success. The two OK fixtures are the ones that
+    # matter: a bound written carelessly rejects a deep mine and a satellite,
+    # and a check that only rejects is satisfied by a codec that rejects
+    # everything.
+    def sited(h):
+        return envelope(REQUEST, delivery() + question(
+            grid_block(1, J2000, 0.0, 0, 1),
+            [profile(observer=1, site=(0.0, 0.0, h))], [obj_body(10)]),
+            request_id=9)
+    add("site_height_below_centre", "c2s", REQUEST, "malformed",
+        "a topocentric site 563 million km below the Earth's centre -- the "
+        "fuzzer's reproducer, and perfectly FINITE, which is why a finiteness "
+        "check would not have caught it",
+        sited(-563224831328256.0))
+    add("site_height_polar_radius", "c2s", REQUEST, "malformed",
+        "exactly the WGS-84 polar radius below sea level: the observer is AT "
+        "the centre, which is not above it",
+        sited(-6356752.0))
+    add("site_height_deep_mine", "c2s", REQUEST, "ok",
+        "4 km below sea level: deeper than any mine, and legitimate",
+        sited(-4000.0))
+    add("site_height_spacecraft", "c2s", REQUEST, "ok",
+        "400 km up: the protocol does not adjudicate how high an observer may "
+        "be, so there is no upper bound to trip",
+        sited(400000.0))
     add("data_inf_f64", "s2c", DATA, "malformed",
         "+Inf in one column: 3.1 says floats MUST be finite",
         envelope(DATA, onerow([bits64(0x7FF0000000000000)] + fin[1:]), request_id=8))
