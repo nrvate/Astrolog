@@ -4298,6 +4298,26 @@ flag FSwissStar(char *sz, real jd, real *rg)
   SwissEnsurePath();
   SwissStarSpec(&ss);
   iflag = ss.iflag;
+  // "-Ys", the solar system plane, EXACTLY AS FSwissPlanet() does it: A.8's
+  // plane 2 is this program's own arithmetic since registry 4.1, so Swiss is
+  // asked tropically in the mean ecliptic of J2000 and ApplySidPlaneLocal()
+  // does the plane below.
+  //
+  // THE STARS WERE NOT GETTING THAT FIX. This function passed SEFLG_SIDEREAL
+  // with the sid mode set to SE_SIDBIT_SSY_PLANE straight through, so Swiss
+  // computed the plane and Swiss's plane-2 origin is the one 4.1 exists to
+  // remove -- while every planet in the same chart went the other way. The two
+  // disagreed by 31.469 arcsec on Aldebaran at J2000, IN LONGITUDE ONLY, the
+  // latitude identical to the last digit, which is the signature of a zero
+  // point and not of a plane. A chart is supposed to be internally consistent
+  // before it is anything else.
+  //
+  // Nothing saw it because nothing compared a star with a planet: the suite's
+  // server-versus-local leg asks about bodies, the numeric oracle asks Swiss
+  // the same question this asked, so it agreed, and tools/ephsrv-golden.sh has
+  // no star legs at all.
+  if (us.fSidereal && us.fSidereal2)
+    iflag = (iflag & ~(int32)SEFLG_SIDEREAL) | SEFLG_J2000 | SEFLG_NONUT;
   // swe_fixstar2() rewrites the name to the star's canonical form in
   // place, and the callers read it back -- that rewrite IS the display
   // name of a star enumerated by number -- so the caller's own buffer
@@ -4307,8 +4327,14 @@ flag FSwissStar(char *sz, real jd, real *rg)
   // Registry 2.4: the four stars whose photocentre swings around an
   // unseen companion, which a catalogue's linear proper motion cannot
   // follow. The server does this at its own Swiss call, out of the same
-  // header, so the application and astrolog-ephd cannot drift.
-  return FEphStarOrbCall(sz, jd, iflag, rg);
+  // header, so the application and astrolog-ephd cannot drift -- and, like
+  // the server, BEFORE the plane below, so the offset goes through the same
+  // one rotation the star does.
+  if (!FEphStarOrbCall(sz, jd, iflag, rg))
+    return fFalse;
+  if (us.fSidereal && us.fSidereal2)
+    ApplySidPlaneLocal(rg);
+  return fTrue;
 }
 
 

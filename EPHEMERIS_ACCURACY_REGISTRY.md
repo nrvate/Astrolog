@@ -551,6 +551,31 @@ leg measures that gap rather than hiding it, and requires it to be an origin
 shift and nothing else, so it cannot drift unnoticed. `ephsrv/ephsidplane.h`
 exists so the fix is the same rotation rather than a second copy of it.
 
+**CLOSED for the bodies, and then the STARS turned out to be a separate half,
+closed 2026-09-18.** `FSwissPlanet()` took the new origin; `FSwissStar()` did
+not. It handed `SEFLG_SIDEREAL` with sid mode `SE_SIDBIT_SSY_PLANE` straight to
+Swiss, so in one `-Ys` chart **the stars used Swiss's plane-2 origin and the
+planets used ours** — 31.47″ apart on Aldebaran at J2000, in longitude alone,
+the latitude identical to the last digit. A chart has to be internally
+consistent before it is accurate.
+
+Nothing saw it because nothing compared a star against anything but Swiss asked
+the same way: the numeric oracle asked Swiss exactly what `FSwissStar()` asked,
+so it agreed; `tools/ephsrv-golden.sh` has no star legs; and the
+server-versus-local leg casts bodies, with the stars restricted by default. **A
+scenario added to that leg passed with the bug deliberately put back**, because
+clearing the restriction did not make the scenario cast a star — so it was
+thrown away rather than tuned, and the check moved to the oracle group where a
+number can be held against something outside this repository.
+
+The net is **Ephemeris Prometheia's own plane-2 longitudes** (`510e1ab`):
+Aldebaran, Polaris and Spica at three instants, geocentric apparent, from a
+cleanroom engine sharing no code, catalogue or ephemeris with this one. Three
+declinations on purpose — +66°, −3.6° and −4.5° — because an origin shift is
+the same arc everywhere and a wrong *plane* would not be. Our fixed path sits
+within **0.04″** of theirs; with the fix removed the check reports **31.511″ in
+longitude and 0.019″ in latitude**, identically for all three.
+
 **What makes it more than a one-line change, found by reading before writing
 it.** Astrolog's sidereal handling is not in one place, and the pieces
 interact:

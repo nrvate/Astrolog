@@ -14278,6 +14278,72 @@ static void TestNumericOracleQt()
     us.fProgress == fProgSav,
     "the oracle restored every borrowed setting (%d restriction slots "
     "differ)", cBad);
+  // A FIXED STAR ON THE SOLAR SYSTEM PLANE, AGAINST AN ENGINE THAT IS NOT
+  // SWISS. This belongs in the oracle rather than beside the other sidereal
+  // legs for the reason the group exists: every other check of a star here
+  // asks Swiss the same question Astrolog asks it, so a star computed the
+  // wrong WAY still agrees with itself.
+  //
+  // Registry 4.1: A.8's plane 2 is this program's own arithmetic, because
+  // Swiss carries the equinox of t0 onto the plane and walks the ayanamsa
+  // there, giving the plane an origin that is not the zodiac's.
+  // FSwissPlanet() asks Swiss tropically in the mean ecliptic of J2000 and
+  // rotates with ApplySidPlaneLocal(). FSwissStar() did NOT -- it handed
+  // SEFLG_SIDEREAL with sid mode SE_SIDBIT_SSY_PLANE straight to Swiss, so
+  // under "-Ys" the STARS took Swiss's plane-2 origin while every PLANET in
+  // the same chart took this program's, 31.47" apart on Aldebaran.
+  //
+  // The fixture is Ephemeris Prometheia's prometheiad at 510e1ab: geocentric
+  // apparent ecliptic longitude and latitude on the invariable plane with the
+  // Fagan-Bradley anchor, from a cleanroom engine that shares no code and no
+  // catalogue with this one. The fixed plane ignores the frame, so nutation
+  // does not enter.
+  //
+  // THE THREE STARS SEPARATE THE TWO FAILURE MODES. An origin shift is the
+  // same arc at every declination; a wrong PLANE is not. Polaris at +66 and
+  // Spica at -3.6 would diverge by quite different amounts if the plane
+  // itself were wrong, and the defect this holds moves all three by 31.5".
+  {
+    static CONST char *rgszStarPl[] = {"Aldebaran", "Polaris", "Spica"};
+    static CONST real rgjdStarPl[] = {2415020.5, 2451545.0, 2488070.0};
+    static CONST real rgLonStarPl[3][3] = {
+      { 44.941542252849,  67.278258099795, 179.106440643122},
+      { 44.942472784996,  67.279419687545, 179.105556851111},
+      { 44.943383209557,  67.280571524596, 179.104714076773}};
+    static CONST real rgLatStarPl[3][3] = {
+      { -4.493578722, 66.573048307, -3.622342813},
+      { -4.499038455, 66.571748296, -3.623573325},
+      { -4.504498454, 66.570487201, -3.624803288}};
+    Borrow bSidPl(us.fSidereal, fTrue);
+    Borrow bSid2Pl(us.fSidereal2, fTrue);
+    real rWorstPl = 0.0, rWorstPlAlt = 0.0;
+    int iS, iJ, cBadPl = 0;
+
+    for (iJ = 0; iJ < 3; iJ++)
+      for (iS = 0; iS < 3; iS++) {
+        real xxPl[6], dLon, dLat;
+        char szStarPl[cchSzDef];
+
+        sprintf2(S(szStarPl), "%s", rgszStarPl[iS]);
+        if (!FSwissStar(szStarPl, rgjdStarPl[iJ], xxPl)) {
+          cBadPl++;
+          continue;
+        }
+        dLon = RAbs(MinDifference(rgLonStarPl[iJ][iS], xxPl[0])) * 3600.0;
+        dLat = RAbs(xxPl[1] - rgLatStarPl[iJ][iS]) * 3600.0;
+        if (dLon > rWorstPl) rWorstPl = dLon;
+        if (dLat > rWorstPlAlt) rWorstPlAlt = dLat;
+      }
+    // Two engines, two star catalogues and two ephemerides: 0.04" on
+    // Aldebaran is what they actually differ by, so 1" is loose enough to be
+    // about the zero point and nothing else, and 31 times tighter than the
+    // defect.
+    Check(cBadPl == 0 && rWorstPl < 1.0 && rWorstPlAlt < 1.0,
+      "a star on the solar system plane starts where the other engine says "
+      "(%d failed, worst %.3f\" lon, %.3f\" lat)",
+      cBadPl, rWorstPl, rWorstPlAlt);
+  }
+
   seedList.Verify("oracle");
   ciCore = ciCoreSav; ciMain = ciMainSav;
   CastChart(1);                // Leave real positions for the rest.

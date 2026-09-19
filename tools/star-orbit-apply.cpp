@@ -27,18 +27,20 @@
 // differ by that, forever, with or without an orbit. The OFFSET is what the
 // model specifies and the only thing both engines can be held to.
 //
-// ALPHA CEN A IS DELIBERATELY NOT GRADED, and that is the one open item.
-// Their split is 1.13/0.97 solar masses -- Pourbaix & Boffin 2016 -- while the
-// elements both engines use are Akeson et al. 2021, which publishes its own
-// masses, 1.0788 +/- 0.0029 and 0.9092 +/- 0.0025, from the same fit. Mixing a
-// mass ratio into another paper's elements is the thing to avoid, so this side
-// uses Akeson's. It is worth 185 mas at 1900 and 142 at 2100, which is far too
-// big to round away: the difference is PRINTED here at every epoch so the
-// decision stays visible until one side moves. Everything else agrees to under
-// a milliarcsec.
+// ALPHA CEN A WAS THE ONE UNGRADED ROW AND IS NOW GRADED, which is worth
+// keeping because it is how the disagreement got resolved rather than split.
+// Their first fixture split alpha Cen 1.13/0.97 solar masses -- Pourbaix &
+// Boffin 2016 -- while the elements BOTH engines use are Akeson et al. 2021,
+// which publishes its own masses from the same fit, 1.0788 +/- 0.0029 and
+// 0.9092 +/- 0.0025. A mass ratio taken from one paper and elements from
+// another is the thing to avoid, so this side used Akeson's and PRINTED the
+// difference at every epoch instead of grading it: 185 mas at 1900, far too
+// big to round away, and a tolerance would have swallowed it silently.
 //
-// The relative orbit is graded, because it carries no mass ratio at all and so
-// is the part of alpha Cen both sides can be held to today.
+// They checked the paper, found its Table 8 carries exactly ORB6's Ake2021
+// elements beside those masses, and moved to the Akeson fraction 0.54266 at
+// their 510e1ab. The rows below are that run. Worst disagreement 0.293 mas,
+// so the row is held like the others now.
 
 #include <math.h>
 #include <stdio.h>
@@ -73,9 +75,9 @@ static const FIXTURE rgFixture[] = {
 };
 #define cFixture (int)(sizeof(rgFixture) / sizeof(rgFixture[0]))
 
-// Their alpha Cen A, for printing the mass-ratio gap rather than grading it.
-static const double rgAcenAE[cYear] = { -4152.059, 0.0, -337.302, 982.444, 155.267 };
-static const double rgAcenAN[cYear] = { -18678.395, 0.0, -442.066, 13532.640, 14324.522 };
+// Their alpha Cen A at 510e1ab, on the Akeson mass fraction.
+static const double rgAcenAE[cYear] = { -4111.027, 0.0, -333.969, 972.735, 153.733 };
+static const double rgAcenAN[cYear] = { -18493.807, 0.0, -437.697, 13398.904, 14182.960 };
 
 // Their B-minus-A in A's tangent plane, arcsec. No mass ratio enters it.
 static const double rgRelE[cYear] = { -10.7258, -11.0951, -9.5383, -7.6724, -1.1585 };
@@ -216,15 +218,19 @@ int main(int argc, char **argv)
            "B - A", rgYear[j], relE, relN, dE, dN, bad ? "  <-- BAD" : "");
   }
 
-  printf("\nalpha Cen A -- PRINTED, NOT GRADED: the open mass-ratio question.\n"
-         "Akeson 2021 (1.0788/0.9092, the elements' own paper) here against\n"
-         "Pourbaix & Boffin 2016 (1.13/0.97) there. Milliarcsec.\n");
+  printf("\nalpha Cen A -- graded since both sides took the mass ratio from\n"
+         "the elements' own paper, Akeson 2021 Table 8. Milliarcsec.\n");
   printf("%-10s %9s %11s %11s %9s %9s\n",
-         "", "epoch", "east", "north", "theirs dE", "dN");
+         "", "epoch", "east", "north", "dE", "dN");
   for (j = 0; j < cYear; j++) {
     if (!FOffsetOf("Rigil Kentaurus", rgYear[j], &e, &n)) { fail++; continue; }
-    printf("%-10s %9.2f %11.3f %11.3f %9.1f %9.1f\n", "a Cen A", rgYear[j],
-           e, n, e - rgAcenAE[j], n - rgAcenAN[j]);
+    double dE = e - rgAcenAE[j], dN = n - rgAcenAN[j];
+    int bad = fabs(dE) > 1.0 || fabs(dN) > 1.0;
+    if (fabs(dE) > worst) worst = fabs(dE);
+    if (fabs(dN) > worst) worst = fabs(dN);
+    fail += bad;
+    printf("%-10s %9.2f %11.3f %11.3f %9.3f %9.3f%s\n", "a Cen A", rgYear[j],
+           e, n, dE, dN, bad ? "  <-- BAD" : "");
   }
 
   // -- the frame carrying, against an angle no frame can change ------------
