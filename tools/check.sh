@@ -9,9 +9,10 @@
 # TWO MODES, because one command cannot be both. The fast one is what you
 # run after an edit: the generated tables, the audits, the three builds
 # your change can actually break, and the suite. The full one adds the
-# other two toolchains, a second run of the whole suite against Qt6, and
-# the slower audits -- worth minutes before a release, not after every
-# edit. Running the slow one by reflex is how a check stops being run.
+# other two toolchains, a second run of the whole suite against Qt6, a
+# third under the maintainer's own settings file, and the slower audits --
+# worth minutes before a release, not after every edit. Running the slow
+# one by reflex is how a check stops being run.
 #
 # CI became tag-only on 2026-09-05, so nothing runs these for you any
 # more. This is the list, in the order that fails fastest: the generated
@@ -229,6 +230,38 @@ if tools/ci-run-suite.sh 600 $SUITE_TMP/check-suite.log \
   grep -hoE '^PASS: .*' $SUITE_TMP/check-suite.log | tail -1
 else
   echo FAILED; tail -20 $SUITE_TMP/check-suite.out | sed 's/^/    /'; fail=1
+fi
+# THE SAME SUITE UNDER THE MAINTAINER'S OWN SETTINGS, which is a DIFFERENT
+# CONFIGURATION and was gated nowhere. The line above runs "-Yi1 ephem";
+# QT_TESTING.md and this project's own documentation tell a person to run
+# ./run-qt-tests.sh, which runs "-i nrvate.as". Only one of the two was ever
+# checked, and the ungated one was failing.
+#
+# What was hiding in the gap: ERROR 9 (busy) treated as a dead window, so a
+# cast needing more windows than the server holds unread fell back to local
+# Swiss and raised a warning box. It needs five windows under nrvate.as and
+# three under "-Yi1 ephem", so the gated configuration could not reach it.
+# Fixed at 02bb758; this is what would have caught it.
+#
+# IN THE FULL LANE AND NOT THE FAST ONE, on measurement rather than taste:
+# this run takes 149 s against the whole fast check's 92, because nrvate.as
+# points at a 887,000-file ephemeris and the path lookups dominate. Trebling
+# the pre-commit command is not worth it; a release paying 149 s is.
+if [ "$mode" = full ]; then
+  printf '%-34s ' "the suite, under nrvate.as"
+  if [ ! -f nrvate.as ]; then
+    echo "skipped -- no nrvate.as in this checkout"
+  elif ! grep -q '^-Yi1 "/swe"' nrvate.as || [ ! -d /swe ]; then
+    # Without the ephemeris nrvate.as names, every esoteric body reads
+    # 0Ari00'00" and the run would fail for a reason that is not a defect.
+    echo "skipped -- nrvate.as names an ephemeris this machine has not got"
+  elif tools/ci-run-suite.sh 900 $SUITE_TMP/check-suite-nrv.log \
+       -i nrvate.as >$SUITE_TMP/check-suite-nrv.out 2>&1; then
+    grep -hoE '^PASS: .*' $SUITE_TMP/check-suite-nrv.log | tail -1
+  else
+    echo FAILED; tail -20 $SUITE_TMP/check-suite-nrv.out | sed 's/^/    /'
+    fail=1
+  fi
 fi
 [ "$fail" -eq 0 ] || { echo "== something above failed"; exit 1; }
 if [ "$mode" = fast ]; then
