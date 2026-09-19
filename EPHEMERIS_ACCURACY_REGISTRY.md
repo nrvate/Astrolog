@@ -453,6 +453,90 @@ The same probe settles `galequ-iau1958` from the other direction: **0.0000″**,
 no anchor in the sky at all, which is why the true-anchor change did not move
 it and confirms its −0.1754″ is the ICRS transfer and nothing else.
 
+### 2.6 A topocentric Moon's speed does not describe its own positions — 8e-4 °/day
+
+Swiss's reported longitude rate for a **topocentric Moon** disagrees with a
+five-point central difference of **Swiss's own topocentric longitudes** by
+7.9e-4 °/day. That is Swiss contradicting itself, not two engines differing,
+and it is 25 times the 3.5a rates bound this server advertises.
+
+Measured 2026-09-18, h = 1/1024 day (exactly representable; a 0.001-day step
+costs 7e-7 °/day in the Julian day's own quantization, and three points
+truncate at about 4e-5 on a topocentric Moon — both findings are Ephemeris
+Prometheia's), site Zürich 8.55E 47.37N 400 m:
+
+| | J2000 | 2461300.5 |
+|---|---|---|
+| **Moon topocentric** | **7.917e-04** | **8.216e-04** |
+| Moon topocentric, no light time | 9.646e-04 | 9.437e-04 |
+| Moon geocentric | 7.208e-06 | 3.342e-05 |
+| Sun topocentric | 8.739e-07 | 2.511e-06 |
+| Mars topocentric | 5.223e-06 | 6.862e-06 |
+
+**It is the Moon and the topocentric observer together.** Geocentrically the
+Moon is a hundred times better; topocentrically the Sun and Mars are a hundred
+times better. Turning light time off makes it slightly *worse*, so the
+retardation is not the cause. What is left is the observer's own motion: the
+diurnal parallax rate is about 1.7 °/day for the Moon and Swiss carries most
+of it — the topocentric and geocentric rates differ by that much — so the
+residue is a modelling gap in that term, not its omission.
+
+**THIS SERVER ADDS NOTHING TO IT.** Prometheia's cross-test measured 7.9e-4
+and 8.2e-4 on our wire; the numbers above come from calling the library
+directly. They agree to three figures, so `astrolog-ephd` is passing Swiss's
+answer through unaltered — and, incidentally, the vendored 2.10.03 and the
+fork 2.10.03-ts.14 behave identically here, which the two measurements
+together establish without a third run.
+
+**Not fixed, and the reason is that the fix is not ours to pick.** Reporting a
+differenced rate instead would diverge from the library on a column
+`ephsrv-golden` holds bit-exact, for a body whose topocentric speed almost
+nothing reads. Recorded so that a later reader measuring it does not go
+looking for a defect in this server.
+
+### 2.7 The distance and the distance RATE are different quantities — up to 4.7e-5 AU/day
+
+Swiss reports the **light-time-retarded distance** in column 2 and the
+**geometric** range rate in column 5. The two therefore do not describe the
+same curve, and differencing the distances does not give the rate.
+
+The proof is that turning light time off makes the disagreement vanish
+entirely. Same method as §2.6:
+
+| | apparent | geometric (`SEFLG_TRUEPOS`) |
+|---|---|---|
+| Mercury | 2.505e-06 | **1.427e-12** |
+| Pluto | **4.748e-05** | 2.903e-11 |
+| Moon | 2.016e-09 | 1.929e-14 |
+
+Twelve orders of magnitude between the two columns is not a tolerance
+question. With the retardation off, Swiss's rate column describes its distance
+column to the last bits it can; with it on, the gap is ṙ·(dτ/dt), which is why
+it scales with the light time — Pluto worst, the Moon negligible at a light
+time of 1.3 seconds.
+
+**The mechanism was Ephemeris Prometheia's**, offered as a measurement of
+their own engine rather than a claim about ours: their range rate is the
+derivative of the light-time range, and they predicted a geometric one would
+miss by exactly ṙ·(dτ/dt), "of order 1e-6 AU/day for the planets and tiny for
+the Moon". It is.
+
+**One number still to reconcile.** Their leg reported our Pluto at 1.5e-6
+AU/day where calling the library directly gives 4.748e-05 — thirty times
+apart. Most likely a different correction mask in that leg, since the gap is
+the light-time term and the mask governs it. Recorded as open rather than
+rounded away: an order of magnitude between two measurements of the same
+quantity is a question, not noise.
+
+**A candidate for §1 rather than §2, and not decided here.** Unlike §2.6 this
+is not a modelling approximation, it is two columns of one row answering
+different questions, and "parity with truth only" points at fixing it — the
+honest rate for a retarded distance is the derivative of the retarded
+distance. Against that: it diverges from the library on a column
+`ephsrv-golden` holds bit-exact, and the protocol does not yet say which
+quantity column 5 is. That last gap is the real finding, and it wants a
+sentence in §3 before either engine changes a number.
+
 ## 3. Divergences deliberately DECLINED
 
 ### 3.1 The Gaussian constant's truncation
