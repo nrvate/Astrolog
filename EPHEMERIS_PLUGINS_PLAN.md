@@ -92,7 +92,7 @@ version 3, and this section is the design authority behind it.
   | 6e the required-server dialog, its ladder and exit 86 deleted | landed `05a0c21` |
   | 6f the console transport (`eph_wsclient.cpp`'s framing, reusable) | **DECLINED 2026-09-18 by the maintainer.** Not an omission: Qt is the shipped interface on every platform, and the console build is the CLI and the matrices' oracle, where nobody has asked to reach a remote ephemeris. The extraction cost is real -- the framing is in a PROGRAM, not a library, and ten gate scripts drive that program |
   | 6g the WinHTTP transport (Win32) | **DECLINED 2026-09-18 by the maintainer**, same reasoning, and it additionally needs a Windows runner to test, which is the slowest loop in this project |
-  | 6h the `horizons` plugin | **not started; no longer blocked.** The seam, the recorded corpus and the offline replay harness are landed (work-log item 22), and the rewrite is specified there in three steps. Four defects were found getting there, one of them a one-minute error in every position Horizons has ever returned |
+  | 6h the `horizons` plugin | **DEFERRED by the maintainer 2026-09-19 -- not declined, and not started.** The seam, the recorded corpus and the offline replay harness are landed (work-log item 22), and the rewrite is specified there in three steps, with a pickup checklist for a fresh session. It buys the chain, the fallback and provenance rather than function: `GetJPLHorizons()` already casts charts, with the one-minute error fixed. Its real content is a refactor of `ComputeEphem()`'s core, so it wants a baseline binary and the four matrices, not the end of a long session. Four defects were found getting here, one a one-minute error in every position Horizons has ever returned |
 
   Phase 8's three reviews are done and their thirteen findings fixed
   (work-log items 19-21). **Nothing else on this branch is implementable
@@ -2635,6 +2635,43 @@ instructions for a human to copy is the thing this direction exists to stop.
    `tools/horizons-fetch.py` rather than remembered, and follows what the
    Prometheia project measured fetching its own corpus on 2026-09-17.
    **Nothing in any gate reaches the network.**
+
+   ### DEFERRED BY THE MAINTAINER, 2026-09-19
+
+   **Not declined like 6f and 6g, and not started: deferred, to be picked
+   up on a fresh session.** The reasoning to carry forward is that the
+   user-visible feature already works -- `GetJPLHorizons()` casts charts
+   today, with the one-minute error fixed and a recorded corpus behind it
+   -- so 6h buys **architectural consistency** (the chain, the fallback,
+   per-object provenance) rather than function. Against that, its real
+   content is a refactor of `ComputeEphem()`'s core, which every chart
+   goes through.
+
+   **What a fresh session needs, so it does not have to re-derive this.**
+
+   - The three steps below are still the specification, and the
+     `calc.cpp` line references in them were **re-verified on 2026-09-19**
+     and are accurate.
+   - Step 2 is the whole of the risk. Steps 1 and 3 are additive; step 2
+     moves cross-object arithmetic out of a per-object loop, and that
+     arithmetic works today only because `i` ascends with
+     `oEar < oSun`. That ordering dependence is undocumented in the code
+     and is the thing most likely to be broken silently.
+   - **Take a baseline binary first.** `git worktree add` at the commit
+     being changed, build `./astrolog-base`, and require
+     `tools/chart-matrix.sh`, `tools/switch-matrix.sh`,
+     `tools/influence-matrix.sh` and `tools/graphics-matrix.sh` to be
+     byte-identical against it. A re-centring change that is correct for
+     the geocentric case and wrong for a heliocentric or planet-centred
+     one will show in the chart matrix and in nothing else.
+   - **The offline check that made this verifiable** is in step 2's own
+     note: cast the same chart through Swiss heliocentrically, and
+     through a recorded geocentric reply plus the emulation, and require
+     agreement. The corpus and `horizons_audit` are committed and in
+     `make check`; nothing reaches the network.
+   - Do not start it at the end of a long session. It is the one piece
+     left in this plan whose blast radius is every chart the program
+     draws.
 
    ### What the rewrite still needs, specified
 
