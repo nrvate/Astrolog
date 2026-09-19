@@ -908,7 +908,15 @@ The key words MUST, MUST NOT, SHOULD and MAY are used as in RFC 2119.
   `precision`: both are refused with ERROR 11, a registry-growth refusal this
   side may answer later, never a claim that the peer broke a rule.
 - **Floats** MUST be finite. The single exception is the canonical quiet NaN,
-  `0x7FF8000000000000`, which is allowed only where a field says so.
+  `0x7FF8000000000000`, which is allowed only where a field says so. **At
+  `precision` = f32 the canonical quiet NaN is `0x7FC00000`** — the f64 pattern
+  narrowed, which widens back to it exactly — and a receiver MUST reject any
+  other f32 NaN payload. In DATA the only field that says so is §3.5's
+  row-failure rule: a failed row is the canonical NaN in **every** column, so a
+  NaN in some columns of a row and not others has no field permitting it and is
+  malformed, of the same class as an infinity. If a registry column ever wants
+  NaN to mean *absent*, that column's A.10 entry must say so and the rule
+  becomes "the whole row, or a column whose entry allows it"; none does today.
 - **Canonical input.** A receiver MUST reject non-canonical input (ERROR 1)
   rather than normalise it. This makes byte equality mean question equality,
   and the result cache depends on it (§3.7).

@@ -1,6 +1,6 @@
 # file	direction	type	expect	note
 # set-sha256 is sha256 over each .hex file's bytes, in the order of the rows below
-# set-sha256 d904e3586c25dc0eeedb0cebb316be92f04b086c2e4d96ae4d2e3bf92337c72d
+# set-sha256 cdbd7438570f29ce6ec1d947e7a4210cd3931f413c653801033f14a42df5aef6
 hello_min.hex	c2s	1	ok	no token, no caps
 hello_token_caps.hex	c2s	1	ok	token and f32|cancel|lookup|segments caps
 hello_future_client.hex	c2s	1	ok	a version-9 client: envelope 9, protoMax 9, protoMin 4; the server answers v4
@@ -23,6 +23,12 @@ request_user_zodiac.hex	c2s	3	ok	user ayanamsha anchored at J2000
 request_segments.hex	c2s	3	ok	segments over 30 days, rectangular, 0.1 arcsec target
 request_pins.hex	c2s	3	ok	precession model plus critical ephemeris and catalog pins, ascending tags
 data_chunk0_meta.hex	s2c	4	ok	f64, sigma+ayanamsa columns, a partial object with a NaN row
+data_inf_f64.hex	s2c	4	malformed	+Inf in one column: 3.1 says floats MUST be finite
+data_nan_noncanonical_f64.hex	s2c	4	malformed	NaN 0x7FF8000000000001: a NaN payload other than the canonical one
+data_nan_partial_row.hex	s2c	4	malformed	the CANONICAL NaN, but in one column of a row and not the rest: 3.5 says a failed row is NaN in every column, so no field permits this one
+data_inf_f32.hex	s2c	4	malformed	+Inf at f32 (0x7F800000)
+data_nan_signalling_f32.hex	s2c	4	malformed	f32 0xFFA00000, a negative SIGNALLING NaN -- the reproducer that found this: it parsed ok and re-encoded as 0xFFE00000, quieted, so the round-trip oracle caught it at f32 and could never catch it at f64
+data_nan_row_f32.hex	s2c	4	ok	a whole failed row of canonical NaN at f32 (0x7FC00000, the f64 pattern narrowed, which widens back to it exactly): this MUST be accepted, or the check above is satisfied by a codec that rejects everything
 data_chunk1_nometa_f32.hex	s2c	4	ok	a later f32 chunk without metadata
 segdata_moon.hex	s2c	15	ok	one degree-2 segment spanning 31 days, no zodiac
 segdata_sidereal_ayanamsa.hex	s2c	15	ok	tropical coefficients with the profile's ayanamsa series beside them

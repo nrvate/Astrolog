@@ -40,6 +40,11 @@ def i32(v): return struct.pack("<i", v)
 def i64(v): return struct.pack("<q", v)
 def f32(v): return struct.pack("<f", v)
 def f64(v): return struct.pack("<d", v)
+# Exact bit patterns, for the float fixtures: a NaN cannot be round-tripped
+# through a Python float and still be the pattern you meant, because the
+# payload is not preserved by every operation on the way.
+def bits64(u): return struct.unpack("<d", struct.pack("<Q", u))[0]
+def bits32(u): return struct.unpack("<f", struct.pack("<I", u))[0]
 def raw_f64(hex_le): return bytes.fromhex(hex_le)
 
 
@@ -421,6 +426,42 @@ def fixtures():
                                     [281.1, 0.0, 0.983, 1.019, 0.0, 0.0, 0.0, 24.1]],
                                    [[45.0, 2.0, 2.1, 0.2, 0.01, 0.001, 0.003, 24.1],
                                     [NAN] * 8]]), request_id=7))
+    # ---- 3.1's float rule in DATA (the 2026-09-18 floats drop) -------------
+    # Floats MUST be finite; the canonical quiet NaN is the one exception and
+    # is allowed only where a field says so, which in DATA is 3.5's rule that
+    # a FAILED ROW is NaN in every column. Found by Ephemeris Prometheia's
+    # fuzzer: our ParseData checked none of it. At f64 every bad pattern
+    # re-encodes bit-identically, so a round-trip oracle cannot see them --
+    # which is why these are fixtures and not a fuzz target.
+    m1 = sources(["JPL DE440"]) + meta(1, source_idx=0, name="Mars", resolved=4,
+                                       corr_applied=7)
+    def onerow(v, prec=0):
+        return data_chunk(0, 0, 1, 1, prec, 0b101, 0, m1, [[list(v)]])
+    fin = [1.0, 2.0, 3.0, 0.1, 0.2, 0.3]
+    add("data_inf_f64", "s2c", DATA, "malformed",
+        "+Inf in one column: 3.1 says floats MUST be finite",
+        envelope(DATA, onerow([bits64(0x7FF0000000000000)] + fin[1:]), request_id=8))
+    add("data_nan_noncanonical_f64", "s2c", DATA, "malformed",
+        "NaN 0x7FF8000000000001: a NaN payload other than the canonical one",
+        envelope(DATA, onerow([bits64(0x7FF8000000000001)] + fin[1:]), request_id=8))
+    add("data_nan_partial_row", "s2c", DATA, "malformed",
+        "the CANONICAL NaN, but in one column of a row and not the rest: 3.5 "
+        "says a failed row is NaN in every column, so no field permits this one",
+        envelope(DATA, onerow([bits64(0x7FF8000000000000)] + fin[1:]), request_id=8))
+    add("data_inf_f32", "s2c", DATA, "malformed",
+        "+Inf at f32 (0x7F800000)",
+        envelope(DATA, onerow([bits32(0x7F800000)] + fin[1:], 1), request_id=8))
+    add("data_nan_signalling_f32", "s2c", DATA, "malformed",
+        "f32 0xFFA00000, a negative SIGNALLING NaN -- the reproducer that found "
+        "this: it parsed ok and re-encoded as 0xFFE00000, quieted, so the "
+        "round-trip oracle caught it at f32 and could never catch it at f64",
+        envelope(DATA, onerow([bits32(0xFFA00000)] + fin[1:], 1), request_id=8))
+    add("data_nan_row_f32", "s2c", DATA, "ok",
+        "a whole failed row of canonical NaN at f32 (0x7FC00000, the f64 "
+        "pattern narrowed, which widens back to it exactly): this MUST be "
+        "accepted, or the check above is satisfied by a codec that rejects "
+        "everything",
+        envelope(DATA, onerow([bits32(0x7FC00000)] * 6, 1), request_id=8))
     add("data_chunk1_nometa_f32", "s2c", DATA, "ok", "a later f32 chunk without metadata",
         envelope(DATA, data_chunk(1, 500, 1, 501, 1, 0b001, 0, b"",
                                   [[[12.5, -1.25, 1.5, 0.5, 0.0, 0.0]]]), request_id=2))
