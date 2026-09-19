@@ -1105,6 +1105,26 @@ static SidPlaneReq PrepareSidPlane(swe_ctx *ctx, const eph::swiss::SwissCall &c)
   } else if (mode >= 0 && mode < SE_NSIDM_PREDEF) {
     char serrA[AS_MAXCH];
     double t0 = ayanamsa[mode].t0, daya = 0.0;
+    // t0 == 0 is Swiss's way of saying THIS MODE HAS NO ANCHOR EPOCH: its
+    // zero point is defined by where something IS -- a star, the galactic
+    // centre, the galactic node -- evaluated at the instant asked. Twelve of
+    // the 47 are like that. 3.5a's sentence presupposes an A0 and a t0, so
+    // there is nothing here to carry onto a fixed plane and the object is
+    // refused.
+    //
+    // THIS USED TO BE AN ACCIDENT AND NOT A CHECK. Without it the code went
+    // on to ask for the ayanamsa at JD 0 -- 4713 BCE -- which fails only
+    // because reaching that far back needs seplm48.se1. With the file absent
+    // the object was refused and the refusal looked principled; with it
+    // present the anchor was built at 4713 BCE and a plane-2 chart came back
+    // with errCode 0 and a wrong number. The maintainer's own ephemeris mount
+    // has that file, so the defect was live on the machine this was written
+    // on and invisible on the bundled ephemeris the gates run against. A
+    // refusal that depends on which files are installed is not a refusal.
+    if (t0 == 0.0) {
+      sp.err = eph::kOErrUnsupported;
+      return sp;
+    }
     swe_set_sid_mode_r(ctx, mode, 0, 0);           // the plain mode, no bits
     if (ayanamsa[mode].t0_is_UT)
       t0 += swe_deltat_ex_r(ctx, t0, SEFLG_SWIEPH, serrA);

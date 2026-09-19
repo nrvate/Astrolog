@@ -97,8 +97,52 @@ print("%.5f %.5f %s" % (dl, db, "BAD" if bad else "ok"))')
   done
 done
 
+# ---- the twelve zodiacs with NO anchor epoch --------------------------------
+# Swiss's table carries t0 = 0 for them: their zero point is defined by where
+# something IS -- a star, the galactic centre, the galactic node -- at the
+# instant asked, so 3.5a's "A0 on the mean ecliptic of t0" has nothing to carry
+# and the object must be refused (errCode 2) on both fixed planes.
+#
+# THE EPHEMERIS PATH HERE IS LOAD-BEARING. The refusal used to be an accident:
+# the code asked for the ayanamsa at JD 0 and that FAILED only because reaching
+# 4713 BCE needs seplm48.se1. On a checkout with the bundled ephemeris the
+# object was refused and the refusal looked deliberate; with a full mount the
+# anchor was built at 4713 BCE and the chart came back with errCode 0 and a
+# wrong number. So this leg puts a deep-time ephemeris on the path when the
+# machine has one -- it must STILL refuse.
+DEEP=""
+for d in /swe /shares/swisseph/ephe; do
+  [ -f "$d/seplm48.se1" ] && DEEP="$d;" && break
+done
+[ -n "$DEEP" ] && echo "  (deep-time ephemeris found: ${DEEP%;} -- the refusals below are not a missing file)"
+if [ -n "$DEEP" ]; then
+  kill "$SRV" 2>/dev/null; sleep 1
+  ./astrolog-ephd --bind 127.0.0.1 --port "$PORT" --threads 1 \
+    --ephe "$DEEP$ROOT/ephem;$ROOT" > "$SCRATCH/srv2.log" 2>&1 &
+  SRV=$!
+  for _ in $(seq 1 100); do
+    grep -q "evt=listen port=" "$SCRATCH/srv2.log" 2>/dev/null && break
+    sleep 0.05
+  done
+fi
+for tok in true-citra true-revati true-pushya true-mula true-sheoran \
+           galcent-0sag galcent-cochrane galcent-rgilbrand galcent-mula-wilhelm \
+           galequ-iau1958 galequ-true galequ-mula; do
+  for sp in 1 2; do
+    row=$(./eph_wsclient --host 127.0.0.1 --port "$PORT" --quiet --jd 2451545.0 \
+      --count 1 --out /dev/stdout --profile "zodiac=$tok,sidplane=$sp,corr=0" \
+      --objs 4 2>/dev/null | grep -v '^META' | head -1)
+    n=$((n+1))
+    case "$row" in
+      *" 2 0 "*) ;;                       # errCode 2, rowsOk 0: refused
+      *) echo "FAIL $tok plane $sp: expected errCode 2 (no anchor epoch), got: $row"
+         fail=$((fail+1));;
+    esac
+  done
+done
+
 if [ "$fail" -eq 0 ]; then
-  echo "SIDPLANE ANCHOR PASS: $n plane-1 comparisons within ${TOL}\" of Swiss's own"
+  echo "SIDPLANE ANCHOR PASS: $n checks -- plane 1 within ${TOL}\" of Swiss's own, and the anchorless zodiacs refused"
   exit 0
 fi
 echo "SIDPLANE ANCHOR FAIL: $fail of $n"
