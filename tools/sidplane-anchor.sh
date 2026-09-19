@@ -138,19 +138,44 @@ if [ -n "$DEEP" ]; then
     sleep 0.05
   done
 fi
+# Plane 1 is refused and plane 2 is ANSWERED, which is the whole of 3.5a's
+# instant-defined clause: plane 1 IS the ecliptic of the anchor epoch and these
+# have none, while plane 2 takes its zero point from the instant asked -- for
+# these zodiacs the definition rather than an approximation of one. Asserting
+# both halves matters: a server that refused everything would pass a
+# plane-1-only check, and one that answered everything would pass a
+# plane-2-only one.
+PREV=""
 for tok in true-citra true-revati true-pushya true-mula true-sheoran \
            galcent-0sag galcent-cochrane galcent-rgilbrand galcent-mula-wilhelm \
            galequ-iau1958 galequ-true galequ-mula; do
   for sp in 1 2; do
     row=$(./eph_wsclient --host 127.0.0.1 --port "$PORT" --quiet --jd 2451545.0 \
-      --count 1 --out /dev/stdout --profile "zodiac=$tok,sidplane=$sp,corr=0" \
+      --count 1 --out /dev/stdout --profile "zodiac=$tok,sidplane=$sp,corr=7" \
       --objs 4 2>/dev/null | grep -v '^META' | head -1)
     n=$((n+1))
-    case "$row" in
-      *" 2 0 "*) ;;                       # errCode 2, rowsOk 0: refused
-      *) echo "FAIL $tok plane $sp: expected errCode 2 (no anchor epoch), got: $row"
-         fail=$((fail+1));;
-    esac
+    if [ "$sp" = 1 ]; then
+      case "$row" in
+        *" 2 0 "*) ;;                     # errCode 2, rowsOk 0: refused
+        *) echo "FAIL $tok plane 1: expected errCode 2 (no anchor epoch), got: $row"
+           fail=$((fail+1));;
+      esac
+    else
+      case "$row" in
+        *" 0 1 "*) ;;                     # errCode 0, rowsOk 1: answered
+        *) echo "FAIL $tok plane 2: expected an answer, got: $row"
+           fail=$((fail+1)); continue;;
+      esac
+      # And each zodiac's own zero point, not one shared by all of them: a
+      # missing swe_set_sid_mode made four different zodiacs return the
+      # IDENTICAL plane-2 longitude, which no check on one token could see.
+      lon=$(echo "$row" | cut -d' ' -f6)
+      if [ "$lon" = "$PREV" ]; then
+        echo "FAIL $tok plane 2: same longitude as the previous zodiac ($lon)"
+        fail=$((fail+1))
+      fi
+      PREV=$lon
+    fi
   done
 done
 
@@ -192,7 +217,7 @@ print("%.5f %.5f %s" % (dt, da, "BAD" if dt > 0.01 else ("SAME" if da < 0.01 els
 done
 
 if [ "$fail" -eq 0 ]; then
-  echo "SIDPLANE ANCHOR PASS: $n checks -- plane 1 within ${TOL}\" of Swiss's own, and the anchorless zodiacs refused"
+  echo "SIDPLANE ANCHOR PASS: $n checks -- plane 1 within ${TOL}\" of Swiss's own, the anchorless zodiacs refused on plane 1 and answered on plane 2"
   exit 0
 fi
 echo "SIDPLANE ANCHOR FAIL: $fail of $n"

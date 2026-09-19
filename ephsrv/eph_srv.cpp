@@ -1095,6 +1095,11 @@ struct SidPlaneReq {
   // a scalar on longitude, since an ayanamsa is a rotation about the ecliptic
   // pole and moves no latitude.
   bool fTrueAnchor = false;
+  // 3.5a's instant-defined clause: a zodiac with no anchor epoch has its zero
+  // point at sidereal longitude 0 on the ecliptic OF THE REQUEST INSTANT, so
+  // plane 2's origin is not a per-object constant -- it moves along a grid and
+  // has to be rebuilt for every row.
+  bool fPerRow = false;
   EPHSIDPLANE p{};
 };
 
@@ -1139,7 +1144,19 @@ static SidPlaneReq PrepareSidPlane(swe_ctx *ctx, const eph::swiss::SwissCall &c)
     // on and invisible on the bundled ephemeris the gates run against. A
     // refusal that depends on which files are installed is not a refusal.
     if (t0 == 0.0) {
-      sp.err = eph::kOErrUnsupported;
+      // No anchor epoch. 3.5a: plane 1 IS the ecliptic of the anchor epoch, so
+      // there is nothing for such a zodiac to have; plane 2 takes the zero
+      // point from the instant asked instead, which for these is the
+      // definition rather than an approximation of one -- their zero point
+      // genuinely is defined on the ecliptic of the instant. The same
+      // construction is an approximation for an epoch-anchored zodiac (30.75"
+      // out for Lahiri) and exact here, which is the distinction the clause
+      // turns on.
+      if (sp.p.plane != 2) {
+        sp.err = eph::kOErrUnsupported;
+        return sp;
+      }
+      sp.fPerRow = true;
       return sp;
     }
     swe_set_sid_mode_r(ctx, mode, 0, 0);           // the plain mode, no bits
@@ -1278,8 +1295,18 @@ static void ComputeObjectRows(swe_ctx *ctx, const eph::Request &req, uint32_t iO
   const int32 iflagBody = sid.fActive
     ? ((c.iflag & ~(int32)(SEFLG_SIDEREAL | SEFLG_ICRS)) | SEFLG_J2000 | SEFLG_NONUT)
     : c.iflag;
-  if (c.fSidereal && !sid.fActive)
-    swe_set_sid_mode_r(ctx, c.sidMode, c.sidT0, c.sidAyanT0);
+  if (c.fSidereal) {
+    // The mode has to be live on the context even when the fixed-plane path
+    // never hands SEFLG_SIDEREAL to Swiss, because it still ASKS Swiss for the
+    // ayanamsa -- for the plane-0 true-anchor correction and, on the
+    // instant-defined clause, for every row's zero point. Without this the
+    // query answers from whatever mode ran last, and the tell is unmistakable:
+    // four different zodiacs returned the IDENTICAL plane-2 longitude.
+    // The plane bits are stripped for the fixed planes, which compute the
+    // plane themselves; plane 0 keeps the mode whole, and has no bits anyway.
+    swe_set_sid_mode_r(ctx, sid.fActive ? (c.sidMode & 0xFF) : c.sidMode,
+      c.sidT0, c.sidAyanT0);
+  }
   if (c.fTopo) swe_set_topo_r(ctx, c.topo[0], c.topo[1], c.topo[2]);
   const bool fRect = pf.form == eph::kFormRectangular;
   char serr[AS_MAXCH], star[SE_MAX_STNAME * 2];
@@ -1499,7 +1526,26 @@ static void ComputeObjectRows(swe_ctx *ctx, const eph::Request &req, uint32_t iO
     // 3.5a: a star whose catalogue entry has no parallax has no distance.
     // Swiss answers 1e9 AU for one (sweph.c's rdist), light time and
     // aberration moving it a little; anything past 1e8 AU is that placeholder.
-    if (sid.fActive) ApplySidPlane(ctx, &sid.p, fRect, xx);
+    if (sid.fActive) {
+      EPHSIDPLANE sp = sid.p;
+      if (sid.fPerRow) {
+        // The instant's own zero point: the true-anchor ayanamsa here, laid on
+        // the mean ecliptic of this instant and projected onto the plane.
+        char serrP[AS_MAXCH];
+        double a0 = 0.0;
+        if (swe_get_ayanamsa_ex_r(ctx, jdEt(),
+              c.iflag | SEFLG_NOABERR | SEFLG_NOGDEFL, &a0, serrP) < 0) {
+          m.errCode = eph::kOErrCoverage;
+          if (m.firstFailedRow == eph::kRowNone) m.firstFailedRow = r;
+          for (uint32_t k = 0; k < nCols; k++) dst[k] = NAN;
+          continue;
+        }
+        sp.t0Et = jdEt();
+        sp.A0 = a0;
+        sp.lonOrigin = SidPlaneOrigin(ctx, sp.t0Et, sp.A0);
+      }
+      ApplySidPlane(ctx, &sp, fRect, xx);
+    }
     // The anchors sentence, on plane 0: Swiss subtracted the ayanamsa built
     // from the APPARENT anchor. Ask it for both and put the difference back.
     // A scalar on longitude is the whole correction -- an ayanamsa is a
@@ -1525,6 +1571,12 @@ static void ComputeObjectRows(swe_ctx *ctx, const eph::Request &req, uint32_t iO
       double daya = 0.0;
       if (sid.fActive) {
         daya = sid.p.A0;         // on a fixed plane the zodiac IS its anchor
+        if (sid.fPerRow) {
+          char serrP[AS_MAXCH];
+          if (swe_get_ayanamsa_ex_r(ctx, jdEt(),
+                c.iflag | SEFLG_NOABERR | SEFLG_NOGDEFL, &daya, serrP) < 0)
+            daya = NAN;
+        }
       } else if (c.fSidereal) {
         char serrA[AS_MAXCH];
         // Same flags the position used, so the column and the longitudes
