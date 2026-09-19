@@ -245,6 +245,43 @@ catalogue and finding two arcsec does not go looking for a bug in either
 server. Fixing it would mean carrying orbital elements for the companion,
 which no star catalogue either of us reads supplies.
 
+### 2.5 A star-anchored zodiac's zero point wobbles 40″ a year — the anchor is taken apparent
+
+Eleven of A.11's tokens anchor their zero point to something in the sky rather
+than to an epoch: `true-citra`, `true-revati`, `true-pushya`, `true-mula`, the
+four `galcent-*` and the three `galequ-*`. Swiss computes their ayanamsa from
+the anchor's **apparent** position. **Swiss's own published documentation says
+the true position** — §2.8.12, items 4–5, "no aberration or deflection".
+
+**Measured** against Prometheia's independently computed J2000 values. Three
+galactic-centre modes are off by *identically* −20.4011″, which says the gap is
+in the anchor and not the mode; everything is inside ±20.5″, the size of
+aberration; and measuring the anchors closes it:
+
+| anchor | aberration in longitude, J2000 | the mode's gap |
+|---|---|---|
+| Spica | −4.83620″ | `true-citra` −4.8284″ |
+| Revati | +3.42085″ | `true-revati` +3.4067″ |
+
+**Why this is a defect and not a convention.** Aberration is an artefact of the
+observer's motion, not a property of the sky, so an apparent anchor makes the
+zodiac's zero point swing through a full cycle every year. Spica's aberration
+across 2000 runs +16.7″, +19.9″, +5.9″, −19.4″ — **40.179″ peak to peak**. A
+sidereal zero point that oscillates by 40 arcsec a year is not a fixed
+reference, and being one is the whole of what a sidereal zodiac is for.
+
+**Why this fork still follows it.** The fix is a §3.5a sentence, drafted as the
+anchors drop and awaiting the maintainer. It is the *ayanamsa* that is wrong,
+so it moves **plane 0** — ordinary sidereal charts — for all eleven modes, and
+by a different amount at every instant. Nothing in Astrolog itself moves: the
+application's own sidereal path offers Fagan/Bradley only.
+
+**Open alongside it:** `galequ-iau1958` is off by **−0.1754″**, which is too
+small for aberration and too large for float noise, while its two siblings
+agree to 0.0007″ — so Swiss is *not* applying aberration to those two and
+something else separates that one. Not to be called agreed until one side can
+say what it is.
+
 ## 3. Divergences deliberately DECLINED
 
 ### 3.1 The Gaussian constant's truncation
