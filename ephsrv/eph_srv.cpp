@@ -2353,9 +2353,38 @@ static const char *UnservedOf(const eph::Request &req) {
     //
     // The interop hazard this was meant to answer -- our client sending a
     // mask another server would refuse -- is fixed where it belongs, in
-    // the client: ClampEphSrvReqQt() now narrows every profile to a mask
-    // WELCOME lists for its observer. A server being permissive about
-    // what it accepts costs nothing once no client over-asks.
+    // the client: ClampEphSrvReqQt() narrows every profile to a mask
+    // WELCOME lists for its observer.
+    //
+    // WHAT IS STALE ABOVE, AND WHY IT IS KEPT. The last paragraph used to
+    // end "a server being permissive about what it accepts costs nothing
+    // once no client over-asks", and that is NO LONGER WHAT THIS SERVER
+    // DOES. The per-kind drop put the acceptance check in UnservedOf()
+    // above, where CorrectionMaskFor() requires the mask to be one
+    // 0x0004 or 0x0014 actually names for that (observer, kind) pair.
+    // 3.5a is normative and says so in as many words: corrections are
+    // "honoured as sent, for every observer... any other combination is
+    // ERROR 11". Strict acceptance is the specification, not a choice
+    // this file gets to make, and the reasoning above survives only as
+    // the record of why the ADVERTISEMENT is shaped the way it is.
+    //
+    // The two halves are defence in depth and neither is redundant: the
+    // client clamps so that a correct client never over-asks, and the
+    // server refuses so that an incorrect one is told rather than
+    // quietly given a narrowed answer it believes is wide.
+    //
+    // This cost a reading on 2026-09-18. The other project's cross-test
+    // reported ERROR 11 on a heliocentric body at the default mask and
+    // ran that leg at mask 1 instead; the stale paragraph here was read
+    // as evidence that the refusal contradicted our own design and so
+    // was a defect. It is not: the client default is kCorrMask (the
+    // "everything" mask, ephproto.h), heliocentric and barycentric
+    // observers advertise only 0 and light time for a BODY because that
+    // is all Swiss will let a body see there, and a client is required
+    // by 3.4 not to send what the other end did not advertise. What
+    // Astrolog sends is mask 1, because the clamp above already ran --
+    // which is why every heliocentric leg here passes with the server as
+    // the only source and no fallback to hide a refusal.
     if ((pf.corrections & ~(uint8_t)eph::kCorrMask) != 0)
       return "this correction mask has bits this server does not define";
     if (!pf.zodiac.empty() && !gCaps.Zodiac(pf.zodiac)) return "zodiac not served";
