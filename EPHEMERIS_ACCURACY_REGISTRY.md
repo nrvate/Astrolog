@@ -152,6 +152,56 @@ against this one, and carries four control stars so a broken parser cannot
 pass it by finding nothing. Found by the Prometheia cross-test's fixed-star
 leg, which agrees with this server to 0.008″ on the other 29 stars it checks.
 
+### 1.5 A mean apsis or node's RATES — 4.68 °/day, and the column held the wrong quantity
+
+`swe_nod_aps()`'s rate columns are not rates for a **mean** point. Two
+distinct faults, both measured against Swiss's own answers:
+
+- **The latitude-rate slot holds the LATITUDE.** Mars's mean perihelion at
+  J2000: `lat = -1.773509`, `dlat = -1.773507`, where differencing Swiss's own
+  latitudes gives **2.83e-7 °/day**. Wrong by the whole latitude, **4.68 °/day**
+  at worst — larger than the Sun's own longitude rate. The osculating points
+  are unaffected (`dlat = 0.000000`).
+- **The longitude rate omits the geocentric re-centring.** Mars reports
+  `0.387106` where differencing gives `0.401093`; **heliocentrically the two
+  agree to 1.6e-7**, so it is the re-centring's own rate that is missing and
+  not the mean elements. §2.8's finding in a second place.
+
+**This fork differences all three rate columns from the point it reports**, for
+mean points only, five-point stencil at h = 1/1024 day (exactly representable;
+at h = 0.001 the Julian day's own quantization costs 7e-7 °/day). §3.5a is
+normative and says a rate is "the time derivative of the coordinates answered
+in the other three columns", so this is conformance rather than preference.
+
+**Osculating points are left as Swiss gives them**: measured, they already
+agree with a difference of their own positions to about 1e-6 °/day, so
+replacing them would move numbers for no gain and would difference a quantity
+that can jitter.
+
+**Confirmed from outside.** Ephemeris Prometheia's engine differences by
+construction and independently reports Mars's mean perihelion at
+**+0.00528 °/day** in latitude and **0.401** in longitude; ours now answers
++0.005281 and 0.401093.
+
+**Why this was nearly not fixed, which is the part worth keeping.** The first
+response was to leave the numbers alone and raise the advertised rates bound
+(A.3 0x0013) to **5 °/day** so that the advertisement covered them — honest by
+the letter of §3.5a, which asks for the largest difference, and useless, since
+it told every client that every rate might be meaningless. A gate asserting the
+wrong thing is not a reason to keep serving a wrong number; it is a second
+thing to fix. `ephsrv-golden.sh` pinned those columns bit-exact and its oracle
+now differences too (`nodapsd:P:M`), which is how the same 161 comparisons
+still pass. The bound is back to 5e-3 °/day.
+
+**Net:** `tools/ephsrv-rates.sh` (the planetary mean apsides are in its grid
+because leaving them out is how the bound was wrong twice) and
+`ephsrv-golden.sh`'s eight mean-point legs.
+
+*Found by:* the Ephemeris Prometheia cross-test's rates leg, reporting 16 rows
+and "worst 4.7 °/day in latitude".
+
+---
+
 ## 2. Where Swiss is known WRONG and this fork still follows it
 
 Recorded so that nobody re-derives them, and so that the cost of each is
@@ -356,6 +406,55 @@ than by reading.** Each cost an engine a real error:
    bend magnitude, the offset is going the wrong way rather than missing** —
    and that is the single most likely mistake, since east/north sign and
    θ-from-north conventions are where this kind of arithmetic goes wrong.
+
+**THE 69% RATIO IN ALPHA CEN'S CATALOGUE PROPER MOTIONS — RAISED, ANSWERED,
+CLOSED (2026-09-19).** Recorded because it was measured, then reasoned around
+and left unwritten for a day, and because the first answer written here was
+wrong.
+
+`sefstars.txt`'s own relative proper motion for the pair is **69% of the ORB6
+orbit's instantaneous relative velocity**, in both components, with the
+directions agreeing to 0.02°:
+
+| | east | north |
+|---|---|---|
+| catalogue, B − A | +64.86 | +329.31 mas/yr |
+| orbit, at 1991.25 | +94.46 | +479.13 mas/yr |
+
+A ratio that equal in two independent components is not noise. I read it as
+casting doubt on the per-star rule below — which subtracts the catalogue
+line's **tangent** at t0 for alpha Cen A, and so assumes that line's *slope* is
+right — and estimated a residual of ~70 mas/yr on A. **That estimate was
+wrong**, and the error was in attributing the shortfall: I split it between the
+two stars when it belongs almost entirely to one.
+
+Ephemeris Prometheia settled it with the reference neither catalogue we read
+supplies: **Akeson et al. 2021 Table 9's barycentric proper motion**, fitted
+from ALMA and Hipparcos together, −3639.95 and +700.40 mas/yr at 2019.5,
+carried back to 1991.25 through the perspective change. Adding each component's
+orbital share predicts its own proper motion:
+
+| | predicted at 1991.25 | catalogue | difference |
+|---|---|---|---|
+| A | −3681.42, +480.94 | −3679.25, +473.67 | **+2.2, −7.3** mas/yr |
+| B | −3586.95, +960.08 | −3614.39, +802.98 | **−27.4, −157.1** mas/yr |
+
+**So the 69% is B's catalogue proper motion being bad, not A's, and not the
+orbit's.** A's line is sound to about 7 mas/yr, which puts the "add only the
+curvature" rule's limit near 0.7″ a century rather than 7″.
+
+**And B's bad proper motion cannot reach our positions**, because the rule
+below places B from **A's** line plus the relative orbit and discards B's own
+(`ephsrv/ephstarorb.h`'s `szLine` for `alCenB` is `,alCenA`; the first Swiss
+call for Toliman resolves the name and its answer is then overwritten by A's).
+That choice was made for a different reason — B's own solution is poor — and
+this is the measurement of how poor.
+
+**The lesson worth more than the number.** Our two engines agreed to 0.29 mas
+across five epochs while both rested on an assumption neither had tested,
+because we make the same assumption from the same elements. Agreement between
+two implementations of one model says the implementations are right, not the
+model. What settled it was a third source measuring the quantity directly.
 
 **And the per-star rule, which is not uniform**, because it depends on what the
 catalogue line already contains:
@@ -619,6 +718,22 @@ calling the library directly, and `astrolog-ephd` passes them through. The
 `equator` of date and the `J2000` ecliptic are clean in the other project's
 cross-test, which is what a missing *ecliptic-of-date rotation* derivative
 predicts and a general speed defect would not.
+
+**TWO THINGS ABOUT HOW WE DECLARE THIS ARE WEAKER THAN THEY LOOK**, recorded
+2026-09-19 rather than left for a reader to discover.
+
+- **`ratesApprox` is set on every object that carries speeds, not on "the
+  objects concerned".** §3.5a's words are the second, and the point of a
+  per-object flag is that a client can tell which rows are approximate. Ours
+  says "all of them", which is true and useless: a geocentric Jupiter whose
+  rate is good to 1e-7 °/day is flagged exactly like a topocentric lunar node
+  at 4e-3. Honest, over-broad, and it costs the flag its meaning.
+- **The advertised bound is one case.** 5e-3 °/day is the topocentric lunar
+  node; almost everything else is 1e-6 or better, and the same node
+  geocentrically is 9.4e-8. A.3 0x0013 is a single pair of numbers, so a
+  client asking geocentric bodies reads a figure five orders of magnitude
+  worse than what it will get. Stating the largest is what §3.5a asks for and
+  the alternative would be a per-observer bound the registry has no field for.
 
 **Ephemeris Prometheia's engine does not have this**: their rates are the
 derivatives of the coordinates they report, retardation and frame included. So

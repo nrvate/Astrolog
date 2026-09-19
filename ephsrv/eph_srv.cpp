@@ -1320,6 +1320,80 @@ static void ComputeObjectRows(swe_ctx *ctx, const eph::Request &req, uint32_t iO
           memcpy(xx, px, sizeof(xx));
           if (fFixedFrame) RotateNodeToFixedFrame(ctx, jdEt(), iflagBody, xx);
         }
+        // A MEAN APSIS OR NODE'S RATES ARE DIFFERENCED FROM THE POINT WE
+        // REPORT, because the ones Swiss hands back are not rates.
+        //
+        // swe_nod_aps() puts the LATITUDE ITSELF in the latitude-rate slot
+        // for a mean point: Mars's mean perihelion at J2000 comes back with
+        // lat -1.773509 and dlat -1.773507, where differencing Swiss's own
+        // answers gives 2.83e-7 deg/day. And the LONGITUDE rate is missing
+        // the geocentric re-centring's own rate -- 0.387106 reported against
+        // 0.401093 differenced for Mars, while heliocentrically the two agree
+        // to 1.6e-7, so it is the re-centring and not the mean elements.
+        // Registry 2.7 and 2.8.
+        //
+        // Together those made 4.68 deg/day the largest rate error this server
+        // could produce, which is larger than the Sun's own longitude rate.
+        // 3.5a is normative -- a rate is "the time derivative of the
+        // coordinates answered in the other three columns" -- so this was a
+        // conformance failure, and advertising a bound big enough to cover it
+        // made the bound useless instead of making the server right.
+        //
+        // OSCULATING POINTS ARE LEFT AS SWISS GIVES THEM: measured, they
+        // already agree with a difference of their own positions to about
+        // 1e-6 deg/day, so replacing them would move numbers for no gain and
+        // would difference a quantity that can jitter. tools/ephsrv-rates.sh
+        // grades them and will say so if that stops being true.
+        //
+        // The five-point stencil and h = 1/1024 day are the other project's,
+        // and h being exactly representable in binary is load-bearing: at
+        // h = 0.001 the Julian day's own quantization costs 7e-7 deg/day.
+        // This does make the rates leg tautological FOR THESE POINTS -- a
+        // rate computed by differencing trivially matches a difference -- and
+        // that is inherent in 3.5a rather than a weakness here: the
+        // independent check is the cross-test against an engine that does not
+        // difference.
+        if (ret >= 0 && pf.speeds && c.nodMethod == SE_NODBIT_MEAN) {
+          const double h = 1.0 / 1024.0;
+          double v[4][6];
+          int k, kk;
+          bool fOk = true;
+          for (k = 0; k < 4 && fOk; k++) {
+            const double dj = (k < 2 ? -2.0 + (double)k : (double)k - 1.0) * h;
+            double yn[6], yd[6], yp[6], ya[6];
+            char serrD[AS_MAXCH];
+            const int32_t r = c.fUT && !fDtGiven
+              ? swe_nod_aps_ut_r(ctx, jd + dj, c.ipl, iflagNode, c.nodMethod,
+                                 yn, yd, yp, ya, serrD)
+              : swe_nod_aps_r(ctx, jdEt() + dj, c.ipl, iflagNode, c.nodMethod,
+                              yn, yd, yp, ya, serrD);
+            if (r < 0) { fOk = false; break; }
+            const double *py = c.point == 0 ? yn : c.point == 1 ? yd :
+                               c.point == 2 ? yp : ya;
+            memcpy(v[k], py, sizeof(v[k]));
+            if (fFixedFrame)
+              RotateNodeToFixedFrame(ctx, jdEt() + dj, iflagBody, v[k]);
+          }
+          // A stencil point that will not compute -- at an ephemeris edge --
+          // leaves Swiss's rates alone rather than inventing one from fewer
+          // points. The row is still answered.
+          if (fOk) {
+            const double half = (iflagBody & SEFLG_RADIANS) ? PI : 180.0;
+            for (kk = 0; kk < 3; kk++) {
+              double a = v[0][kk], b = v[1][kk], d = v[2][kk], e = v[3][kk];
+              if (kk == 0 && !(iflagBody & SEFLG_XYZ)) {
+                // The wrap, on the ONE column that has one.
+                while (b - a >  half) b -= 2.0 * half;
+                while (b - a < -half) b += 2.0 * half;
+                while (d - b >  half) d -= 2.0 * half;
+                while (d - b < -half) d += 2.0 * half;
+                while (e - d >  half) e -= 2.0 * half;
+                while (e - d < -half) e += 2.0 * half;
+              }
+              xx[kk + 3] = (a - 8.0 * b + 8.0 * d - e) / (12.0 * h);
+            }
+          }
+        }
         break;
       }
       case eph::swiss::kCallFixstar: {
@@ -3511,6 +3585,21 @@ static void BuildWelcome(const EphDiscovery &disc, const char *szSwe) {
   // and a client wanting better can ask geocentrically, where the same sweep
   // gives 9.4e-8 for that node. tools/ephsrv-rates.sh holds this against a
   // grid that includes the case, so it cannot quietly rot again.
+  //
+  // THE PLANETARY MEAN APSIDES briefly made this 5 deg/day, which is larger
+  // than the Sun's own longitude rate and made the advertisement useless.
+  // That was swe_nod_aps() putting the LATITUDE in the latitude-rate slot
+  // (4.68 deg/day on Mars) and leaving the geocentric re-centring out of the
+  // longitude rate (0.387 against 0.401). Both are FIXED rather than
+  // advertised around -- those rates are differenced from the point this
+  // server reports, in the kCallNodAps branch -- so the figure is back to
+  // what the rest of the server actually does.
+  //
+  // What is left at 4.05e-3 is the topocentric lunar NODE at 1800, and that
+  // one is Swiss's topocentric velocity model (registry 2.6), not a blunder:
+  // the same node geocentrically is 9.4e-8. Fixing it would mean differencing
+  // every topocentric row, four extra ephemeris calls apiece, which an
+  // animation pays on every frame. Recorded and advertised instead.
   c.fRatesBound = true;
   c.ratesDegPerDay = 5e-3f;
   c.ratesAuPerDay = 1e-4f;

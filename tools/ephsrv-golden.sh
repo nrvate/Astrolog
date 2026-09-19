@@ -73,6 +73,10 @@ int main(int argc, char **argv) {
            aya      swe_calc_r, then one more column: the ayanamsa of the
                     mode (swe_get_ayanamsa_ex_r at jd with the same flags)
            star:N   swe_fixstar2_r at jd for the star named N (ipl unused)
+           nodapsd:P:M  as nodaps, but the three RATE columns differenced
+                    from the same point (five points, h = 1/1024 day) --
+                    what 3.5a defines a rate to be, and what the server
+                    serves for a MEAN point
      The three trailing arguments, taken when iflag carries SEFLG_TOPOCTR,
      are the site. The ephemeris bit (SEFLG_SWIEPH) is always added; no
      other flag is -- the gate writes each one. */
@@ -97,7 +101,43 @@ int main(int argc, char **argv) {
     if (argc < 10) { printf("ERR topo needs lon lat alt\n"); return 1; }
     swe_set_topo_r(ctx, atof(argv[7]), atof(argv[8]), atof(argv[9]));
   }
-  if (strncmp(mode, "star:", 5) == 0) {
+  if (strncmp(mode, "nodapsd:", 8) == 0) {
+    /* swe_nod_aps_r at jd, answer P, method M -- and the three RATE columns
+       DIFFERENCED from that same point with a five-point stencil at
+       h = 1/1024 day, because that is what 3.5a defines a rate to be and
+       what the server now serves for a MEAN point. Swiss's own rate columns
+       are not rates there: it puts the latitude in the latitude-rate slot,
+       and leaves the geocentric re-centring out of the longitude rate.
+       Written out here, by hand, like every flag in this file. */
+    int pnt = 0, meth = 0, k, kk, bad = 0;
+    double xn[6], xd[6], xp[6], xa[6], *px, v[4][6];
+    const double h = 1.0 / 1024.0;
+    sscanf(mode + 8, "%d:%d", &pnt, &meth);
+    ret = swe_nod_aps_r(ctx, jd, ipl, iflag, meth, xn, xd, xp, xa, serr);
+    px = pnt == 0 ? xn : pnt == 1 ? xd : pnt == 2 ? xp : xa;
+    for (int i = 0; i < 6; i++) xx[i] = px[i];
+    for (k = 0; k < 4 && !bad; k++) {
+      double dj = (k < 2 ? -2.0 + (double)k : (double)k - 1.0) * h;
+      if (swe_nod_aps_r(ctx, jd + dj, ipl, iflag, meth, xn, xd, xp, xa, serr) < 0)
+        { bad = 1; break; }
+      px = pnt == 0 ? xn : pnt == 1 ? xd : pnt == 2 ? xp : xa;
+      for (int i = 0; i < 6; i++) v[k][i] = px[i];
+    }
+    if (!bad && ret >= 0)
+      for (kk = 0; kk < 3; kk++) {
+        double a = v[0][kk], b = v[1][kk], d = v[2][kk], e = v[3][kk];
+        if (kk == 0 && !(iflag & SEFLG_XYZ)) {
+          double half = (iflag & SEFLG_RADIANS) ? 3.14159265358979323846 : 180.0;
+          while (b - a >  half) b -= 2.0 * half;
+          while (b - a < -half) b += 2.0 * half;
+          while (d - b >  half) d -= 2.0 * half;
+          while (d - b < -half) d += 2.0 * half;
+          while (e - d >  half) e -= 2.0 * half;
+          while (e - d < -half) e += 2.0 * half;
+        }
+        xx[kk + 3] = (a - 8.0 * b + 8.0 * d - e) / (12.0 * h);
+      }
+  } else if (strncmp(mode, "star:", 5) == 0) {
     /* ipl is ignored; the name is the body. swe_fixstar2_r rewrites the
        buffer, so it gets a writable copy. */
     char star[256];
@@ -337,14 +377,14 @@ leg "no speeds Moon" 2451545.0 1 0 0 tt -- --profile speeds=0 --objs 301
 #    descending node, which is swe_nod_aps's point 1 since the mean node
 #    stopped using SE_MEAN_NODE for its distance.
 for p in 0 1 2 3; do
-  leg "nod_aps Jupiter mean point $p" 2415020.5 5 100 0 "nodaps:$p:1" -- --points "5:$p:0" --jd 2415020.5
+  leg "nod_aps Jupiter mean point $p" 2415020.5 5 100 0 "nodapsd:$p:1" -- --points "5:$p:0" --jd 2415020.5
   leg "nod_aps Jupiter osculating point $p" 2415020.5 5 100 0 "nodaps:$p:2" -- --points "5:$p:1" --jd 2415020.5
 done
 # swe_nod_aps reads the correction bits itself, before the normalisation
 # above, so a heliocentric orbit point answers differently under the full
 # mask and under light time alone -- each against its own oracle flags.
-leg "helio nod_aps Mars perihelion" 2451545.0 4 108 0 "nodaps:2:1" -- --profile obs=helio --points 4:2:0
-leg "helio nod_aps Mars perihelion, light time only" 2451545.0 4 708 0 "nodaps:2:1" -- --profile obs=helio,corr=1 --points 4:2:0
+leg "helio nod_aps Mars perihelion" 2451545.0 4 108 0 "nodapsd:2:1" -- --profile obs=helio --points 4:2:0
+leg "helio nod_aps Mars perihelion, light time only" 2451545.0 4 708 0 "nodapsd:2:1" -- --profile obs=helio,corr=1 --points 4:2:0
 leg "Moon true node" 2451545.0 11 100 0 tt -- --points 301:0:1
 leg "Moon interpolated apogee" 2451545.0 21 100 0 tt -- --points 301:3:2
 leg "Moon mean apogee, sidereal" 2451545.0 12 10100 0 tt -- --profile zodiac=fagan-bradley --points 301:3:0
@@ -354,7 +394,7 @@ leg "Moon mean apogee, sidereal" 2451545.0 12 10100 0 tt -- --profile zodiac=fag
 # orbit actually has at the node. Same direction to 8.7e-13 degrees, and a
 # distance a client can re-centre with. So the oracle asks the way the
 # server now asks -- point 1 of swe_nod_aps directly, no opposite flip.
-leg "Moon mean descending node" 2451545.0 1 100 0 "nodaps:1:1" -- --points 301:1:0
+leg "Moon mean descending node" 2451545.0 1 100 0 "nodapsd:1:1" -- --points 301:1:0
 
 # 6b. FIXED STARS, which this gate had none of at all until 2026-09-19.
 #     That is worth stating plainly: the whole of registry 2.4's binary

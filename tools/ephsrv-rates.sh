@@ -125,9 +125,20 @@ done
 # by a factor of 264.
 #
 # So the grid below sweeps the observers as well as the bodies, and the
-# advertised figure has to cover the worst of them. The worst case is not the
-# Moon: it is the TRUE NODE topocentrically, 4.1e-3 deg/day at 1800, which is
-# the osculating node's own jitter seen through the diurnal parallax.
+# advertised figure has to cover the worst of them.
+#
+# AND THE PLANETARY MEAN APSIDES, which the first version of this grid left
+# out and which are the worst thing in it by an order of magnitude. That
+# omission is the same failure the bound itself had: a sweep is only as wide
+# as its object list, and bodies plus the Moon's points is not the object
+# list a client has. Mercury's MEAN PERIHELION misses by 4.7e-2 deg/day
+# geocentrically -- nine times the 5e-3 that was advertised after the first
+# sweep -- and heliocentrically it is 1.6e-7. So it is the geocentric
+# RE-CENTRING whose own rate is left out, which is registry 2.8's finding
+# again in a second place: a transformation applied to the position and not
+# to the rate beside it. Found by the Prometheia cross-test's rates leg
+# reporting our mean perihelia at 0.387 against their 0.401 deg/day, and
+# their number is what differencing Swiss's own longitudes gives.
 echo
 echo "== the advertised rates bound covers what the server actually does"
 ./eph_wsclient --host 127.0.0.1 --port "$PORT" --objs 10 --count 1 \
@@ -143,7 +154,8 @@ for obs in geo topo; do
       --step-ns 84375000000 --count 5 \
       --profile "obs=$1$SITE,plane=ecl,form=sph,speeds=1" \
       --objs 10,301,199,299,499,5,6,7,8,9 \
-      --points 301:0:1,301:1:1 --out "$3" > /dev/null
+      --points 301:0:1,301:1:1,4:2:0,5:2:0,199:2:0,4:0:0,199:2:1 \
+      --out "$3" > /dev/null
   }
   # 1800 is in the grid on purpose: the worst case is there, not at J2000.
   for jd in 2378496.5 2451545.0 2461300.5; do
