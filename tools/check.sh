@@ -185,6 +185,13 @@ step "long prompt line refused"  tools/long-prompt-check.sh ./astrolog
 # An object with no .d beside it is rebuilt, since make cannot otherwise
 # know its headers; a stale xdata.o broke animated GIFs (Makefile.qt).
 step "objects without .d rebuilt"  tools/stale-object-check.sh
+# The four astrometric binaries (EPHEMERIS_ACCURACY_REGISTRY.md 2.4). It is
+# here rather than among the ephemeris server's hand-run gates because it
+# needs no server and no /shares/swisseph: it compiles a probe against the
+# VENDORED Swiss, which is the copy Astrolog's own star path uses. 7 s, and
+# it is the only check in the fast lane that can see the DIRECTION of a
+# star's orbit offset rather than its size.
+step "star orbits"               tools/star-orbit-check.sh
 
 # The other two toolchains, when this machine has them. Both are here
 # because their absence has cost this project real time: Makefile.win
