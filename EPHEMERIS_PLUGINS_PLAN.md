@@ -2417,9 +2417,24 @@ and is **not** growing an agent-facing chart API. A design for one was started
 and scrapped on that instruction.
 
 **What is proposed instead**, and it is a different and better thing: a channel
-for an agent to ask Astrolog to *show* something. The agent does the finding —
+for an agent to ask Astrolog to *show* something.
+
+**The use case, in the maintainer's words:** the AI session reaches chart data
+through one MCP — Prometheia's — and calls Astrolog through another to
+**display**. An astrologer talks to the AI conversationally, through whatever
+client they like, and asks it to put up the patterns it is describing.
+
+That framing settles what this is and what it is not. **Astrolog is the display
+endpoint, not a data endpoint.** It is not asked what the Moon's longitude is;
+it is asked to draw the configuration the AI has already found, in a particular
+view, with particular objects and aspects showing. The agent does the finding —
 it has the ephemeris — and Astrolog does what it is actually good at, which is
 drawing a chart thirty years of options deep.
+
+It also makes the shared vocabulary load-bearing rather than tidy: the AI will
+be naming bodies and aspects it got from the ephemeris when it asks Astrolog to
+draw them. If the two surfaces spell the same sky differently, every such call
+needs a translation layer that can silently get it wrong.
 
 **Why it would be cheap, which is the part worth keeping.** Astrolog's API
 already exists and is the **switch registry**: 529 invocations in the switch
