@@ -2823,6 +2823,9 @@ void CreateElemTable(ET *pet)
 // EPHSID_FORK here -- the vendored Swiss sources compile into this binary and
 // their swi_precess() and swi_epsiln() take no context.
 #include "ephsrv/ephsidplane.h"
+// The four astrometric binaries, shared with astrolog-ephd for the same
+// reason: EPHEMERIS_ACCURACY_REGISTRY.md 2.4.
+#include "ephsrv/ephstarorb.h"
 #define ret cp0.dir
 
 // The ephemeris search path, as the list of directories it actually is.
@@ -4299,7 +4302,13 @@ flag FSwissStar(char *sz, real jd, real *rg)
   // place, and the callers read it back -- that rewrite IS the display
   // name of a star enumerated by number -- so the caller's own buffer
   // is handed on, not a copy.
-  return swe_fixstar2(sz, jd, iflag, rg, serr) >= 0;
+  if (swe_fixstar2(sz, jd, iflag, rg, serr) < 0)
+    return fFalse;
+  // Registry 2.4: the four stars whose photocentre swings around an
+  // unseen companion, which a catalogue's linear proper motion cannot
+  // follow. The server does this at its own Swiss call, out of the same
+  // header, so the application and astrolog-ephd cannot drift.
+  return FEphStarOrbCall(sz, jd, iflag, rg);
 }
 
 

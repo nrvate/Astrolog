@@ -83,6 +83,8 @@ def relative(o, t):
 
 
 fail = 0
+print("-- leg 1: the Kepler solve and the projection, against ORB6's own "
+      "published ephemeris\n")
 print("%-11s %-9s %8s %8s %9s | %8s %8s %9s" %
       ("system", "epoch", "theta", "ORB6", 'd(")', "rho", "ORB6", 'd(")'))
 for name, o in ORBITS.items():
@@ -109,10 +111,74 @@ for name, o in ORBITS.items():
     fail += bad
     print("%-11s %-9.1f %8.2f %8.2f %9.4f | %8.3f %8.3f %9.4f%s" %
           (name, t, th, th0, dthArc, rho, rho0, drho, "  <-- BAD" if bad else ""))
+if fail == 0:
+  print("\n  leg 1 PASS: ORB6's own ephemeris reproduced to better than 0.01\" "
+        "in both coordinates")
+else:
+  print("\n  leg 1 FAIL: %d of %d epochs" % (fail, len(ORBITS) * len(EPOCHS)))
+
+
+# -- leg 2 ------------------------------------------------------------------
+#
+# THE ONLY CHECK EITHER PROJECT HAS THAT SEES DIRECTION RATHER THAN MAGNITUDE,
+# and it costs nothing: sefstars.txt carries alpha Cen A and alpha Cen B as
+# SEPARATE records, so the catalogue states the relative position of the pair
+# itself.  Carry both records back to the Hipparcos epoch with their own proper
+# motions and the separation that falls out must be the orbit's, in BOTH
+# components.
+#
+# Why this matters more than it looks.  Leg 1 grades theta and rho, and the
+# other project's cross-test grades |ours - theirs| against the magnitude of
+# the bend -- so an offset laid in the wrong DIRECTION passes both.  East and
+# north signs, and whether theta runs from north through east, are exactly
+# where this arithmetic goes wrong.  Here a sign flip in either component
+# misses by 22 to 31 arcsec against data no orbit code on either side touches.
+#
+# Measured 2026-09-18: 0.073" between the two, in a 19" separation.  Ephemeris
+# Prometheia ran the same leg against their own Hipparcos records and got the
+# same difference in the same direction (+73.0, -28.0 mas against our +68, -27)
+# -- two catalogues, two implementations, one answer.
+EPOCH_HIP = 1991.25
+TOL = 0.2
+
+def sefstar(path, nomen):
+  """The one sefstars.txt record whose nomenclature field is `nomen`."""
+  for line in open(path, encoding="latin-1"):
+    if line.startswith("#"):
+      continue
+    f = [x.strip() for x in line.split(",")]
+    if len(f) > 12 and f[1] == nomen:
+      ra = (float(f[3]) + float(f[4]) / 60.0 + float(f[5]) / 3600.0) * 15.0
+      sgn = -1.0 if f[6].lstrip().startswith("-") else 1.0
+      dec = sgn * (abs(float(f[6])) + float(f[7]) / 60.0 + float(f[8]) / 3600.0)
+      # Columns 9 and 10 are the proper motions in mas/yr, the first already
+      # multiplied by cos(delta) -- alpha Cen A's -3679.25 is the catalogued
+      # mu_alpha*, not mu_alpha.
+      return ra, dec, float(f[9]) / 1000.0, float(f[10]) / 1000.0
+  raise SystemExit("sefstars.txt has no record with nomenclature %r" % nomen)
+
+print("\n-- leg 2: the direction, against sefstars.txt's own alpha Cen A and B\n")
+raA, decA, pmaA, pmdA = sefstar("sefstars.txt", "alCenA")
+raB, decB, pmaB, pmdB = sefstar("sefstars.txt", "alCenB")
+dt = EPOCH_HIP - 2000.0
+# B minus A in A's tangent plane, both records carried back to 1991.25.
+catE = (raB - raA) * 3600.0 * math.cos(math.radians(decA)) + (pmaB - pmaA) * dt
+catN = (decB - decA) * 3600.0 + (pmdB - pmdA) * dt
+th, rho = relative(ORBITS["alpha Cen"], EPOCH_HIP)
+orbE, orbN = rho * math.sin(math.radians(th)), rho * math.cos(math.radians(th))
+print("%-22s %10s %10s" % ("", 'east(")', 'north(")'))
+print("%-22s %10.4f %10.4f" % ("sefstars.txt B - A", catE, catN))
+print("%-22s %10.4f %10.4f" % ("ORB6 elements", orbE, orbN))
+print("%-22s %10.4f %10.4f" % ("difference", catE - orbE, catN - orbN))
+bad = abs(catE - orbE) > TOL or abs(catN - orbN) > TOL
+fail += bad
+print("\n  leg 2 %s: the catalogue's own separation at %.2f is the orbit's to "
+      "%.3f\"" % ("FAIL" if bad else "PASS", EPOCH_HIP,
+                  math.hypot(catE - orbE, catN - orbN)))
+
 print()
 if fail == 0:
-  print("STAR ORBIT PASS: the Kepler solve reproduces ORB6's own ephemeris "
-        "to better than 0.01\" in both coordinates")
+  print("STAR ORBIT PASS: both legs")
   sys.exit(0)
-print("STAR ORBIT FAIL: %d of %d epochs" % (fail, len(ORBITS) * len(EPOCHS)))
+print("STAR ORBIT FAIL")
 sys.exit(1)

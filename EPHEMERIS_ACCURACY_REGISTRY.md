@@ -236,11 +236,81 @@ The other 24 stars are within **0.56″** on both servers over the same two
 centuries (worst: Antares at 1900), and within 0.31″ at 2000. The two servers
 agree with each other to **0.007″** everywhere.
 
-**BEING ADOPTED.** Approved by the maintainer 2026-09-18. Ephemeris
-Prometheia moves these four on their orbits and we are following. The elements
-and the arithmetic landed at `7c05f7f`, netted against ORB6's own published
-ephemeris (15 epochs, θ and ρ within 0.01″, which is ORB6's printed rounding).
-Applying the offsets to star positions is the remaining piece.
+**ADOPTED AND APPLIED**, 2026-09-18. Approved by the maintainer; Ephemeris
+Prometheia moves these four on their orbits and we follow. The elements and the
+arithmetic landed at `7c05f7f`; the offsets are applied to star positions from
+this commit, in `ephsrv/ephstarorb.h`, which both Swiss copies compile — the
+server at its `swe_fixstar2` call and Astrolog at `FSwissStar()`, so the
+application and `astrolog-ephd` cannot drift.
+
+**The agreement with the other engine is sub-milliarcsecond.** They published
+their offsets as (east, north) in mas at five TT epochs from 1900 to 2100
+(their `618861f`), computed from Hipparcos records with ERFA — different
+catalogue data, different code, no shared line. Ours reproduce them to **0.40
+mas on Sirius and 0.17 on Procyon** at every epoch, and the α Cen relative
+orbit to 0.27 mas. `tools/star-orbit-check.sh` is the gate and holds all of it.
+
+**One number is still open, and it is a mass ratio, not a method.** They split
+α Cen 1.13/0.97 M☉ — Pourbaix & Boffin 2016 — while the elements both engines
+use are Akeson et al. 2021, which publishes **its own** masses from the same
+fit, 1.0788 ± 0.0029 and 0.9092 ± 0.0025. Taking a mass ratio from one paper
+and elements from another is the thing to avoid, so this side uses Akeson's. It
+is worth **185 mas at 1900 and 142 at 2100** on α Cen A — too big to round away
+— so the check prints the difference at every epoch rather than grading it, and
+α Cen A is the one row of the four that is not yet held to the other engine.
+Nothing else in the four differs by as much as a milliarcsec.
+
+**The FK5 table above does not measure what this entry first claimed it did,
+and the reasoning is corrected here rather than quietly dropped.** Re-derived
+2026-09-18 (1.750 / 0.665 / 2.242 for Sirius against the 1.756 / 0.687 / 2.332
+recorded — the same measurement), and then looked at as a *vector* instead of a
+magnitude: the Sirius residual is E = (+0.001, −0.665, −1.330) and
+N = (−1.750, +0.027, +1.804) at 1900 / 2000 / 2100 — **linear in time to three
+figures, with no periodic part at all.** The reason is arithmetic. Sirius's
+period is 50.1284 yr, so 1900→2100 is 3.99 periods and all three epochs land at
+orbital phase ≈ 0.11: the table samples the same point of the orbit three
+times. What those numbers measure is the ~19 mas/yr proper-motion difference
+between FK5 and Hipparcos.
+
+FK5 cannot be a direct oracle for the offsets at any epoch, because **FK5's own
+model is a straight line too**, and two straight lines can differ only by a
+constant and a slope. The growth away from 2000 is still real evidence of the
+binary — two lines fitted to the same curved path over different windows have
+different slopes — but "the signature of a straight line fitted through a curve
+at its catalogue epoch" claims more than the measurement supports. Ephemeris
+Prometheia's own notes had already read those residuals as the proper-motion
+difference; the phase coincidence is the sharper reason and is new.
+
+**What the nets are, now that FK5 is not one of them.** Three, and they fail
+differently:
+
+- **ORB6's own published ephemeris** — θ and ρ at 15 epochs from these same
+  elements, to better than 0.01″. Nets the Kepler solve and the projection.
+- **sefstars.txt's own α Cen A and B** — the catalogue carries the pair as two
+  records, so it states their relative position itself. Carried back to the
+  Hipparcos epoch with their own proper motions the separation is
+  E = −11.0275″, N = −15.6070″ against the orbit's −11.0952 and −15.5796:
+  **0.073″, in both components.** This is the leg that sees DIRECTION, and a
+  sign flip in either component misses it by 22 to 31″. Prometheia ran it
+  against their own Hipparcos records and got the same difference in the same
+  direction (+73.0, −28.0 mas against our +68, −27) — two catalogues, two
+  implementations, one answer. They have adopted it too.
+- **An angle no change of frame can move** — at α Cen A, the angle between the
+  direction to B and the direction to Vega, computed in seven frames. This one
+  earned its place immediately: the first implementation carried the offset
+  into Swiss's *equatorial sidereal* output through the ecliptic, on the
+  reasoning that an ayanamsa is an ecliptic quantity. Swiss subtracts the
+  ayanamsa from **right ascension** there. The offset kept exactly the right
+  size and pointed **4.46° away**, which is 1.3″ of position on α Cen B, and
+  every magnitude check stayed green. Measured, then fixed: the pole the
+  sidereal step turns about is the output plane's own.
+
+**The bit-exact golden gate is structurally blind to all of this**, and that is
+worth knowing rather than assuming otherwise: `tools/ephsrv-golden.sh` has no
+star legs at all, so it neither caught nor could catch a star defect, and it
+passes unchanged across this commit. It could not simply gain them either —
+its premise is that the server's bits ARE the fork's bits, and for these four
+they deliberately are not.
 
 **Three conventions that have to be right, all found by a check failing rather
 than by reading.** Each cost an engine a real error:

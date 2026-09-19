@@ -46,6 +46,7 @@ extern "C" {
 // live in sweph.h. EPHSID_FORK picks the context-taking swi_* forms.
 #define EPHSID_FORK
 #include "ephsidplane.h"
+#include "ephstarorb.h"
 
 #include <openssl/err.h>
 #include <openssl/pem.h>
@@ -1321,11 +1322,43 @@ static void ComputeObjectRows(swe_ctx *ctx, const eph::Request &req, uint32_t iO
         }
         break;
       }
-      case eph::swiss::kCallFixstar:
+      case eph::swiss::kCallFixstar: {
         snprintf(star, sizeof(star), "%s", c.star.c_str());
         ret = c.fUT && !fDtGiven ? swe_fixstar2_ut_r(ctx, star, jd, iflagBody, xx, serr)
                                  : swe_fixstar2_r(ctx, star, jdEt(), iflagBody, xx, serr);
+        // Registry 2.4: four stars in sefstars.txt swing around an unseen
+        // companion, and every catalogue either engine reads carries a star
+        // as a position plus a LINEAR proper motion. Keyed on the name SWISS
+        // HANDS BACK -- it rewrites the buffer to "traditional,nomenclature"
+        // on success -- so every alias of a star arrives as one key.
+        const int iStar = ret >= 0 ? IStarOrbFind(star) : -1;
+        if (iStar >= 0) {
+          // alpha Cen B is placed from A plus the relative orbit, because B's
+          // own solution is poor (+/-20-26 mas/yr). Its own line is asked for
+          // first all the same: that is what resolves the name, reports an
+          // unknown star, and fails the row when B is off the ephemeris.
+          const char *szLine = SzStarOrbLine(iStar);
+          if (szLine != NULL) {
+            char starLine[SE_MAX_STNAME * 2];
+            snprintf(starLine, sizeof(starLine), "%s", szLine);
+            ret = c.fUT && !fDtGiven
+              ? swe_fixstar2_ut_r(ctx, starLine, jd, iflagBody, xx, serr)
+              : swe_fixstar2_r(ctx, starLine, jdEt(), iflagBody, xx, serr);
+          }
+          // The ayanamsa Swiss actually subtracted, with this row's own
+          // flags -- which is why it is read back rather than computed.
+          // Zero unless the answer is sidereal; the FIXED planes never
+          // reach here sidereal, because those ask in J2000 and
+          // ApplySidPlane() turns the whole row below.
+          double ayan = 0.0;
+          if (ret >= 0 && (iflagBody & SEFLG_SIDEREAL) &&
+              swe_get_ayanamsa_ex_r(ctx, jdEt(), iflagBody, &ayan, serr) < 0)
+            ret = -1;
+          if (ret >= 0)
+            EphStarOrbApply(ctx, iStar, jdEt(), iflagBody, ayan, xx);
+        }
         break;
+      }
       default:
         snprintf(serr, sizeof(serr), "unsupported call");
         break;
