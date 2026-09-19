@@ -265,6 +265,17 @@ than by reading.** Each cost an engine a real error:
    point moves at the same RA/Dec rates. Adding an explicit north-turn on top
    double-counts, whichever sign is chosen.
 
+4. **The cross-test's own binary rows cannot see direction, today.** Prometheia
+   disclosed this unprompted: their `expected-difference` grading for these
+   four compares |ours − theirs| against `hypot(east, north)` of the bend — a
+   **magnitude**, so a bend laid in the wrong *direction* passes it. Harmless
+   while this side has no orbit at all. The moment we apply offsets those rows
+   become direct position comparisons, which do see direction, and they should
+   drop to the ordinary star band. **If one instead lands exactly at the old
+   bend magnitude, the offset is going the wrong way rather than missing** —
+   and that is the single most likely mistake, since east/north sign and
+   θ-from-north conventions are where this kind of arithmetic goes wrong.
+
 **And the per-star rule, which is not uniform**, because it depends on what the
 catalogue line already contains:
 
