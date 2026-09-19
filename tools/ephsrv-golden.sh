@@ -72,6 +72,7 @@ int main(int argc, char **argv) {
            pctr:C   swe_calc_pctr_r at jd centred on body C
            aya      swe_calc_r, then one more column: the ayanamsa of the
                     mode (swe_get_ayanamsa_ex_r at jd with the same flags)
+           star:N   swe_fixstar2_r at jd for the star named N (ipl unused)
      The three trailing arguments, taken when iflag carries SEFLG_TOPOCTR,
      are the site. The ephemeris bit (SEFLG_SWIEPH) is always added; no
      other flag is -- the gate writes each one. */
@@ -96,7 +97,13 @@ int main(int argc, char **argv) {
     if (argc < 10) { printf("ERR topo needs lon lat alt\n"); return 1; }
     swe_set_topo_r(ctx, atof(argv[7]), atof(argv[8]), atof(argv[9]));
   }
-  if (strncmp(mode, "nodaps:", 7) == 0) {
+  if (strncmp(mode, "star:", 5) == 0) {
+    /* ipl is ignored; the name is the body. swe_fixstar2_r rewrites the
+       buffer, so it gets a writable copy. */
+    char star[256];
+    snprintf(star, sizeof(star), "%s", mode + 5);
+    ret = swe_fixstar2_r(ctx, star, jd, iflag, xx, serr);
+  } else if (strncmp(mode, "nodaps:", 7) == 0) {
     int pnt = 0, meth = 0;
     double xn[6], xd[6], xp[6], xa[6], *px;
     sscanf(mode + 7, "%d:%d", &pnt, &meth);
@@ -147,6 +154,15 @@ if [ "${TLS:-0}" = 1 ]; then
   CLI=(--tls --ca "$SCRATCH/ca.pem")
 fi
 [ -n "${PROTO:-}" ] && CLI+=(--proto "$PROTO")
+
+# sefstars.txt lives at the tree ROOT, not in the bundled ephem/, so the
+# star legs need it on the path -- but the tree root cannot simply go ON
+# the path, because seorbel.txt is there too and section 7's legs assert
+# what a hypothetical does WITHOUT it. So the catalogue alone is copied to
+# a scratch directory and that is what both ends get.
+mkdir -p "$SCRATCH/stars"
+cp "$ROOT/sefstars.txt" "$SCRATCH/stars/" 2>/dev/null || true
+EPH="$EPH;$SCRATCH/stars"
 
 "$ROOT/astrolog-ephd" --port "$PORT" --ephe "$EPH" --threads 1 --cells-per-sec 0 "${TLS_SRV[@]}" \
   > "$SCRATCH/ephd.log" 2>&1 &
@@ -339,6 +355,102 @@ leg "Moon mean apogee, sidereal" 2451545.0 12 10100 0 tt -- --profile zodiac=fag
 # distance a client can re-centre with. So the oracle asks the way the
 # server now asks -- point 1 of swe_nod_aps directly, no opposite flip.
 leg "Moon mean descending node" 2451545.0 1 100 0 "nodaps:1:1" -- --points 301:1:0
+
+# 6b. FIXED STARS, which this gate had none of at all until 2026-09-19.
+#     That is worth stating plainly: the whole of registry 2.4's binary
+#     work and the plane-2 star defect of 1ecb8b9 happened while this file
+#     -- the one check that holds the server to the fork bit for bit --
+#     was structurally unable to see a star. A gate's coverage is not what
+#     it checks well, it is what it checks at all.
+#
+#     The frames and zodiacs matter here rather than being padding: the
+#     plane-2 defect was in Astrolog's local path, and the way it was
+#     found was a star computed through a sidereal plane. A star asked
+#     tropically would not have shown it.
+for st in Aldebaran Regulus Antares Vega Polaris Canopus; do
+  leg "fixstar $st" 2451545.0 0 100 0 "star:$st" -- --stars "$st"
+done
+leg "fixstar Vega, 1800"        2378500.5 0 100 0 "star:Vega" -- --stars Vega --jd 2378500.5
+leg "fixstar Vega, 2400"        2489500.5 0 100 0 "star:Vega" -- --stars Vega --jd 2489500.5
+# The flag hex is written out here, by hand, from Appendix B, like every
+# other leg: SPEED 0x100, EQUATORIAL 0x800, XYZ 0x1000, J2000 0x20 with
+# NONUT 0x40, ICRS 0x20000, TOPOCTR 0x8000, SIDEREAL 0x10000.
+# --profile BEFORE the objects it governs: the client's profiles are
+# positional ("each starts a profile the objects named after it use"), so a
+# --stars ahead of it takes the DEFAULT profile instead. Written the wrong
+# way round these five legs reported the server ignoring plane, frame and
+# form -- Vega at ecliptic 285.30 against the oracle's right ascension
+# 279.23 -- which reads exactly like a server defect and was the leg.
+leg "fixstar Vega, equatorial"  2451545.0 0 900 0 "star:Vega" -- --profile plane=equ --stars Vega
+leg "fixstar Vega, J2000"       2451545.0 0 160 0 "star:Vega" -- --profile frame=j2000 --stars Vega
+leg "fixstar Vega, ICRF"        2451545.0 0 20160 0 "star:Vega" -- --profile frame=icrf --stars Vega
+leg "fixstar Vega, rectangular" 2451545.0 0 1100 0 "star:Vega" -- --profile form=rect --stars Vega
+leg "fixstar Vega, sidereal"    2451545.0 0 10100 0 "star:Vega" -- --profile zodiac=fagan-bradley --stars Vega
+leg "fixstar Vega, lahiri"      2451545.0 0 10100 1 "star:Vega" -- --profile zodiac=lahiri --stars Vega
+TOPO="8.55 47.37 400" leg "fixstar Vega, topocentric" 2451545.0 0 8100 0 "star:Vega" \
+  -- --profile obs=topo,site=8.55:47.37:400 --stars Vega
+# No "speeds=0" leg for a star: the server zeroes the three rate columns
+# itself, so the oracle would have to be asked a different question rather
+# than the same one, and section 3 already holds that behaviour for a body.
+
+# 6c. AND THE FOUR STARS THAT MUST *NOT* MATCH THE FORK.
+#     Registry 2.4: Sirius, Procyon and both alpha Cen components are moved
+#     onto their visual orbits, because a catalogue's LINEAR proper motion
+#     cannot follow a photocentre swinging around an unseen companion. So
+#     for exactly these four this gate's premise is inverted -- the server's
+#     bits are deliberately not the fork's -- and that inversion has to be
+#     asserted, or the day the correction stops being applied every leg here
+#     goes green.
+#
+#     WHAT THIS LEG DOES NOT SEE, said plainly: it grades a MAGNITUDE, so an
+#     offset laid in the wrong direction passes it. That is the blind spot
+#     registry 2.4's fourth prerequisite is about, and it is deliberate here
+#     rather than overlooked -- DIRECTION is owned by
+#     tools/star-orbit-check.sh, whose three legs grade it against ORB6's
+#     published ephemeris, against sefstars.txt's own alpha Cen separation,
+#     and against the other engine's published offsets. This one asks the
+#     question that file cannot: is the correction reaching the WIRE.
+printf 'orbit stars differ from the fork: '
+nOrb=0
+for st in Sirius Procyon "Rigil Kentaurus" Toliman; do
+  "$ROOT/eph_wsclient" "${CLI[@]}" --port "$PORT" --count 1 --quiet \
+    --out "$SCRATCH/orb.txt" --stars "$st" \
+    || { echo "GOLDEN FAIL: orbit star $st: the request failed"; exit 1; }
+  if ! ora=$("$SCRATCH/oracle" 2451545.0 0 100 0 "$EPH" "star:$st"); then
+    echo "GOLDEN FAIL: orbit star $st: the oracle refused: $ora"; exit 1
+  fi
+  # python3 rather than awk: the columns are HEXFLOATS, which awk's strtonum
+  # does not read -- it stops at the "0x1" and every separation comes out
+  # the same wrong number.
+  if ! python3 -c '
+import math, sys
+star, ora, path = sys.argv[1], sys.argv[2].split(), sys.argv[3]
+got = open(path).readline().split()[5:11]
+dl = float.fromhex(got[0]) - float.fromhex(ora[0])
+db = float.fromhex(got[1]) - float.fromhex(ora[1])
+if dl > 180.0: dl -= 360.0
+if dl < -180.0: dl += 360.0
+c = math.cos(float.fromhex(ora[1]) * math.pi / 180.0)
+d = math.hypot(dl * c, db) * 3600.0
+# Nonzero by a margin no rounding reaches, and bounded by the largest
+# excursion any of the four has -- alpha Cen B, which is its separation
+# from A. A correction that stopped reads 0; one that ran away passes the
+# floor and fails the ceiling.
+if not (0.05 < d < 30.0):
+    print("\nGOLDEN FAIL: %s differs from the fork by %.4f arcsec, outside "
+          "0.05..30 --\n  the registry 2.4 orbit correction is not reaching "
+          "the wire, or is not\n  what it was" % (star, d))
+    sys.exit(1)
+' "$st" "$ora" "$SCRATCH/orb.txt"; then
+    exit 1
+  fi
+  nOrb=$((nOrb + 1))
+done
+echo "$nOrb stars, each moved off the catalogue line"
+# And a star with no orbit, asked the same way, must still be bit-exact --
+# so a change that moved EVERY star would fail here rather than passing
+# both halves.
+leg "fixstar Vega is untouched by the orbit table" 2451545.0 0 100 0 "star:Vega" -- --stars Vega
 
 # 7. A hypothetical and a designation.
 leg "hypothetical cupido" 2451545.0 40 100 0 tt -- --hypo cupido

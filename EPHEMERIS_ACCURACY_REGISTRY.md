@@ -305,12 +305,22 @@ differently:
   every magnitude check stayed green. Measured, then fixed: the pole the
   sidereal step turns about is the output plane's own.
 
-**The bit-exact golden gate is structurally blind to all of this**, and that is
-worth knowing rather than assuming otherwise: `tools/ephsrv-golden.sh` has no
-star legs at all, so it neither caught nor could catch a star defect, and it
-passes unchanged across this commit. It could not simply gain them either —
-its premise is that the server's bits ARE the fork's bits, and for these four
-they deliberately are not.
+**The bit-exact golden gate WAS structurally blind to all of this, and is not
+any more** (2026-09-19). It had no star legs at all, so it neither caught nor
+could catch a star defect. It now has sixteen: six stars bit-exact against the
+fork, Vega across two instants, both planes, three frames, both forms, two
+zodiacs and a topocentric site — and, for the four here, the **inverse**
+assertion, because for exactly these the gate's premise is turned around and
+the server's bits are deliberately not the fork's. Each must differ by between
+0.05″ and 30″, and a star with no orbit asked the same way must still be
+bit-exact, so a change that moved every star fails rather than passing both
+halves. Sabotage-verified: with the orbit lookup disabled it reports Sirius
+differing by 0.0000″.
+
+That leg grades a **magnitude**, and says so in the file: direction is owned by
+`tools/star-orbit-check.sh`'s three legs. The division is deliberate — golden
+asks the question that file cannot, which is whether the correction reaches the
+wire at all.
 
 **Three conventions that have to be right, all found by a check failing rather
 than by reading.** Each cost an engine a real error:
