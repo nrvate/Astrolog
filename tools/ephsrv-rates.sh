@@ -115,10 +115,87 @@ sys.exit(1 if bad else 0)
 PY
 done
 
+# -- the advertised bound (A.3 0x0013) against what the server actually does --
+#
+# 3.5a: a server whose rates differ from a central difference of its own
+# positions by more than 1e-5 deg/day or 1e-6 AU/day "states its largest such
+# difference" here. THAT IS A PROMISE AND IT WAS WRONG: the number was
+# measured geocentrically on five bodies, and a TOPOCENTRIC Moon misses by
+# 8e-4 deg/day while the advertisement said 3e-6. A client trusting it was out
+# by a factor of 264.
+#
+# So the grid below sweeps the observers as well as the bodies, and the
+# advertised figure has to cover the worst of them. The worst case is not the
+# Moon: it is the TRUE NODE topocentrically, 4.1e-3 deg/day at 1800, which is
+# the osculating node's own jitter seen through the diurnal parallax.
+echo
+echo "== the advertised rates bound covers what the server actually does"
+./eph_wsclient --host 127.0.0.1 --port "$PORT" --objs 10 --count 1 \
+  --out /dev/null > "$SCRATCH/welcome.txt"
+for obs in geo topo; do
+  # A site is only meaningful for the topocentric observer, and sending one
+  # otherwise is ERROR 1 by 3.4 -- which is the server being right.
+  SITE=""
+  [ "$obs" = topo ] && SITE=",site=8.55:47.37:400"
+  run_obs() {
+    ./eph_wsclient --host 127.0.0.1 --port "$PORT" --quiet \
+      --jd "$(python3 -c "print(repr($2 - 2.0/1024.0))")" \
+      --step-ns 84375000000 --count 5 \
+      --profile "obs=$1$SITE,plane=ecl,form=sph,speeds=1" \
+      --objs 10,301,199,299,499,5,6,7,8,9 \
+      --points 301:0:1,301:1:1 --out "$3" > /dev/null
+  }
+  # 1800 is in the grid on purpose: the worst case is there, not at J2000.
+  for jd in 2378496.5 2451545.0 2461300.5; do
+    run_obs "$obs" "$jd" "$SCRATCH/b-$obs-$jd.txt"
+  done
+done
+python3 - "$SCRATCH/welcome.txt" "$SCRATCH"/b-*.txt <<'PY' || fail=1
+import sys, re, glob
+
+adv = re.search(r"ratebound=([0-9.eE+-]+)/([0-9.eE+-]+)", open(sys.argv[1]).read())
+if not adv:
+    print("  WELCOME states no rates bound at all"); sys.exit(1)
+advDeg, advAu = float(adv.group(1)), float(adv.group(2))
+h = 1.0 / 1024.0
+worstA = worstR = 0.0; whoA = whoR = ""
+for path in sys.argv[2:]:
+    rows = {}
+    for line in open(path):
+        f = line.split()
+        if len(f) < 11 or int(f[2]) != 0:
+            continue
+        rows.setdefault(f[1], []).append([float.fromhex(x) for x in f[5:11]])
+    for label, seq in rows.items():
+        if len(seq) != 5:
+            continue
+        for col in (0, 1, 2):
+            v = [r[col] for r in seq]
+            if col == 0:
+                for i in range(1, 5):
+                    while v[i] - v[i-1] > 180.0: v[i] -= 360.0
+                    while v[i] - v[i-1] < -180.0: v[i] += 360.0
+            d = (v[0] - 8*v[1] + 8*v[3] - v[4]) / (12.0 * h)
+            m = abs(seq[2][col+3] - d)
+            if col == 2:
+                if m > worstR: worstR, whoR = m, "%s %s" % (label, path.split("/")[-1])
+            elif m > worstA:
+                worstA, whoA = m, "%s %s col%d" % (label, path.split("/")[-1], col)
+print("    advertised  %g deg/day   %g AU/day" % (advDeg, advAu))
+print("    measured    %g deg/day   %g AU/day" % (worstA, worstR))
+print("    worst angle    %s" % whoA)
+print("    worst distance %s" % whoR)
+bad = worstA > advDeg or worstR > advAu
+print("    %s" % ("BAD: the server misses by more than it advertises"
+                  if bad else "the advertisement covers it"))
+sys.exit(1 if bad else 0)
+PY
+
 if [ "$fail" -eq 0 ]; then
   echo
   echo "RATES PASS: every row's longitude rate describes its own longitudes,"
-  echo "and an instant-defined zodiac is no worse than an epoch-anchored one."
+  echo "an instant-defined zodiac is no worse than an epoch-anchored one, and"
+  echo "the advertised rates bound covers the worst the server actually does."
   exit 0
 fi
 echo

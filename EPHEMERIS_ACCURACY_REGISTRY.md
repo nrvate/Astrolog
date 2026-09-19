@@ -581,6 +581,28 @@ the second instant. −dε·sin λ is a small-latitude approximation and the Moo
 latitude reaches 5° and changes fast, so other terms are comparable there. A
 formula that fitted the Moon too would be one fitted to the data.
 
+**AND THE ADVERTISED BOUND WAS WRONG, WHICH IS OURS.** §3.5a requires a server
+whose rates miss by more than 1e-5 °/day to state **its largest such
+difference** (A.3 0x0013). This one advertised **3e-6 °/day**. That figure was
+measured geocentrically, on five bodies, at J2000 — so it never asked the
+observer that matters. Swept across four observers, thirteen bodies and four
+instants from 1800 to 2400, the real worst is **4.05e-03 °/day**: the
+topocentric lunar node at 1800, the osculating node's own jitter seen through
+the diurnal parallax. A client trusting the advertisement was out by **1351**.
+Corrected to 5e-3 °/day. The distance figure, 1e-4 AU/day, was already right
+(worst measured 5.06e-05, geocentric Neptune).
+
+**A measurement trap worth keeping**, because it cost a plausible-looking
+5,000,000× result before it was caught. Near the edge of an ephemeris file
+Swiss **silently falls back to Moshier for some points of a stencil and not
+others**, returning success either way — only the returned FLAGS differ
+(18180 against 18178). A five-point stencil straddling that boundary
+differences two different theories and reports 16 °/day, which is four times
+Mercury's own speed and entirely the measurement's. Every point of a stencil
+must be required to come from the same ephemeris. Stability across h = 1/512,
+1/1024 and 1/2048 is the other guard: the real misses above repeat to five
+figures, the artefact does not.
+
 **All of it is Swiss's**, on the same evidence as §2.6: these numbers come from
 calling the library directly, and `astrolog-ephd` passes them through. The
 `equator` of date and the `J2000` ecliptic are clean in the other project's

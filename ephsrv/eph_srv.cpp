@@ -3490,8 +3490,29 @@ static void BuildWelcome(const EphDiscovery &disc, const char *szSwe) {
   // noise (it is the observer's acceleration over the light time). That is
   // past the 1e-6 AU/day tolerance, so the bound is advertised and every
   // object answered with speeds carries ratesApprox.
+  //
+  // THE ANGLE FIGURE WAS 3e-6 AND THAT WAS A PROMISE THIS SERVER DID NOT
+  // KEEP. The sweep above is geocentric and covers five bodies, so it never
+  // asked the observer that matters: a TOPOCENTRIC Moon misses by 7.9e-4
+  // deg/day and the topocentric lunar NODE by 4.1e-3 at 1800 -- the
+  // osculating node's own jitter seen through the diurnal parallax. A client
+  // trusting 3e-6 was out by a factor of 1351. Registry 2.6 and 2.8.
+  //
+  // Measured across four observers, thirteen bodies and four instants from
+  // 1800 to 2400, each point required to come from the SAME ephemeris as the
+  // rest of its stencil -- near a file's edge Swiss falls back to Moshier for
+  // some points and not others, still returning success, and a stencil
+  // straddling that boundary reports 16 deg/day that is entirely the
+  // measurement's. Stable to five figures at h = 1/512, 1/1024 and 1/2048, so
+  // it is the model and not differencing noise.
+  //
+  // 5e-3 covers the worst with margin. It is a large number and it is the
+  // honest one: 3.5a asks for the LARGEST such difference, not a typical one,
+  // and a client wanting better can ask geocentrically, where the same sweep
+  // gives 9.4e-8 for that node. tools/ephsrv-rates.sh holds this against a
+  // grid that includes the case, so it cannot quietly rot again.
   c.fRatesBound = true;
-  c.ratesDegPerDay = 3e-6f;
+  c.ratesDegPerDay = 5e-3f;
   c.ratesAuPerDay = 1e-4f;
   for (int i = 0; i < eph::kHypotheticalTokenCount; i++)
     c.hypotheticals.push_back(eph::kHypotheticalTokens[i]);

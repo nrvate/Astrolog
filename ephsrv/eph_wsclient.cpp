@@ -659,11 +659,15 @@ int main(int argc, char **argv) {
       if (!quiet)
         printf("WELCOME v%u caps=0x%x maxObjs=%u maxRows=%u maxChunk=%u maxCells=%u maxProfiles=%u "
                "kinds=0x%x observers=0x%x masks=%zu columns=0x%x zodiacs=%zu scales=0x%x "
-               "lookup=%u hypotheticals=%zu rate=%u deltat=%s server=%s dataset=%s engine=\"%s\"\n",
+               "lookup=%u hypotheticals=%zu rate=%u ratebound=%g/%g deltat=%s server=%s "
+               "dataset=%s engine=\"%s\"\n",
                w.protoSession, w.caps, w.maxObjs, w.maxRows, w.maxChunkRows, w.maxCells,
                (unsigned)w.maxProfiles, caps.kinds, caps.observers, caps.corrMasks.size(), caps.columns,
                caps.zodiacs.size(), caps.timeScales, (unsigned)caps.lookupMax, caps.hypotheticals.size(),
-               caps.fRate ? caps.cellsPerSec : 0, caps.deltaTModel.c_str(), w.serverName.c_str(),
+               caps.fRate ? caps.cellsPerSec : 0,
+               caps.fRatesBound ? (double)caps.ratesDegPerDay : 0.0,
+               caps.fRatesBound ? (double)caps.ratesAuPerDay : 0.0,
+               caps.deltaTModel.c_str(), w.serverName.c_str(),
                w.datasetId.c_str(), w.engine.c_str());
     }
     if (cyc < cycles) {
