@@ -52,6 +52,10 @@ struct SwissCall {
   int32_t nodMethod = 0;       // SE_NODBIT_*
   int point = 0;               // nod_aps: which of the four answers (0..3)
   bool fOpposite = false;      // named node body: add 180 deg (descending)
+  bool fOrbitPoint = false;    // the REQUEST asked for kind 1, whatever this
+                               // resolved to -- the Moon's points resolve to
+                               // named BODIES and would otherwise look like
+                               // ordinary ones to the observer check below
   bool fSidereal = false;
   int32_t sidMode = 0;         // swe_set_sid_mode triple
   double sidT0 = 0.0, sidAyanT0 = 0.0;
@@ -202,6 +206,7 @@ inline uint16_t MapObject(const Object &o, int32_t nNative, const Profile &pf,
     }
     case kObjOrbitPoint: {
       c->resolvedNaif = o.naif;
+      c->fOrbitPoint = true;
       if (o.point > kOrbitPointMax || o.method > kOrbitMethodMax) {
         *why = "orbit point";
         return kOErrUnsupported;
@@ -336,8 +341,31 @@ inline uint16_t MapObject(const Object &o, int32_t nNative, const Profile &pf,
     int32_t iplC, resolvedC;
     bool fApproxC;
     err = BodyFromNaif(pf.observerBody, &iplC, &extra, &resolvedC, &fApproxC);
-    if (err || extra || c->kind != kCallCalc) {
-      *why = "no Swiss body for this observer";
+    // AN ORBIT POINT IS REFUSED FROM A BODY-CENTRED OBSERVER whatever it
+    // resolved to. Testing c->kind alone caught the swe_nod_aps points and
+    // MISSED the Moon's, because those resolve to Swiss's named node and
+    // apogee BODIES and so arrive here as kCallCalc -- indistinguishable
+    // from an ordinary body by that test.
+    //
+    // What they got instead was swe_calc_pctr() on a point that has no
+    // heliocentric position of its own, and the answers were not merely
+    // differently defined, they were impossible: seen from the Mars
+    // barycentre at J2000, where the Earth and Moon both sit at 1.85 AU,
+    // the Moon's osculating apogee and ascending node came back IDENTICAL
+    // to each other at 1.384 AU, and the descending node at 0.0026 AU --
+    // inside Mars's own orbit. Found by the Prometheia cross-test's points
+    // leg, which asks every orbit point from the Sun, the barycentre and
+    // Mars's centre and compares each against the Earth answered in the
+    // same request: whatever a Moon point means, it is within 0.003 AU of
+    // the Earth.
+    //
+    // Refusing is what the mean node and both perihelia already did, by
+    // falling through to swe_nod_aps; this makes the other four agree with
+    // them instead of contradicting them.
+    if (err || extra || c->fOrbitPoint || c->kind != kCallCalc) {
+      *why = c->fOrbitPoint ? "an orbit point has no place seen from another "
+                              "body's centre"
+                            : "no Swiss body for this observer";
       return err ? err : (uint16_t)kOErrUnsupported;
     }
     if (iplC == c->ipl) { *why = "the observer is the body"; return kOErrUnsupported; }

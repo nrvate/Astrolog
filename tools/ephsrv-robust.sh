@@ -409,6 +409,43 @@ fi
 kill "$B9" 2>/dev/null || true
 alive "$A" || fail "S9: the server died on the partial window"
 
+# ---- S11: an orbit point from a body-centred observer is refused ---------
+step "S11"
+# A point on a body's orbit has no place seen from ANOTHER body's centre,
+# and the refusal has to be uniform. It was not: swe_nod_aps points were
+# refused, and the Moon's -- which resolve to Swiss's NAMED node and apogee
+# bodies and so look like ordinary bodies to a check on the call kind --
+# went to swe_calc_pctr instead. From the Mars barycentre at J2000, where
+# the Earth and the Moon both sit at 1.85 AU, the osculating apogee and the
+# ascending node came back IDENTICAL at 1.384 AU and the descending node at
+# 0.0026 AU, inside Mars's own orbit.
+#
+# Found by the Prometheia cross-test's points leg, which asks every orbit
+# point from the Sun, the barycentre and Mars's centre and grades each
+# against the Earth answered in the SAME request -- whatever a Moon point
+# means, it is within 0.003 AU of the Earth. The body itself is still
+# answered from another body's centre; only its orbit points are not.
+PORT11=$((PORT + 7))
+start_server "$PORT11" "$SCRATCH/s11.log" --threads 1 \
+  || { echo "ROBUST FAIL: S11: server did not start"; exit 1; }
+B11=$SRV_PID
+if ! $CLI --port "$PORT11" --jd 2451545.0 --count 1 --quiet \
+    --profile "obs=body:4,plane=ecl,form=sph,speeds=1,corr=0" \
+    --points 301:0:0,301:3:1,301:0:1,301:1:1,301:2:1,5:0:1 --objs 399,301 \
+    --out "$SCRATCH/s11.txt"; then
+  fail "S11: the request was not answered at all"
+else
+  # Column 3 is errCode: every orbit point refused, both bodies answered.
+  pts=$(awk '$2 ~ /^o:/ {print $3}' "$SCRATCH/s11.txt" | sort -u | tr '\n' ' ')
+  bodies=$(awk '$2 !~ /^o:/ {print $3}' "$SCRATCH/s11.txt" | sort -u | tr '\n' ' ')
+  npt=$(awk '$2 ~ /^o:/' "$SCRATCH/s11.txt" | wc -l)
+  [ "$npt" -eq 6 ] || fail "S11: expected 6 orbit-point rows, got $npt"
+  [ "$pts" = "2 " ] || fail "S11: an orbit point was ANSWERED from a body's centre (errCodes: $pts)"
+  [ "$bodies" = "0 " ] || fail "S11: an ordinary body was refused from a body's centre (errCodes: $bodies)"
+fi
+kill "$B11" 2>/dev/null || true
+alive "$A" || fail "S11: the server died on the body-centred refusal"
+
 # ---- S6: a second server on the same port --------------------------------
 step "S6"
 "$ROOT/astrolog-ephd" --port "$PORT" --ephe "$EPH" --cells-per-sec 0 > "$SCRATCH/b.log" 2>&1 &
