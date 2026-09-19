@@ -289,16 +289,25 @@ the outlier and the difference is in which transfer Swiss used. Recorded as a
 transfer difference rather than a defect, because nothing here has established
 which transfer Swiss intended.
 
-**`true-sheoran`: this fork's data and the published definition disagree.** Its
-published definition is epoch-anchored — −60° at the winter solstice of 4174
-BCE — but Swiss's ayanamsa table gives it **t0 = 0**, the marker for "no anchor
-epoch". So this server treats it as anchorless and refuses it on the fixed
-planes, which follows Swiss's *data* and not Swiss's *documentation*. Prometheia
-keeps the published reading and does not implement the mode, so the two will
-not diverge in practice — but they would if either of us implemented it from
-the other's premise. Written down here because a class that is defined by
-"does this zodiac have an anchor epoch" is the right rule and this is the one
-token where the answer depends on which source you ask.
+**`true-sheoran`: Swiss's implementation contradicts its own documentation, and
+the implementation is what we follow.** Its published definition is
+epoch-anchored — −60° at the winter solstice of 4174 BCE — while Swiss's
+ayanamsa table gives it **t0 = 0**, the marker for "no anchor epoch". The
+documentation would have us hardcode a datum the library does not carry, so
+this looked like it needed adjudicating.
+
+It does not: **Swiss's implementation is measurably star-anchored.** Switching
+aberration off moves its ayanamsa by **18.3463″** at J2000 — an epoch-anchored
+ayanamsa is a fixed arc plus precession and cannot care about aberration at
+all, which the Lahiri and Fagan/Bradley controls confirm at exactly 0.0000″. So
+whatever the documentation calls it, the code computes it from an anchor in the
+sky at the instant asked, and this server's treatment — anchorless, refused on
+the fixed planes, true anchor on plane 0 — is right for the library we actually
+link. Nothing is hardcoded and nothing is invented.
+
+The same probe settles `galequ-iau1958` from the other direction: **0.0000″**,
+no anchor in the sky at all, which is why the true-anchor change did not move
+it and confirms its −0.1754″ is the ICRS transfer and nothing else.
 
 ## 3. Divergences deliberately DECLINED
 

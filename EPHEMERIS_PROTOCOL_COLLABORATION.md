@@ -176,6 +176,60 @@ registered.
 | Vendored third-party code | **Your human maintainer**, not you and not the peer |
 | Repository policy, permissions, config | **Your human**, always |
 
+### Most of it is not a decision at all
+
+The table above is about *authority*. The more common mistake is not misplacing
+authority but **asking for it when none is needed**. A question that a
+measurement, a published reference or the spec's own text answers is not a
+decision; it is work. Escalating it costs the maintainer's attention and
+teaches them that the agent cannot tell the two apart — which is expensive
+later, when something really is theirs.
+
+**Settle it yourself, and write down what settled it:**
+
+- which of two implementations is right, when a measurement decides — including
+  diverging from the library this project is built on;
+- a defect and its fix, with a net proven to fail without it;
+- which source to believe when data and documentation disagree, when a probe
+  can tell them apart;
+- what a gate asserts, where code lives, how a test is built;
+- anything internal and cheaply reversible.
+
+**Take it to your maintainer when, and mostly only when:**
+
+- the evidence genuinely does not pick a winner, and two reasonable people
+  would choose differently — a *preference*, not a hard question;
+- it is hard to undo, or reaches outside the repository: a release, a tag, a
+  push to someone else's remote, a deletion;
+- it **obliges someone else** — most often a §3 drop, which is the contract the
+  other project builds against and commits them to work;
+- it is repository policy, permissions, or vendored third-party code.
+
+The test is **cost and reversibility, not difficulty**. A hard question with a
+decisive measurement is yours. An easy question that quietly commits the other
+project to a week is not.
+
+### A maintainer's decision reaches a project only through that project's own maintainer
+
+This is worth stating separately because it looks like pedantry until it
+happens. A peer relayed four decisions "from the maintainer directly", noting
+that the same human maintains both projects and had answered in that session.
+Two of the four had already been approved here and proceeded on that authority.
+**The other two did not, and should not have.**
+
+Not because the peer might lie — they were relaying in good faith and were very
+likely accurate. It is that *"your maintainer told me X about your repository"*
+is, from the receiving side, indistinguishable from a peer who misunderstood,
+or who is describing a decision made in a context you cannot see. The failure
+mode is silent: you act, it was almost right, and nobody ever learns which part
+was not.
+
+The cost of the rule is one message and a few hours. The cost of breaking it is
+a change nobody can trace to a decision.
+
+This composes with the section above rather than fighting it: as fewer things
+need authority at all, fewer relays matter.
+
 Two corollaries worth stating because both came up:
 
 - **Draft, but do not decide alone, anything that changes what the peer must
