@@ -20761,74 +20761,25 @@ static void TestEphSrvLiveQt()
     Check(NCastWarnSrvTestQt() == cWarn,
       "%s: the server cast raised no warning (\"%.100s\")", szScen,
       SzWarnSrvTestQt());
-    if (iScen == 8) {
-      // 3.5a's fixed sidereal planes are the SERVER's own arithmetic since
-      // registry 4.1, and the local Swiss path still delegates to Swiss --
-      // so on the solar-system plane the two DIVERGE on purpose, by the
-      // zero point Swiss puts in the wrong place. Bit-identity is the
-      // wrong assertion here until the local path lands.
-      //
-      // What replaces it is stronger than "allow a difference", which
-      // would be carving an exception around the very thing this leg
-      // watches. An origin shift and nothing else has a signature: every
-      // LATITUDE unchanged, and every LONGITUDE moved by the SAME angle.
-      // So require exactly that, and require the angle to be the one the
-      // registry documents for Fagan/Bradley. Anything that moved a
-      // latitude, or moved two objects by different amounts, is not an
-      // origin shift and fails.
-      // Partitioned by whether the object MOVED rather than by index range.
-      // The two sets are meaningful in themselves: house cusps, the angles
-      // and the points derived from them are Astrolog's own arithmetic and
-      // no ephemeris source touches them, so they must be bit-identical; the
-      // bodies come from the source and must all move together. Keying this
-      // on object numbers instead was wrong twice in a row -- the cusps are
-      // not the only locally computed points.
-      int iObjT, cMoved = 0, cStill = 0;
-      real rOff = 0.0, rSpread = 0.0;
-      for (iObjT = 0; iObjT <= cObj; iObjT++) {
-        if (snLocal.rgobj[iObjT] == 0.0 && snSrv.rgobj[iObjT] == 0.0)
-          continue;
-        real rDL = (snSrv.rgobj[iObjT] - snLocal.rgobj[iObjT]) * 3600.0;
-        if (rDL > 180.0 * 3600.0) rDL -= 360.0 * 3600.0;
-        if (rDL < -180.0 * 3600.0) rDL += 360.0 * 3600.0;
-        if (RAbs(rDL) < 0.001) {
-          Check(snLocal.rgobj[iObjT] == snSrv.rgobj[iObjT],
-            "%s: object %d is either served and moved, or not served and "
-            "BIT-identical -- not almost identical", szScen, iObjT);
-          cStill++;
-          continue;
-        }
-        real rD2 = RAbs(snLocal.rgalt[iObjT] - snSrv.rgalt[iObjT]) * 3600.0;
-        Check(rD2 < 0.01, "%s: latitude unmoved for object %d (%.5f\"), "
-          "which an origin shift cannot do", szScen, iObjT, rD2);
-        if (cMoved == 0) rOff = rDL;
-        else if (RAbs(rDL - rOff) > rSpread) rSpread = RAbs(rDL - rOff);
-        cMoved++;
-      }
-      Check(cMoved > 8, "%s: enough served bodies to characterise the shift "
-        "(%d moved, %d unmoved)", szScen, cMoved, cStill);
-      Check(cStill > 8, "%s: the locally computed points did NOT move (%d)",
-        szScen, cStill);
-      Check(rSpread < 0.05, "%s: every served body moved by the SAME angle, "
-        "which is what an origin shift means (spread %.5f\" over %d)",
-        szScen, rSpread, cMoved);
-      // 31.5", which registry 4.1 predicted and the other engine measured
-      // independently as 31.51" between the two servers. The first version of
-      // this leg asserted 28.2" and "explained" the 3.3" gap as a plane-0
-      // reference artefact -- it was not, it was a defect: the anchor was
-      // built from the TRUE ayanamsa at t0 instead of the mean, which is
-      // dpsi(t0) out and zodiac-dependent. An assertion written around a
-      // wrong number would have locked that in, which is the argument for
-      // taking the number from a source outside this project.
-      Check(RAbs(RAbs(rOff) - 31.5) < 0.5, "%s: and by the angle registry 4.1 "
-        "documents for Fagan/Bradley, about 31.5\" (measured %.4f\")",
-        szScen, rOff);
-    } else {
+    // Scenario 8 was special for a day and is not any more, which is the
+    // point of recording it: A.8's fixed sidereal planes went in-house on the
+    // server first, so the server and the application disagreed by the 31.5"
+    // the zodiac's zero point had been out by, and this leg asserted the
+    // divergence -- every served body moved by ONE angle, every locally
+    // computed point bit-identical, and the angle the one registry 4.1
+    // documents. That assertion caught two real defects while it stood: a
+    // node handed SEFLG_J2000 (its LATITUDE moved, which an origin shift
+    // cannot do) and, when the application caught up, the same node defect
+    // reintroduced on the local side for the same reason.
+    //
+    // Now that both paths share ephsrv/ephsidplane.h the gap is zero and
+    // bit-identity is the right assertion again. If this ever fails on
+    // scenario 8 again, the two paths have diverged, and the shared header
+    // is where to look first.
     cDiff = CDiffEphQt(&snLocal, &snSrv, rTol, S(szDiff));
     Check(cDiff == 0, "%s: server cast %s the local one "
       "(%d objects differ; first: %s)", szScen,
       rTol == 0.0 ? "bit-identical to" : "agrees with", cDiff, szDiff);
-    }
     Check(planet[oSun] != 0.0 || planet[oMoo] != 0.0,
       "%s: the cast computed something at all", szScen);
     if (iScen == 6) {

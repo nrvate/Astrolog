@@ -35,11 +35,13 @@
 #define EPHSID_CTXARG ctx,
 #define EPHSID_PRECESS(x, j, d) swi_precess(ctx, (x), (j), 0, (d))
 #define EPHSID_EPSILN(j) swi_epsiln(ctx, (j), 0)
+#define EPHSID_BIAS(x, j, f) swi_bias(ctx, (x), (j), (f), FALSE)
 #else
 #define EPHSID_CTXDECL
 #define EPHSID_CTXARG
 #define EPHSID_PRECESS(x, j, d) swi_precess((x), (j), 0, (d))
 #define EPHSID_EPSILN(j) swi_epsiln((j), 0)
+#define EPHSID_BIAS(x, j, f) swi_bias((x), (j), (f), FALSE)
 #endif
 
 // What a caller works out once per object and then applies to every row.
@@ -136,6 +138,68 @@ static void ApplySidPlane(EPHSID_CTXDECL const EPHSIDPLANE *psp, int fRect,
     swi_polcart_sp(p2, xx);
   } else
     memcpy(xx, pol, sizeof(pol));
+}
+
+// A node's frame, per 3.5a as the 2026-09-18 drop amended it: a node lies on
+// the mean ecliptic of DATE, and the profile's frame gives the coordinates it
+// is expressed in rather than which point it is.
+//
+// Swiss handed a fixed frame answers a THIRD point. The of-date node's
+// longitude comes back precessed and correct, and the latitude is neither the
+// rotation's nor zero: +10.013" at 1800 where rotating the of-date node gives
+// +61.358", and at 2100 not even the same sign. So the caller asks for the
+// node with OF-DATE flags and rotates it here.
+//
+// Shared because BOTH paths need it and for the same reason: anything that
+// asks Swiss with SEFLG_J2000 gets the third point, and A.8's fixed sidereal
+// planes ask exactly that way. Astrolog's own "-Ys" reintroduced this defect
+// the moment it started asking in J2000, and the suite's server-versus-local
+// leg caught it as a node whose LATITUDE had moved -- which an origin shift
+// cannot do.
+//
+// swi_precess is the same precession swe_calc gives the BODIES, which is the
+// property that matters: a chart has to be internally consistent, and a model
+// reimplemented here would disagree with our own planets before it disagreed
+// with anyone else's.
+static void RotateNodeToFixedFrame(EPHSID_CTXDECL double jdEt, int32 iflag,
+  double *xx)
+{
+  double v[6], pol[6];
+  const int fRect = (iflag & SEFLG_XYZ) != 0;
+  const int fEqu = (iflag & SEFLG_EQUATORIAL) != 0;
+  const double toRad = (iflag & SEFLG_RADIANS) ? 1.0 : DEGTORAD;
+
+  if (fRect)
+    memcpy(v, xx, sizeof(v));
+  else {
+    memcpy(pol, xx, sizeof(pol));
+    pol[0] *= toRad; pol[1] *= toRad; pol[3] *= toRad; pol[4] *= toRad;
+    swi_polcart_sp(pol, v);
+  }
+  // Precession is defined on the equator, so ecliptic input goes there and
+  // back. The obliquity out is J2000's, not the instant's.
+  if (!fEqu) {
+    swi_coortrf(v, v, -EPHSID_EPSILN(jdEt));
+    swi_coortrf(v + 3, v + 3, -EPHSID_EPSILN(jdEt));
+  }
+  EPHSID_PRECESS(v, jdEt, J_TO_J2000);
+#ifdef EPHSID_FORK
+  swi_precess_speed(ctx, v, jdEt, 0, J_TO_J2000);
+#else
+  swi_precess_speed(v, jdEt, 0, J_TO_J2000);
+#endif
+  if (iflag & SEFLG_ICRS) EPHSID_BIAS(v, jdEt, iflag);
+  if (!fEqu) {
+    swi_coortrf(v, v, EPHSID_EPSILN(J2000));
+    swi_coortrf(v + 3, v + 3, EPHSID_EPSILN(J2000));
+  }
+  if (fRect)
+    memcpy(xx, v, sizeof(v));
+  else {
+    swi_cartpol_sp(v, pol);
+    pol[0] /= toRad; pol[1] /= toRad; pol[3] /= toRad; pol[4] /= toRad;
+    memcpy(xx, pol, sizeof(pol));
+  }
 }
 
 #endif // EPHSIDPLANE_H

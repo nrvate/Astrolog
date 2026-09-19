@@ -2817,6 +2817,12 @@ void CreateElemTable(ET *pet)
 #undef ret
 #include "swephexp.h"
 #include "swephlib.h"
+#include "sweph.h"
+// A.8's fixed sidereal planes, shared with astrolog-ephd so the application
+// and the server cannot drift: EPHEMERIS_ACCURACY_REGISTRY.md 4.1. No
+// EPHSID_FORK here -- the vendored Swiss sources compile into this binary and
+// their swi_precess() and swi_epsiln() take no context.
+#include "ephsrv/ephsidplane.h"
 #define ret cp0.dir
 
 // The ephemeris search path, as the list of directories it actually is.
@@ -3945,6 +3951,36 @@ LRestore:
 }
 
 
+// A.8 plane 2 for this program's own Swiss path. The anchor is Fagan/Bradley,
+// which is the only sidereal base Astrolog offers, and it is a constant: t0
+// and the MEAN ayanamsa there do not depend on the chart, so the plane's
+// origin is worked out once. SEFLG_NONUT on that lookup is load-bearing --
+// without it the anchor is the TRUE ayanamsa at t0, the arc from the true
+// equinox, and placing it on the mean ecliptic of t0 moves the origin by the
+// nutation in longitude there (-3.311" for Fagan/Bradley). The server made
+// exactly that mistake and the other project's cross-test found it in an
+// hour; tools/sidplane-anchor.sh is the gate that holds it on that side.
+static void ApplySidPlaneLocal(double *xx)
+{
+  static EPHSIDPLANE sp;
+  static flag fReady = fFalse;
+  char serr[AS_MAXCH];
+
+  if (!fReady) {
+    double t0 = ayanamsa[SE_SIDM_FAGAN_BRADLEY].t0, a0 = 0.0;
+    if (ayanamsa[SE_SIDM_FAGAN_BRADLEY].t0_is_UT)
+      t0 += swe_deltat(t0);
+    if (swe_get_ayanamsa_ex(t0, SEFLG_SWIEPH | SEFLG_NONUT, &a0, serr) < 0)
+      return;                  // leave the tropical answer rather than guess
+    sp.plane = 2;
+    sp.t0Et = t0;
+    sp.A0 = a0;
+    sp.lonOrigin = SidPlaneOrigin(t0, a0);
+    fReady = fTrue;
+  }
+  ApplySidPlane(&sp, fFalse, xx);
+}
+
 flag FSwissPlanet(int ind, real jd, int indCent,
   real *obj, real *objalt, real *dir, real *dist, real *diralt, real *dirlen)
 {
@@ -3967,16 +4003,46 @@ flag FSwissPlanet(int ind, real jd, int indCent,
     is.rDeltaT = swe_deltat(jd);
   }
   jde = jd + (us.rDeltaT == rInvalid ? is.rDeltaT : us.rDeltaT/86400.0);
+  // "-Ys", the solar system plane: A.8's plane 2 is this program's own
+  // arithmetic now, so Swiss is asked TROPICALLY in the mean ecliptic of
+  // J2000 and ApplySidPlaneLocal() does the plane below. Swiss's own
+  // SE_SIDBIT_SSY_PLANE puts the zodiac's zero point about 31.5" from where
+  // the zodiac names: it carries the equinox of t0 onto the plane and walks
+  // the ayanamsa there instead of carrying the zero point's own DIRECTION.
+  // The server stopped delegating it on 2026-09-18 and this is the
+  // application catching up, so the two agree again.
+  //
+  // THE FLAGS THIS FUNCTION CALLS WITH ARE NOT THE FLAGS GetSwissFlags()
+  // REPORTS, and that separation is load-bearing. ephswiss.h maps those same
+  // flags BACK into a protocol profile for the Ephemeris Server backend, so
+  // clearing SEFLG_SIDEREAL there told the server the chart was tropical --
+  // the server then answered 24.7 degrees away, which is the ayanamsa, and
+  // the suite's server-versus-local leg caught it at once. GetSwissFlags()
+  // says what the CHART is; this says how to get it out of Swiss.
+  int32 iflagCall = ss.iflag;
+  if (us.fSidereal && us.fSidereal2)
+    iflagCall = (iflagCall & ~(int32)SEFLG_SIDEREAL) | SEFLG_J2000 |
+      SEFLG_NONUT;
   if (ss.nPnt == 0) {
     if (ss.iobjCent < 0)
       // Normal geocentric or heliocentric position.
-      nRet = swe_calc(jde, ss.iobj, ss.iflag, xx, serr);
+      nRet = swe_calc(jde, ss.iobj, iflagCall, xx, serr);
     else
       // Alternate position orbiting an unusual central object.
-      nRet = swe_calc_pctr(jde, ss.iobj, ss.iobjCent, ss.iflag, xx, serr);
+      nRet = swe_calc_pctr(jde, ss.iobj, ss.iobjCent, iflagCall, xx, serr);
   } else {
-    // Standard case to get node or apsis position.
-    nRet = swe_nod_aps(jde, ss.iobj, ss.iflag, ss.nNodMethod,
+    // Standard case to get node or apsis position. A node under "-Ys" is
+    // asked OF DATE and rotated, never with SEFLG_J2000 -- Swiss handed a
+    // fixed frame answers a third point, neither the node of date expressed
+    // in J2000 nor the node against the J2000 ecliptic. 3.5a: a node lies on
+    // the mean ecliptic of date and the frame only says what to express it
+    // in. RotateNodeToFixedFrame() is the same routine the server uses.
+    int32 iflagNode = iflagCall;
+    flag fRotNode = (iflagCall & SEFLG_J2000) != 0;
+    if (fRotNode)
+      iflagNode = (iflagCall & ~(int32)(SEFLG_J2000 | SEFLG_ICRS)) |
+        SEFLG_NONUT;
+    nRet = swe_nod_aps(jde, ss.iobj, iflagNode, ss.nNodMethod,
       xnasc, xndsc, xperi, xaphe, serr);
     switch (ss.nPnt) {
     case 1:  px = xnasc; break;  // North node
@@ -3986,6 +4052,8 @@ flag FSwissPlanet(int ind, real jd, int indCent,
     }
     for (ix = 0; ix < 6; ix++)
       xx[ix] = px[ix];
+    if (nRet >= 0 && fRotNode)
+      RotateNodeToFixedFrame(jde, iflagCall, xx);
   }
 
   // Clean up and return position.
@@ -4002,6 +4070,14 @@ flag FSwissPlanet(int ind, real jd, int indCent,
     }
     return fFalse;
   }
+  // The solar system plane, this program's own arithmetic since the zodiac's
+  // zero point is a DIRECTION. Applied to xx before the lines below, so the
+  // longitude, the latitude and all three rates go through one rotation and
+  // the existing return arithmetic is untouched: *obj still subtracts is.rSid
+  // for ComputeEphem to add back, and the user's zodiac offsets still ride on
+  // top of whatever the zodiac produced.
+  if (us.fSidereal && us.fSidereal2)
+    ApplySidPlaneLocal(xx);
   *obj    = xx[0] - is.rSid + (us.fSidereal ? us.rZodiacOffset : 0.0) +
     us.rZodiacOffsetAll;
   *objalt = xx[1];
