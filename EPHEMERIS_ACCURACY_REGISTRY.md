@@ -521,12 +521,13 @@ derivative of the light-time range, and they predicted a geometric one would
 miss by exactly ṙ·(dτ/dt), "of order 1e-6 AU/day for the planets and tiny for
 the Moon". It is.
 
-**One number still to reconcile.** Their leg reported our Pluto at 1.5e-6
-AU/day where calling the library directly gives 4.748e-05 — thirty times
-apart. Most likely a different correction mask in that leg, since the gap is
-the light-time term and the mask governs it. Recorded as open rather than
-rounded away: an order of magnitude between two measurements of the same
-quantity is a question, not noise.
+**A number that looked open and was a unit.** Their leg reported our Pluto at
+1.5e-6 where the library gives 4.748e-05, and I recorded the thirty-fold gap
+as a question rather than rounding it away. It was the right instinct and the
+wrong guess: their distance column is **AU/day per AU of distance**, and Pluto
+was 31 AU away at that instant — 1.53e-6 × 31 = 4.7e-5. Same measurement, and
+the mask was not different. **4.748e-05 AU/day is the number.** They are adding
+the unit to the leg's printed header.
 
 **A candidate for §1 rather than §2, and not decided here.** Unlike §2.6 this
 is not a modelling approximation, it is two columns of one row answering
@@ -536,6 +537,61 @@ distance. Against that: it diverges from the library on a column
 `ephsrv-golden` holds bit-exact, and the protocol does not yet say which
 quantity column 5 is. That last gap is the real finding, and it wants a
 sentence in §3 before either engine changes a number.
+
+### 2.8 Every rate is the derivative of the UNTRANSFORMED quantity — and §2.7 is one case of it
+
+§2.7 found the distance rate describing a different curve from the distance.
+It is not special. **Swiss's rate columns are the derivatives of the geometric,
+mean-frame quantity, while its position columns are the transformed one** — so
+every transformation applied to a position (light time, aberration, the
+rotation into the true ecliptic of date) is missing its own time derivative
+from the rate beside it.
+
+Measured 2026-09-18 by turning each term off in turn and re-differencing, six
+bodies, geocentric, h = 1/1024 day. The miss and the term it lives in:
+
+| column | term whose derivative is missing | example |
+|---|---|---|
+| distance | light time | Pluto 4.748e-05 AU/day → **2.9e-11** geometric |
+| latitude | **nutation in obliquity** | Mercury 5.765e-06 → **6.19e-08** with nutation off |
+| longitude | light time, and aberration for the Sun | Sun 4.078e-07 → **4.04e-10** with aberration off; Mercury 2.669e-06 → **4.51e-09** geometric |
+
+**The latitude case is the one that can be predicted in closed form, so it is
+the proof.** Rotating into the *true* ecliptic of date tilts by the nutation in
+obliquity, and a change dε moves ecliptic latitude by −dε·sin λ. If the
+rotation's derivative is the missing term, the miss must be |dε/dt · sin λ| — a
+different number for every body, because it depends on where the body is.
+Against Swiss's own nutation (dε/dt = −6.063e-06 °/day at J2000):
+
+| body | λ | observed | predicted | ratio |
+|---|---|---|---|---|
+| Sun | 280.4° | 5.913e-06 | 5.964e-06 | **0.99** |
+| Mercury | 271.9° | 5.765e-06 | 6.060e-06 | **0.95** |
+| Mars | 328.0° | 3.197e-06 | 3.216e-06 | **0.99** |
+| Jupiter | 25.3° | 2.617e-06 | 2.587e-06 | **1.01** |
+| Pluto | 251.5° | 5.736e-06 | 5.748e-06 | **1.00** |
+
+Five bodies spanning 300° of longitude, ratios within 5% of unity, and the
+prediction varies by a factor of 2.3 across them — so the agreement is not a
+scale factor that any constant would satisfy. Repeated at 2461300.5 where
+dε/dt is 1.6 times larger: Mars, Jupiter and Pluto all 1.00.
+
+**The Moon does not fit and is not made to.** Ratio 1.28 at J2000 and 0.03 at
+the second instant. −dε·sin λ is a small-latitude approximation and the Moon's
+latitude reaches 5° and changes fast, so other terms are comparable there. A
+formula that fitted the Moon too would be one fitted to the data.
+
+**All of it is Swiss's**, on the same evidence as §2.6: these numbers come from
+calling the library directly, and `astrolog-ephd` passes them through. The
+`equator` of date and the `J2000` ecliptic are clean in the other project's
+cross-test, which is what a missing *ecliptic-of-date rotation* derivative
+predicts and a general speed defect would not.
+
+**Ephemeris Prometheia's engine does not have this**: their rates are the
+derivatives of the coordinates they report, retardation and frame included. So
+the two engines differ on every rate column by construction, and §3.5's text
+does not say which is meant — see §2.7. One sentence closes all four columns
+at once, which is why it should be general and not about distance.
 
 ## 3. Divergences deliberately DECLINED
 
