@@ -21310,9 +21310,15 @@ static void TestEphSrvLiveQt()
   CastChart(0);
   SnapshotEphQt(&snSrv);
   cDiff = CDiffEphQt(&snLocal, &snSrv, 0.0, S(szDiff));
+  // The warning TEXT is in the message because this assertion has three
+  // clauses and used to print evidence for only two of them: it failed
+  // under "-i nrvate.as" reading "5 requests, bit-identical (0 differ: )",
+  // which names nothing that is wrong. A check that cannot say why it
+  // failed costs as much as one that does not fail.
   Check(NCastWarnSrvTestQt() == cWarn && cDiff == 0 && CWinSrvTestQt() >= 3,
     "a server allowing 5 objects a request: %d requests, bit-identical (%d "
-    "differ: %s)", CWinSrvTestQt(), cDiff, szDiff);
+    "differ: %s) (%d warnings: %s)", CWinSrvTestQt(), cDiff, szDiff,
+    NCastWarnSrvTestQt() - cWarn, SzWarnSrvTestQt());
   SetWelcMaxObjsSrvTestQt(eph::Welcome().maxObjs);
 
   // The server deselected: a cast raises nothing and sends nothing --

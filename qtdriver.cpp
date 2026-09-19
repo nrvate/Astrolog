@@ -7193,6 +7193,11 @@ typedef struct _EphReq {
   int cResend;
 } EPHREQ;
 #define cEphSrvResendMax 3
+// A server that says BUSY (ERROR 9) names its own retryAfterMs; these bound
+// what this client will wait on it, so a zero does not become a spin and a
+// large one does not stall a cast past the point a user would wait.
+#define msEphSrvBusyMin    20
+#define msEphSrvBusyMax  2000
 
 static struct {
   int est;                    // The es* state.
@@ -7505,6 +7510,39 @@ static void EphSrvMessage(CONST QByteArray &ba)
     eph::Error err;
     if (eph::ParseError(pl, cbPl, &err, &strWhy) != eph::kOk)
       goto LBad;
+    // ERROR 9 IS BUSY AND THE PROTOCOL MARKS IT RETRYABLE, with a
+    // retryAfterMs (3.3). It says the server is holding as many computed
+    // answers unread as it will hold -- not that this question cannot be
+    // answered. Treating it as a window failure, which every non-terminal
+    // error did, made the cast fall back to local Swiss and raise a
+    // user-visible warning for a condition that clears by itself.
+    //
+    // It is reachable under the maintainer's own settings and was not
+    // under the gated ones, which is why nothing saw it: a cast splits
+    // into one request per window, the server holds four, and "-i
+    // nrvate.as" casts enough objects to need five where "-Yi1 ephem"
+    // needs three. The suite's own documented command failed one
+    // assertion on it while "make check" passed.
+    //
+    // The re-send machinery is the one a dropped connection already uses:
+    // the request bytes are kept in mpReq and a request is a pure
+    // function, so the same bytes are the retry. cResend bounds it, and
+    // the window expects chunk 0 again because this is a new answer to
+    // the same question (3.4).
+    if (err.code == eph::kErrBusy && esrv.mpReq.contains(env.requestId) &&
+      ++esrv.mpReq[env.requestId].cResend <= cEphSrvResendMax) {
+      uint32_t dwBusy = env.requestId;
+      int msWait = (int)Min((uint32_t)msEphSrvBusyMax,
+        Max(err.retryAfterMs, (uint32_t)msEphSrvBusyMin));
+      QTimer::singleShot(msWait, [dwBusy]() {
+        // The window may have been evicted or cancelled while this waited.
+        if (!esrv.mpReq.contains(dwBusy) || esrv.pws == NULL)
+          return;
+        ResetWindowChunksQt(dwBusy);
+        esrv.pws->sendBinaryMessage(esrv.mpReq[dwBusy].ba);
+      });
+      break;
+    }
     esrv.mpReq.remove(env.requestId);
     esrv.strErr = QString::fromUtf8(err.text.c_str());
     // This client is too old for the server (8), or the server wants a
