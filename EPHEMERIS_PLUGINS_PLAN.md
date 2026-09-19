@@ -2403,6 +2403,54 @@ the gates the phase touches.
    against Swiss on DE440).
 8. **Review** of the whole branch, and a summary for the maintainer.
 
+## 7B. Proposed, not started: an MCP render tool
+
+**Documented at the maintainer's instruction 2026-09-18, and deliberately not
+built.** Recorded here so the reasoning is not re-derived.
+
+**Scope correction first, because it bounds everything below.** Astrolog stays
+a **desktop application**. "AI-forward" is about the **data layer** — the
+ephemeris. Ephemeris Prometheia is the AI-facing ephemeris (a high-speed C++
+library first, with a C API, a binary protocol, a CLI, and JSON/MCP as
+convenience surfaces beside them). Astrolog is **not** exposing charts as data
+and is **not** growing an agent-facing chart API. A design for one was started
+and scrapped on that instruction.
+
+**What is proposed instead**, and it is a different and better thing: a channel
+for an agent to ask Astrolog to *show* something. The agent does the finding —
+it has the ephemeris — and Astrolog does what it is actually good at, which is
+drawing a chart thirty years of options deep.
+
+**Why it would be cheap, which is the part worth keeping.** Astrolog's API
+already exists and is the **switch registry**: 529 invocations in the switch
+matrix, `tools/registry_audit.py` asserting that every spelling the help text
+or the settings writer names resolves to a row, and it is the single way the
+program is configured. A tool that takes switches is not a new API; it is an
+audited one with a new transport. Measured: one headless command, no display,
+switches in and a rendered chart out.
+
+**Two shapes, in the order they should be taken:**
+
+- **(b) Stateless render, first.** A request (time, place, objects, aspects,
+  chart type) in; the rendered image and the computed positions out. No
+  changes inside the shipped GUI, nothing to regress, no new attack surface,
+  and it proves the vocabulary before anything ships.
+- **(a) Driving the live application, after.** A listener inside the Qt build
+  so an agent can put a chart in the window the user is already looking at.
+  This is what was actually asked for, and it is the one with a security
+  question — a local socket that can drive the user's application — so it
+  wants to be opt-in and loopback-only.
+
+**One constraint either way:** anything astronomical — bodies, zodiacs, frames,
+orbit points — uses the **same A.11/A.15 tokens Prometheia's tools use**. Only
+the presentational words are Astrolog's own, because those are the part an
+ephemeris has no opinion about. An agent that sees two vocabularies for one sky
+is worse off than one that sees none.
+
+**The case against, recorded because it is real:** it is a convenience, and an
+agent could print a command line for a human to run. Against that: emitting
+instructions for a human to copy is the thing this direction exists to stop.
+
 ## 8. Work log
 
 0. **Spec amendments after Prometheia's review (2026-09-17).** The Prometheia
