@@ -398,7 +398,22 @@ done
 #     number -- the index in A.11 IS the Swiss mode.
 leg "zodiac lahiri" 2451545.0 4 10100 1 tt -- --profile zodiac=lahiri --objs 4
 leg "zodiac krishnamurti" 2451545.0 4 10100 5 tt -- --profile zodiac=krishnamurti --objs 4
-leg "zodiac true-citra" 2451545.0 4 10100 27 tt -- --profile zodiac=true-citra --objs 4
+# "zodiac true-citra" IS GONE FROM THIS GATE, ON PURPOSE (2026-09-18, the
+# anchors drop). true-citra is one of the twelve zodiacs whose zero point is a
+# DIRECTION rather than an epoch, and 3.5a now says the anchor is taken at its
+# TRUE position -- no aberration, no deflection -- where Swiss takes it
+# apparent. So this leg necessarily mismatches swetest now, by Spica's own
+# aberration, and a leg that must differ does not belong in a gate whose whole
+# contract is bit-exactness against the fork.
+#
+# The other four zodiac legs stay and still pass: lahiri, krishnamurti,
+# lahiri-icrc and user are all epoch-anchored, and nothing about them moved.
+# That is the leg that says the delegation is still right where it should be.
+#
+# What replaced it is a direct assertion of the rule rather than of a number:
+# tools/sidplane-anchor.sh requires the server's ayanamsa for each of the
+# twelve to equal Swiss's own NOABERR|NOGDEFL value and to DIFFER from its
+# apparent one. Swetest could only ever have said "unchanged".
 leg "zodiac lahiri-icrc" 2451545.0 4 10100 46 tt -- --profile zodiac=lahiri-icrc --objs 4
 leg "zodiac user" 2451545.0 4 10100 255:2451545:23.85 tt -- --profile zodiac=user,anchor=2451545:23.85 --objs 4
 

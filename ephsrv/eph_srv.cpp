@@ -1087,12 +1087,29 @@ static void PrepareObject(swe_ctx *ctx, const eph::Request &req, uint32_t iObj,
 struct SidPlaneReq {
   bool fActive = false;
   uint16_t err = 0;
+  // 3.5a's anchors sentence: the anchor is taken at its TRUE position, no
+  // aberration and no deflection. Swiss takes it apparent, which makes the
+  // zero point of a star- or galaxy-anchored zodiac carry the Earth's own
+  // motion -- 40.179" peak to peak over a year for Spica. Set for the twelve
+  // modes whose anchor is a direction rather than an epoch; the correction is
+  // a scalar on longitude, since an ayanamsa is a rotation about the ecliptic
+  // pole and moves no latitude.
+  bool fTrueAnchor = false;
   EPHSIDPLANE p{};
 };
 
 static SidPlaneReq PrepareSidPlane(swe_ctx *ctx, const eph::swiss::SwissCall &c) {
   SidPlaneReq sp;
   if (!c.fSidereal) return sp;
+  {
+    // Does this zodiac's zero point come from a DIRECTION rather than an
+    // epoch? Swiss marks those with t0 = 0 in its ayanamsa table, and they
+    // are the ones the anchors sentence is about, on every plane including
+    // plane 0. Decided here so it is one test in one place.
+    const int32 m0 = c.sidMode & 0xFF;
+    sp.fTrueAnchor = m0 != SE_SIDM_USER && m0 >= 0 && m0 < SE_NSIDM_PREDEF &&
+      ayanamsa[m0].t0 == 0.0;
+  }
   const bool f2 = (c.sidMode & SE_SIDBIT_SSY_PLANE) != 0;
   const bool f1 = (c.sidMode & SE_SIDBIT_ECL_T0) != 0;
   if (!f1 && !f2) return sp;                       // plane 0 is Swiss's
@@ -1483,6 +1500,23 @@ static void ComputeObjectRows(swe_ctx *ctx, const eph::Request &req, uint32_t iO
     // Swiss answers 1e9 AU for one (sweph.c's rdist), light time and
     // aberration moving it a little; anything past 1e8 AU is that placeholder.
     if (sid.fActive) ApplySidPlane(ctx, &sid.p, fRect, xx);
+    // The anchors sentence, on plane 0: Swiss subtracted the ayanamsa built
+    // from the APPARENT anchor. Ask it for both and put the difference back.
+    // A scalar on longitude is the whole correction -- an ayanamsa is a
+    // rotation about the ecliptic pole, so no latitude moves, which is also
+    // what the cross-test measured (the other engine's rows differ from ours
+    // in longitude alone, by each anchor's own aberration).
+    if (sid.fTrueAnchor && !sid.fActive && !fRect) {
+      char serrA[AS_MAXCH];
+      double aApp = 0.0, aTrue = 0.0;
+      if (swe_get_ayanamsa_ex_r(ctx, jdEt(), c.iflag, &aApp, serrA) >= 0 &&
+          swe_get_ayanamsa_ex_r(ctx, jdEt(),
+            c.iflag | SEFLG_NOABERR | SEFLG_NOGDEFL, &aTrue, serrA) >= 0) {
+        xx[0] += aApp - aTrue;
+        xx[0] = fmod(xx[0], 360.0);
+        if (xx[0] < 0.0) xx[0] += 360.0;
+      }
+    }
     if (c.kind == eph::swiss::kCallFixstar && !fRect && xx[2] > 1e8)
       m.flags |= eph::kMetaNoDistance;
     memcpy(dst, xx, sizeof(xx));
@@ -1493,7 +1527,11 @@ static void ComputeObjectRows(swe_ctx *ctx, const eph::Request &req, uint32_t iO
         daya = sid.p.A0;         // on a fixed plane the zodiac IS its anchor
       } else if (c.fSidereal) {
         char serrA[AS_MAXCH];
-        if (swe_get_ayanamsa_ex_r(ctx, jdEt(), c.iflag, &daya, serrA) < 0) daya = NAN;
+        // Same flags the position used, so the column and the longitudes
+        // describe one zodiac rather than two.
+        const int32 fl = sid.fTrueAnchor
+          ? (c.iflag | SEFLG_NOABERR | SEFLG_NOGDEFL) : c.iflag;
+        if (swe_get_ayanamsa_ex_r(ctx, jdEt(), fl, &daya, serrA) < 0) daya = NAN;
       }
       dst[k++] = daya;
     }

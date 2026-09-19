@@ -46,6 +46,19 @@ int main(int c, char **v) {
   swe_ctx *x = swe_ctx_new(); char e[AS_MAXCH]; double xx[6];
   (void)c;
   swe_set_ephe_path_r(x, v[4]);
+  if (atoi(v[3]) < 0) {
+    // ayanamsa mode: apparent and true, so the caller can require the server
+    // to match one and differ from the other.
+    double app = 0, tru = 0;
+    swe_set_sid_mode_r(x, atoi(v[1]), 0, 0);
+    if (swe_get_ayanamsa_ex_r(x, atof(v[2]), SEFLG_SWIEPH, &app, e) < 0 ||
+        swe_get_ayanamsa_ex_r(x, atof(v[2]),
+          SEFLG_SWIEPH | SEFLG_NOABERR | SEFLG_NOGDEFL, &tru, e) < 0) {
+      fprintf(stderr, "%s\n", e); return 1;
+    }
+    printf("%.12f %.12f\n", app, tru);
+    swe_ctx_free(x); return 0;
+  }
   swe_set_sid_mode_r(x, atoi(v[1]) | SE_SIDBIT_ECL_T0, 0, 0);
   if (swe_calc_r(x, atof(v[2]), atoi(v[3]),
       SEFLG_SWIEPH | SEFLG_SIDEREAL | SEFLG_SPEED, xx, e) < 0) {
@@ -137,6 +150,43 @@ for tok in true-citra true-revati true-pushya true-mula true-sheoran \
       *" 2 0 "*) ;;                       # errCode 2, rowsOk 0: refused
       *) echo "FAIL $tok plane $sp: expected errCode 2 (no anchor epoch), got: $row"
          fail=$((fail+1));;
+    esac
+  done
+done
+
+# ---- 3.5a's anchors sentence: the anchor at its TRUE position --------------
+# Swiss builds these twelve zodiacs' ayanamsa from the anchor's APPARENT
+# position, which makes the zero point carry the Earth's own motion -- 40.179"
+# peak to peak over a year for Spica, and a sidereal zero point that
+# oscillates annually is not a fixed reference. 3.5a takes the true position.
+#
+# Asserted against Swiss's OWN two answers, so it needs no second engine and
+# no recorded constant: the server's ayanamsa must equal the NOABERR|NOGDEFL
+# one and must DIFFER from the apparent one. The second half matters -- the
+# first alone would pass on a server that had never heard of the rule if the
+# two happened to coincide for that anchor.
+for spec in "27 true-citra" "28 true-revati" "29 true-pushya" "35 true-mula" \
+            "17 galcent-0sag" "40 galcent-cochrane" "30 galcent-rgilbrand" \
+            "31 galequ-iau1958" "32 galequ-true" "33 galequ-mula"; do
+  mode=${spec%% *}; tok=${spec##* }
+  for jd in 2415020.5 2451545.0 2461000.5; do
+    pair=$("$SCRATCH/oracle" "$mode" "$jd" -1 "$ROOT/ephem:$ROOT" 2>/dev/null) || continue
+    row=$(./eph_wsclient --host 127.0.0.1 --port "$PORT" --quiet --jd "$jd" --count 1 \
+      --out /dev/stdout --profile "zodiac=$tok,sidplane=0,corr=7,cols=2" --objs 4 \
+      2>/dev/null | grep -v '^META' | head -1)
+    n=$((n+1))
+    out=$(PAIR="$pair" ROW="$row" python3 -c '
+import os
+app, tru = [float(x) for x in os.environ["PAIR"].split()]
+f = os.environ["ROW"].split()
+a = float.fromhex(f[11])
+dt = abs(a - tru) * 3600.0
+da = abs(a - app) * 3600.0
+print("%.5f %.5f %s" % (dt, da, "BAD" if dt > 0.01 else ("SAME" if da < 0.01 else "ok")))')
+    case "$out" in
+      *BAD*) echo "FAIL $tok jd=$jd: ayanamsa is not the TRUE-anchor one ($out)"
+             fail=$((fail+1));;
+      *SAME*) ;;   # anchor has no aberration at this instant; nothing to tell apart
     esac
   done
 done
