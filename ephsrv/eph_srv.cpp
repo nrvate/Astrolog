@@ -1529,6 +1529,39 @@ static void ComputeObjectRows(swe_ctx *ctx, const eph::Request &req, uint32_t iO
         xx[0] += aApp - aTrue;
         xx[0] = fmod(xx[0], 360.0);
         if (xx[0] < 0.0) xx[0] += 360.0;
+        // AND ITS RATE, which the first version of this left out. The
+        // correction is not a constant: it is the anchor's own aberration in
+        // longitude, and 2.5 is an entry about that term swinging 40.179"
+        // over a year. So it has a rate of its own, up to 9.9e-5 deg/day,
+        // and a longitude that moves while its speed column does not is a
+        // row that disagrees with itself.
+        //
+        // Found by the Prometheia cross-test's "rates" leg, which grades each
+        // server's reported rates against a central difference of ITS OWN
+        // positions -- so neither engine is the other's oracle and there is
+        // nothing to agree about. It reported every body identical to 1e-6
+        // under an epoch-anchored zodiac and every body out by the same
+        // amount under true-citra, varying only with the date. Uniform across
+        // bodies and a function of t alone is the signature of a whole-zodiac
+        // rotation, which is what this is. Measured here before fixing:
+        // 9.874e-5 deg/day at J2000 and -4.813e-5 at 2461300.5, against the
+        // 9.8e-5 and 4.8e-5 they measured on the wire.
+        //
+        // Differenced rather than derived because the anchor's aberration has
+        // no closed form here that Swiss will hand over; the term is smooth
+        // and annual, so a half-day step truncates at about 4e-7 arcsec/day,
+        // four orders below the tolerance the leg grades at.
+        if (pf.speeds) {
+          const double h = 0.5;
+          double a1 = 0.0, a2 = 0.0, b1 = 0.0, b2 = 0.0;
+          if (swe_get_ayanamsa_ex_r(ctx, jdEt() - h, c.iflag, &a1, serrA) >= 0 &&
+              swe_get_ayanamsa_ex_r(ctx, jdEt() - h,
+                c.iflag | SEFLG_NOABERR | SEFLG_NOGDEFL, &b1, serrA) >= 0 &&
+              swe_get_ayanamsa_ex_r(ctx, jdEt() + h, c.iflag, &a2, serrA) >= 0 &&
+              swe_get_ayanamsa_ex_r(ctx, jdEt() + h,
+                c.iflag | SEFLG_NOABERR | SEFLG_NOGDEFL, &b2, serrA) >= 0)
+            xx[3] += ((a2 - b2) - (a1 - b1)) / (2.0 * h);
+        }
       }
     }
     if (c.kind == eph::swiss::kCallFixstar && !fRect && xx[2] > 1e8)

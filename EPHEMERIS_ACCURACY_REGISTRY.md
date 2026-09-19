@@ -367,6 +367,30 @@ which no star catalogue either of us reads supplies.
 
 ### 2.5 A star-anchored zodiac's zero point wobbles 40″ a year — the anchor is taken apparent
 
+**Its RATE was missing until 2026-09-18, and that is worth recording beside
+it.** The correction this entry describes was applied to the longitude and not
+to the longitude's rate — but the correction is the anchor's own aberration in
+longitude, and an entry about a term swinging 40.179″ over a year is an entry
+about something with a rate. Every one of the eleven instant-defined zodiacs
+reported a longitude that moved while its speed column said otherwise, by up to
+**9.9e-5 °/day**, uniform across every body and a function of the date alone.
+
+Found by Ephemeris Prometheia's cross-test `rates` leg, whose oracle is each
+server's own positions — a five-point central difference at h = 1/1024 day,
+that step chosen because at h = 0.001 the Julian day's own quantization costs
+7e-7 °/day, the size of the thing being measured. Neither engine grades the
+other, so there is nothing to agree about. `tools/ephsrv-rates.sh` asks the
+same question on this side; with the fix removed it reports 9.875e-5 °/day at
+J2000 and 4.8e-5 at 2461300.5, against the 9.8e-5 and 4.8e-5 they measured
+independently on the wire.
+
+It grades an instant-defined zodiac against an **epoch-anchored** one rather
+than against an absolute band, and that is deliberate: Swiss's own speeds sit
+at 1e-6 to 1e-5 °/day against a difference of its own positions, and a
+topocentric Moon is worse. Those are Swiss's numbers and belong in §2, not
+here. What is this server's is a rate error that appears only when the zero
+point is the one thing that changed.
+
 Eleven of A.11's tokens anchor their zero point to something in the sky rather
 than to an epoch: `true-citra`, `true-revati`, `true-pushya`, `true-mula`, the
 four `galcent-*` and the three `galequ-*`. Swiss computes their ayanamsa from
