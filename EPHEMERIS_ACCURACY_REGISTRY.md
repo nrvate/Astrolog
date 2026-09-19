@@ -276,11 +276,29 @@ so it moves **plane 0** — ordinary sidereal charts — for all eleven modes, a
 by a different amount at every instant. Nothing in Astrolog itself moves: the
 application's own sidereal path offers Fagan/Bradley only.
 
-**Open alongside it:** `galequ-iau1958` is off by **−0.1754″**, which is too
-small for aberration and too large for float noise, while its two siblings
-agree to 0.0007″ — so Swiss is *not* applying aberration to those two and
-something else separates that one. Not to be called agreed until one side can
-say what it is.
+**`galequ-iau1958` is a different thing and is now explained.** It is off by
+**−0.1754″**, too small for aberration and too large for float noise, while its
+two siblings agree to 0.0007″ — so Swiss applies no aberration to those two.
+Prometheia identified it as the **ICRS realisation of the IAU 1958 pole**,
+which has no aberration to have, being fixed in ICRS: the 1958 pole is defined
+in B1950/FK4 and its ICRS value depends on the transfer, the E-terms and the
+FK4→FK5→ICRS chain. Theirs is Liu, Zhu & Zhang eq. 19, and the Hipparcos
+transfer (ERFA's `g2icrs`) independently agrees with it to 0.012″. Two
+published transfers within 12 mas of each other, against our 0.175″, so ours is
+the outlier and the difference is in which transfer Swiss used. Recorded as a
+transfer difference rather than a defect, because nothing here has established
+which transfer Swiss intended.
+
+**`true-sheoran`: this fork's data and the published definition disagree.** Its
+published definition is epoch-anchored — −60° at the winter solstice of 4174
+BCE — but Swiss's ayanamsa table gives it **t0 = 0**, the marker for "no anchor
+epoch". So this server treats it as anchorless and refuses it on the fixed
+planes, which follows Swiss's *data* and not Swiss's *documentation*. Prometheia
+keeps the published reading and does not implement the mode, so the two will
+not diverge in practice — but they would if either of us implemented it from
+the other's premise. Written down here because a class that is defined by
+"does this zodiac have an anchor epoch" is the right rule and this is the one
+token where the answer depends on which source you ask.
 
 ## 3. Divergences deliberately DECLINED
 
