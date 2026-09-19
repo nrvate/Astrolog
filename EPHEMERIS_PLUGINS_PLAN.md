@@ -110,11 +110,56 @@ version 3, and this section is the design authority behind it.
   mean-frame quantity while its positions are the transformed one -- and
   the nutation case is proved in closed form.
 
-  **Open, and the maintainer's**: whether to correct the mean-apsis rate
-  column, which Swiss fills with a LATITUDE and which `ephsrv-golden.sh`
-  pins bit-exact on four legs. Phase 6h is deferred with a pickup
-  checklist; `tools/swetest-oracle.sh` has no fixed-star legs, which is
-  the same gap golden had and is not yet closed.
+  **The mean-apsis rate columns are FIXED** (`d1f1287`, registry 1.5) --
+  Swiss put the latitude in the latitude-rate slot and left the geocentric
+  re-centring out of the longitude rate. The first response was to raise
+  the advertised bound to 5 deg/day so the advertisement covered them, and
+  to call the fix a maintainer decision because `ephsrv-golden.sh` pinned
+  those columns. That was hiding behind a gate: a gate asserting the wrong
+  thing is a second thing to fix, not a reason to serve a wrong number.
+  **The maintainer's standing instruction, 2026-09-19, is to fix errors
+  without asking.**
+
+  ### OPEN ITEMS, so a fresh session does not have to find them again
+
+  1. **The four differential matrices have not been run since the cast
+     changed.** `calc.cpp`'s `FSwissStar()` gained the plane-2 fix and the
+     star orbits, and `make check` does **not** include
+     `chart-matrix.sh`, `switch-matrix.sh`, `influence-matrix.sh` or
+     `graphics-matrix.sh` -- those need a baseline binary
+     (`git worktree add`, build `./astrolog-base`). The star change moves
+     `-Ys` charts by 31.5" BY DESIGN; what is unverified is that nothing
+     else moved. **This is the one open item with real regression risk.**
+  2. **`tools/swetest-oracle.sh` has no fixed-star legs.** The only check
+     that can say Astrolog's own star numbers are right from outside this
+     repository, and it cannot see a star -- the same gap
+     `ephsrv-golden.sh` had until 2026-09-19. Closing it needs an upstream
+     `swetest` and care over which `sefstars.txt` both ends read, since
+     ours is corrected (registry 1.4) and four stars deliberately differ
+     (registry 2.4).
+  3. **The topocentric lunar node misses by 4.05e-3 deg/day**, which is
+     what the advertised bound is now made of. It is Swiss's topocentric
+     velocity model (registry 2.6) -- the same node geocentrically is
+     9.4e-8. Fixing it means differencing every topocentric row, four
+     extra ephemeris calls apiece, which an animation pays per frame.
+     That is a cost decision, not a permission one.
+  4. **`ratesApprox` is set on every object carrying speeds**, where 3.5a
+     says "the objects concerned". Over-broad rather than wrong, and it
+     costs the flag its meaning. Registry 2.8 records it.
+  5. **Owed to Ephemeris Prometheia**: our half of the log join -- the
+     request id in `astrolog-ephd`'s log, so a row in their cross-test can
+     be traced to a request in our log. They have asked once and it is the
+     only thing they are waiting on. They also sent an inventory of the
+     legs they run that we do not (Horizons, deflection against USNO 179,
+     FK5 and ERFA-generated star fixtures, JPL `testpo`, per-observer
+     orbit points, a sidereal token sweep, refusal combinatorics,
+     fuzzing); ours is owed back.
+  6. **Closed, recorded so it is not re-checked**: their dataset id's
+     digest changed on 2026-09-19 (file hashing in 8 MiB pieces). Nothing
+     of ours pins it -- `ephsrv/conformance/welcome_prometheia.hex` is a
+     synthetic "prometheiad-like" WELCOME, not their real identity.
+  7. **Phase 6h** is deferred with its own pickup checklist (work-log item
+     22).
 
 - **STATUS (2026-09-18, phase 6 substantially landed).** Phases 2, 3, 4,
   5 and 7 are on this branch and gated, and phase 6 is most of the way
