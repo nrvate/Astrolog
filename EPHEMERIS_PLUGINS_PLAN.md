@@ -1467,12 +1467,47 @@ may select another from A.20):
   whose distance rates omit it says so with the flag.
 
 **Sidereal zodiacs** (see §3.5):
-- A zodiac has a **zero point**: a mean ayanamsa A₀ at an anchor epoch t₀ (TT).
-  - `user`: t₀ = `anchorEpoch` (TT), A₀ = `anchorAyanamsaDeg`, a **mean**
-    ayanamsa (no nutation in it).
-  - Named tokens (A.11): the published definition of that mode's zero point. A
-    server implements the tokens whose definitions it implements, and advertises
-    exactly those.
+- A zodiac has a **zero point**, and it is a **DIRECTION IN THE SKY**, not an
+  arc from the equinox. Every ayanamsa is defined that way — `true-citra` is
+  Spica at 180°, `aldebaran-15tau` is Aldebaran at 45°, `galcent-0sag` is the
+  galactic centre at 240°, and Lahiri and Fagan/Bradley are numerical fits to
+  statements of the same kind. The arc from the equinox is the *derived*
+  quantity: it is recomputed for every instant as the equinox precesses, and it
+  is different tomorrow. A reference plane is a choice of how to **measure**
+  directions and MUST NOT change **which** direction a zodiac starts at.
+- Zodiacs come in two kinds, and **the kind is decided by whether the zodiac has
+  an anchor epoch, never by an enumeration.** A list would rot; the question is
+  answerable from the zodiac's own definition.
+  - **Epoch-anchored.** A mean ayanamsa A₀ at an anchor epoch t₀ (TT). Its zero
+    point is the direction at longitude A₀ on the **mean ecliptic and equinox of
+    t₀** — fixed in space thereafter.
+    - `user`: t₀ = `anchorEpoch` (TT), A₀ = `anchorAyanamsaDeg`, a **mean**
+      ayanamsa (no nutation in it).
+    - Named tokens (A.11): the published definition of that mode's zero point.
+    - **A₀ is the MEAN ayanamsa at t₀**, the arc from the *mean* equinox. Placing
+      the *true* value on a mean frame moves the origin by the nutation in
+      longitude at t₀, which is zodiac-dependent — −3.311″ for Fagan/Bradley,
+      +16.777″ for Lahiri, +17.346″ for Raman — and so looks exactly like the
+      defect this rule exists to prevent.
+  - **Instant-defined.** The zero point is defined by where something *is*,
+    evaluated at the instant asked: a star on the ecliptic, the galactic centre,
+    the galactic node. Such a zodiac has **no A₀ and no t₀**, and the
+    epoch-anchored rules above simply do not apply to it.
+- **The anchor is taken at its TRUE position: no aberration, no deflection.**
+  Aberration is an artefact of the observer's motion, not a property of the sky,
+  so an apparent anchor makes the zero point swing through a full cycle every
+  year — measured at **40.179″ peak to peak** for Spica across 2000. A sidereal
+  zero point that oscillates annually is not a fixed reference, and being one is
+  the whole of what a sidereal zodiac is for.
+- **A polar projection goes through the MEAN pole of date.** Where a zodiac's
+  definition projects its anchor along an hour circle (`galcent-mula-wilhelm`),
+  the pole is the mean pole of date and the equinox is then slid by Δψ. Through
+  the *true* pole the pole's own nutation enters the zero point — about 0.6″
+  over 18.6 years — **even in the mean ayanamsa**, and a mean quantity that
+  carries nutation is a contradiction. The other ten instant-defined modes
+  cannot see the difference, because the ecliptic does not nutate.
+- A server implements the tokens whose definitions it implements, and advertises
+  exactly those.
 - **siderealPlane 0 (ecliptic of date).** The ayanamsa subtracted at t is
   A(t) = A₀ + p(t₀, t), p the general precession in longitude from t₀ to t, plus
   the nutation in longitude at t **for frame 0 only** (true ayanamsa); frame 1
@@ -1480,13 +1515,34 @@ may select another from A.20):
   point fixed on the J2000 ecliptic.
 - **siderealPlane 1 (ecliptic of the anchor epoch).** Positions are referred to
   the mean ecliptic and equinox of t₀; longitude is counted from the zero point
-  there (A₀ subtracted, no precession term).
+  there (A₀ subtracted, no precession term). **An instant-defined zodiac has no
+  plane 1**, because plane 1 *is* the ecliptic of the anchor epoch and such a
+  zodiac has none; any epoch a server chose would be the server's and not the
+  zodiac's. A request for one is `kOErrUnsupported` (A.17 code 2).
 - **siderealPlane 2 (invariable plane).** Positions are projected onto the
   invariable plane of the solar system (the orientation the server names in its
   engine description); longitude is counted along that plane from the zero point
-  carried onto it. Servers that implement it advertise it (A.3 0x0008).
+  projected onto it. Servers that implement it advertise it (A.3 0x0008).
+  - **For an epoch-anchored zodiac the zero point is the zodiac's own
+    zero-point DIRECTION — the direction at longitude A₀ on the mean ecliptic of
+    t₀ — projected onto the plane.** Not the equinox of t₀ carried onto the
+    plane with the ayanamsa then walked along it: projection between planes
+    inclined by 1.578701° is not longitude-preserving, so walking the arc before
+    projecting differs from walking it after, by **31.5″ under Fagan/Bradley and
+    30.4″ under Lahiri**. It depends on *which* zodiac was asked for, and a
+    plane does not know that — which is the tell that such an origin is tied to
+    the equinox rather than to the sky.
+  - **For an instant-defined zodiac the zero point is the direction at sidereal
+    longitude 0 on the ecliptic of the REQUEST INSTANT, projected onto the
+    plane.** This is the same construction that is *wrong* for an
+    epoch-anchored zodiac, and the difference is not a special case: there it
+    uses the zero point's projection onto the ecliptic of date instead of the
+    zero point itself (30.75″ out for Lahiri), while here the zero point
+    genuinely *is* defined on that ecliptic. The origin therefore moves with the
+    instant and is rebuilt per row.
 - The ayanamsa column reports the value subtracted for the row: A(t) for plane
-  0, A₀ for planes 1 and 2.
+  0, A₀ for planes 1 and 2 — and, for an instant-defined zodiac on plane 2, that
+  instant's own value.
 
 **Orbit points** (kind 1):
 - **Which orbit.** The body's orbit about the Sun (heliocentric) — or about the
