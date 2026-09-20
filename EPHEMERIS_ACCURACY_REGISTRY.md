@@ -1122,6 +1122,66 @@ time and asks whether any leg notices — reporting `--deltat` blind in all
 fifteen of their legs. See [§2.10](#210): the 1900 Polaris row recorded
 there as unresolved is now attributable to this.
 
+### 2.11a A topocentric star's distance rate collapses in a narrow region at the 1900.0 epoch — 7.5e-3 AU/day, over the advertised bound
+
+Distinct from [§2.11](#211), which was a stale observer and is fixed. This
+one survives that fix unchanged, needs a **supplied** ΔT, and puts the
+server past what A.3 0x0013 advertises.
+
+**Swept at JD 2415020.5, Polaris, topocentric Quito (−78.47, −0.18, 2850),
+corrections 7**, recomputing the five-point difference per cell because ΔT
+moves the positions too:
+
+| ΔT (s) | 0 | 20 | 25 | 28 | 30 | 35 | 40 | 69.2 | 100 | 140 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| miss (AU/day) | 1.4e-05 | 5.8e-04 | 1.3e-04 | 9.4e-05 | **7.2e-03** | **7.5e-03** | **7.4e-03** | **7.5e-03** | **6.9e-03** | **7.0e-03** |
+
+The transition sits **between 28 and 30 s** — below every ΔT a
+twentieth-century date actually carries — and eight of the eleven values
+tried exceed the advertised **4e-3 AU/day**.
+
+**The differenced value is stable at −7.884e-03 across the whole sweep**, so
+the positions are consistent and it is the rate column that moves. That is
+§4.4's Sirius separation applied a second time.
+
+**Not ours.** `swe_fixstar2_r` called directly against `libswe.a`, no server
+and no protocol, returns the server's wire numbers bit for bit at every ΔT
+tried, including after the §2.11 fork fix.
+
+**It is a narrow region, and the instant is not arbitrary.** At ΔT 69.2 the
+neighbours are clean — 2415020.4990 gives 1.7e-04 and 2415020.5010 gives
+7.1e-04 — while 2415020.5000 and 2415020.5005 are over. 1800, J2000, 2026
+and 2100 are all clean at the same ΔT (1.6e-04 to 7.0e-04). **JD 2415020.5
+is the standard epoch 1900.0**, a catalogue epoch rather than an arbitrary
+date, which is suggestive and is as far as the evidence goes.
+
+**A tidy explanation was tested and failed, which is why none is offered.**
+The obvious one — that the region is TT in `[epoch, epoch + ΔT/86400]`,
+i.e. the window where UT has crossed below the epoch and TT has not — fits
+ΔT 69.2 well: predicted width 8.0e-04 d, and the edge sits between
+2415020.5005 (over) and 2415020.5008 (clean). It then fails outright at
+ΔT 140, where it predicts a window twice as wide and 2415020.5005 measures
+**8.2e-06**, clean. So the region is not a simple UT-crossing and the
+mechanism is unknown here. Recorded as unknown rather than as the story
+that fit two thirds of the data.
+
+*Consequence for the advertisement, unresolved and the maintainer's:* the
+A.3 0x0013 figure of 4e-3 AU/day was measured over a grid that never sends
+`deltaTSec` at all — `ephsrv-rates.sh` sends none — so this input class was
+outside everything that produced the number. A client supplying a
+twentieth-century ΔT at that instant sees 7.5e-3. Either the advertisement
+widens, or it states the exception; both are decisions about what we
+promise rather than defects to fix, and the previous holder of this
+question was adjudicated as "no honest absolute number exists for this
+column".
+
+*Found by:* the Ephemeris Prometheia project, re-measuring the §4.4 Polaris
+cell against the fixed build and then **sweeping the axis the cell held
+fixed**. Their own sentences "exactly one row still exceeds it" and "the
+only row over in an eighteen-row subgrid" were true of a grid that holds ΔT
+constant — a count that was the width of a list, the fourth instance
+between the two projects this week and the first that was theirs.
+
 ### 2.12 A fixed star's DISTANCE rate is not the derivative of its own distance — 0.6% to 3.4%, geocentric, every star
 
 The plainest member of this family and the one to read first: no
