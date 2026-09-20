@@ -24,10 +24,13 @@
 # ephprom.cpp is the Prometheia source plugin (EPHEMERIS_PLUGINS_PLAN.md
 # 4.2, phase 7): every build compiles it, and without -DPROMETHEIA it is
 # empty, so the default build never references the library.
+# ephhorizons.cpp is the JPL Horizons source (4.2, phase 6h), empty
+# without JPLWEB for the same reason -- it is the fetcher's object
+# mapping and has nothing to map without the fetcher.
 SRC_CORE = astrolog.cpp switch.cpp atlas.cpp calc.cpp charts0.cpp \
   charts1.cpp charts2.cpp charts3.cpp data.cpp ephem.cpp ephswiss.cpp \
-  ephprom.cpp ephserver.cpp express.cpp general.cpp intrpret.cpp io.cpp \
-  matrix.cpp
+  ephhorizons.cpp ephprom.cpp ephserver.cpp express.cpp general.cpp \
+  intrpret.cpp io.cpp matrix.cpp
 
 # The graphics half: chart drawing and the device backends it draws to.
 # cgif.cpp and cgif_raw.cpp are the vendored cgif library (MIT, see

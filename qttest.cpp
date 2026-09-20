@@ -18295,6 +18295,80 @@ static void TestHorizonsEmulationQt()
       "answer in the cast's own frame");
   }
 
+  // The instant the horizons SOURCE asks for is the query's, converted
+  // by CiFromJulianEph(); GetJPLHorizons()'s old caller read the ciCore
+  // global instead. Those are the same moment only because
+  // ComputeEphem() is called once per cast with exactly the moment
+  // ciCore carries -- an equivalence nothing stated and nothing checked,
+  // and the conversion has a half-day offset in it (Astrolog counts a
+  // day from midnight where MdyToJulian() returns the noon-based
+  // integer), which is precisely the kind of thing that is wrong by 12
+  // hours and looks plausible. Checked here over several charts, offline,
+  // because the fetch itself cannot be.
+  {
+    CONST int rgyeaT[] = {1990, 1500, 2026, 2100};
+    real rTimUT;
+    int iT;
+    for (iT = 0; iT < (int)(sizeof(rgyeaT)/sizeof(*rgyeaT)); iT++) {
+      CI ciT;
+      ciMain.mon = 6; ciMain.day = 15; ciMain.yea = rgyeaT[iT];
+      ciMain.tim = 7.25; ciMain.zon = 5.0; ciMain.dst = 1.0;
+      ciMain.lon = rHorLonQt; ciMain.lat = rHorLatQt;
+      ciCore = ciMain;
+      CastChart(0);
+      // The expected value is the COOKED time, not the typed one.
+      // CastChart() folds the zone into ciCore.tim to make it UT and
+      // restores the typed value at every exit (the "Borrow bciCore"
+      // in calc.cpp), so by the time this reads ciCore the 5-hour zone
+      // and 1-hour DST are back on it -- while is.T, and therefore any
+      // query built from it, is UT. Comparing against the typed value
+      // is what this check did first, and it failed by exactly
+      // (zon - dst): the assertion was wrong, not the conversion.
+      CiFromJulianEph(JulianDayFromTime(is.T), &ciT);
+      rTimUT = ciCore.tim + (ciCore.zon - DstReal(ciCore.dst));
+      Check(ciT.yea == ciCore.yea && ciT.mon == ciCore.mon &&
+        ciT.day == ciCore.day,
+        "the query's instant is the cast's own date in %d (got %d-%d-%d, "
+        "want %d-%d-%d)", rgyeaT[iT], ciT.yea, ciT.mon, ciT.day,
+        ciCore.yea, ciCore.mon, ciCore.day);
+      Check(RAbs(ciT.tim - rTimUT) < 1.0/3600.0,
+        "and its time of day in UT, to the second (got %.6f, want %.6f "
+        "= %.2f typed + %.2f zone - %.2f dst)", ciT.tim, rTimUT,
+        ciCore.tim, ciCore.zon, DstReal(ciCore.dst));
+      Check(ciT.zon == 0.0 && ciT.dst == 0.0,
+        "with no zone or DST left on it, since the moment is already UT "
+        "and SzUrlJPLHorizons() would shift it a second time");
+      Check(ciT.lon == ciCore.lon && ciT.lat == ciCore.lat,
+        "and the cast's own site, which a topocentric query needs");
+    }
+  }
+
+  // The source serves the bodies the old inline branch served, and the
+  // Earth is not one of them. NEphHorizonsId() is now the ONE mapping --
+  // ComputeEphem() had four near-copies of it, two of which also counted
+  // the Earth, and a reader comparing them had to notice that.
+  Check(NEphHorizonsId(oEar) == ephNoIdHor,
+    "the Earth is not a Horizons target: it is the center the queries "
+    "are made from, and JPL refuses it as degenerate");
+  Check(NEphHorizonsId(oSun) == 10 && NEphHorizonsId(oMoo) == 301 &&
+    NEphHorizonsId(oJup) == 599,
+    "and the main bodies carry their own NAIF-style ids");
+  Check(NEphHorizonsId(oFor) == ephNoIdHor,
+    "while a computed point like the Part of Fortune is not a body any "
+    "service can be asked for");
+  {
+    // Zero is a REAL target -- the solar system barycentre -- so the
+    // "not served" sentinel cannot be zero. The barycentric Sun is the
+    // one object that asks for it, and it would read as unserved under
+    // the obvious spelling of this table.
+    flag fBarySav = us.fBarycenter;
+    us.fBarycenter = fTrue;
+    Check(NEphHorizonsId(oSun) == 0,
+      "a barycentric Sun asks Horizons for target 0, the solar system "
+      "barycentre, which is why the unserved sentinel is not 0");
+    us.fBarycenter = fBarySav;
+  }
+
   if (!FHorizonsRowQt("sun-1990", fTrue, rgrSun) ||
     !FHorizonsRowQt("venus-1990", fTrue, rgrVen) ||
     !FHorizonsRowQt("mars-1990", fTrue, rgrMar)) {
@@ -21792,8 +21866,14 @@ static void TestEphNoSourceQt()
   // A chain naming only a source this build does not register at all.
   // CEphChainSrc skips a key it cannot resolve, so the walk has nothing to
   // ask and must not report success.
+  //
+  // The key used to be "horizons", which was unregistered until phase 6h
+  // step 3 gave it a plugin. Any unresolvable key does this job -- what
+  // the check is about is a chain whose every token the build cannot
+  // resolve, which is also what a settings file from a NEWER build looks
+  // like from here.
   {
-    EphSelBorrow bChain("horizons");
+    EphSelBorrow bChain("nonesuch");
     cisrc = CEphChainSrc(us.szEphemSource, rgisrc, cEphSrcBuiltIn);
     EphQueryInit(&eq, 2451545.0);
     FEphQueryAdd(&eq, oSun, 0, oEar, NULL);
@@ -21889,11 +21969,18 @@ static void TestEphemRegistryQt()
     Check(IEphSrcFromKey("swiss") == 0 && IEphSrcFromKey("jpl") == 1 &&
       IEphSrcFromKey("moshier") == 2 && IEphSrcFromKey("matrix") == 3 &&
       IEphSrcFromKey("server") == 4 + cEphSrcPrometheia &&
-      IEphSrcFromKey("none") == 5 + cEphSrcPrometheia &&
+      IEphSrcFromKey("none") ==
+        5 + cEphSrcPrometheia + cEphSrcHorizons &&
       IEphSrcFromKey("nonesuch") < 0,
       "every source resolves by its key, and a bad key resolves to none "
-      "(the phase 7 source, when compiled in, sits at index 4, and the "
-      "phase 6 server after it)");
+      "(the phase 7 source, when compiled in, sits at index 4, the "
+      "phase 6 server after it, then horizons where JPLWEB is compiled "
+      "in, and none last)");
+#ifdef JPLWEB
+    Check(IEphSrcFromKey("horizons") == 5 + cEphSrcPrometheia,
+      "and horizons is a registered source now, not a key the chain "
+      "parser merely tolerates");
+#endif
     Check(FEqSz(us.szEphemSource, "swiss"),
       "the selection IS the chain, and its head is the swiss source");
 
@@ -22198,7 +22285,9 @@ static void TestEphemRegistryQt()
       Check(FProcessSwitches(3, rgsz, NULL), "back to the default again");
       {
         static CONST char *rgszFuture[] = {
+#ifndef JPLWEB
           "horizons",
+#endif
 #ifndef PROMETHEIA
           "prometheia",
 #endif

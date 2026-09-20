@@ -4157,8 +4157,16 @@ flag FParseJPLHorizons(FILE *file, PT3R *pt, char *szName, int cchName)
 }
 
 
-flag GetJPLHorizons(int id, real *obj, real *objalt, real *dir, real *dist,
-  real *diralt, real *dirlen, char *szOut)
+// The instant and the site are an ARGUMENT here, not the ciCore global.
+// The wrapper below passes ciCore, which is what every caller did until
+// the horizons source was written -- and that was correct only because
+// ComputeEphem() is called once per cast with the moment ciCore already
+// carries. Nothing stated the equivalence and nothing checked it; the
+// suite checks it now, and a fetcher that takes its instant can be asked
+// for a second one.
+
+flag GetJPLHorizonsAt(int id, CONST CI *pci, real *obj, real *objalt,
+  real *dir, real *dist, real *diralt, real *dirlen, char *szOut)
 {
   char szUrl[cchSzLine*2], szName[cchSzMax];
   PT3R pt[3];
@@ -4167,7 +4175,7 @@ flag GetJPLHorizons(int id, real *obj, real *objalt, real *dir, real *dist,
   int i;
   flag fOk;
 
-  SzUrlJPLHorizons(id, &ciCore, us.fTopoPos, ciCore.lon, ciCore.lat,
+  SzUrlJPLHorizons(id, pci, us.fTopoPos, pci->lon, pci->lat,
     us.elvDef, S(szUrl));
   // A reply we already have is the fastest and politest kind.
   if (FJPLCacheGet(szUrl, pt, S(szName)))
@@ -4220,6 +4228,14 @@ LProcess:
   if (szOut != NULL)
     CopyRgchToSz(szName, CchSz(szName)+1, szOut, cchSzMax);
   return fTrue;
+}
+
+
+flag GetJPLHorizons(int id, real *obj, real *objalt, real *dir, real *dist,
+  real *diralt, real *dirlen, char *szOut)
+{
+  return GetJPLHorizonsAt(id, &ciCore, obj, objalt, dir, dist, diralt,
+    dirlen, szOut);
 }
 #endif // JPLWEB
 

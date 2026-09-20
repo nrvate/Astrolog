@@ -474,6 +474,8 @@ extern flag FInputData P((CONST char *));
 extern void SzUrlJPLHorizons P((int, CONST CI *, flag, real, real, real,
   char *, int));
 extern flag FParseJPLHorizons P((FILE *, PT3R *, char *, int));
+extern flag GetJPLHorizonsAt P((int, CONST CI *, real *, real *, real *,
+  real *, real *, real *, char *));
 extern flag GetJPLHorizons P((int,
   real *, real *, real *, real *, real *, real *, char *));
 #endif
@@ -543,6 +545,13 @@ extern int NCheckEclipseSolarLoc P((real, real, real *));
 extern void CreateElemTable P((ET *));
 
 #ifdef SWISS
+// The Horizons target id of each main object, calc.cpp's table. Shared
+// rather than copied: ephhorizons.cpp maps objects to ids with it, and a
+// second copy is the one thing this arrangement cannot afford -- the two
+// would answer differently about which bodies the source serves at all.
+#ifdef JPLWEB
+extern CONST int rgObjJPL[cThing+1];
+#endif
 extern CONST int rgObjSwissDef[cCust], rgTypSwissDef[cCust];
 extern int rgObjSwiss[cCust], rgTypSwiss[cCust], rgPntSwiss[cCust],
   rgFlgSwiss[cCust];
@@ -585,6 +594,10 @@ extern flag FSrcChainHead P((CONST char *));
 extern flag FEphSpeeds P((void));
 extern flag FEphLegacyCast P((void));
 extern flag FEphGeoUncorrected P((void));
+extern void CiFromJulianEph P((real, CI *));
+#ifdef JPLWEB
+extern int NEphHorizonsId P((int));
+#endif
 extern int CEphChainSrc P((CONST char *, int *, int));
 extern int NEphSourceGen P((void));
 extern void EphQueryInit P((EPHQUERY *, real));

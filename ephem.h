@@ -332,12 +332,28 @@ extern EPHSRCDEF ephsrcPrometheia;
 #define cEphSrcPrometheia 0
 #endif
 
+// The JPL Horizons source (phase 6h) is compiled in only where the
+// fetcher is -- JPLWEB, astrolog.h -- because it IS the fetcher's
+// mapping and has nothing to do without it. A build without JPLWEB has
+// no such source and never had the branch either.
+#ifdef JPLWEB
+extern EPHSRCDEF ephsrcHorizons;
+// "This source does not serve that object", from NEphHorizonsId(). NOT
+// zero, which is a real Horizons target -- the solar system barycentre,
+// and what a barycentric Sun is asked for. rgObjJPL[] uses 0 for "no
+// entry", so the two meanings are told apart before the lookup.
+#define ephNoIdHor (-1000000)
+#define cEphSrcHorizons 1
+#else
+#define cEphSrcHorizons 0
+#endif
+
 // The server source (phase 6) sits between the local sources and none.
 // Its place in the table is nearly cosmetic -- the default chain is
 // built from the documented quality order of the LOCAL sources, and a
 // remote one is only ever in a chain because the user named it -- but it
 // goes before none, because a chain that reaches none is over.
-#define cEphSrcBuiltIn (6 + cEphSrcPrometheia)
+#define cEphSrcBuiltIn (6 + cEphSrcPrometheia + cEphSrcHorizons)
 
 // The registry order, the fallback chain's quality order (section 4.2:
 // swiss, jpl, moshier, matrix), none last: it serves nothing, and a chain

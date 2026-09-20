@@ -1025,6 +1025,40 @@ flag FSkipEphem(int i, int objCentCalc, flag fJPLPla)
 }
 
 
+// Whether object i's row comes from a geocentric, light-time-uncorrected
+// source on this cast -- the JPL Horizons one today. Two questions in
+// one, and only the first was ever written down: WHICH objects that
+// source can serve, and WHETHER it is the one being asked.
+//
+// The id mapping is ephhorizons.cpp's single table (NEphHorizonsId), so
+// the answer to "does this source serve object i" has one definition
+// rather than the four copies that used to sit in this function -- and
+// they were not quite four copies, which is the point: two of them also
+// counted the EARTH, and a reader comparing them had to notice that.
+//
+// fEarthToo is that difference, kept explicit. The Earth is never
+// FETCHED from Horizons (it is the center the queries are made from, and
+// JPL refuses it as degenerate), but the shift and relocate rules below
+// must still treat it as belonging to that source, because its position
+// was synthesised from the source's Sun and carries the source's frame.
+
+static flag FObjGeoSrc(int i, flag fJPLPla, flag fEarthToo)
+{
+#ifdef JPLWEB
+  if (fEarthToo && fJPLPla && i == oEar)
+    return fTrue;
+  if (NEphHorizonsId(i) == ephNoIdHor)
+    return fFalse;
+  // A custom slot configured as a Horizons body is that source's
+  // whatever the chain says; a main object is only when the chain's head
+  // is the one that answers this way.
+  return FCust(i) || fJPLPla;
+#else
+  return fFalse;
+#endif
+}
+
+
 // Re-center a geocentric, light-time-uncorrected row set on the cast's
 // own center: the host-owned emulation of the one capability JPL
 // Horizons does not have (EPHCAPS fGeoUncorrected,
@@ -1169,8 +1203,7 @@ void ComputeEphem(real t)
           continue;
         if (FCust(i) && rgTypSwiss[i - custLo] == 5)
           continue;
-        fJPL = FJPL((FCust(i) && rgTypSwiss[i - custLo] == 4) ||
-          (fJPLPla && FBetween(i, 0, cThing) && rgObjJPL[i] > 0));
+        fJPL = FObjGeoSrc(i, fJPLPla, fFalse);
         if (fJPL)
           continue;
         objOrbit = us.fMoonMove ? ObjOrbit(i) : -1;
@@ -1210,15 +1243,13 @@ void ComputeEphem(real t)
 
     // Calculate planet using Swiss Ephemeris or JPL Horizons
     fRet = fFalse;
-    fJPL = FJPL((FCust(i) && rgTypSwiss[i - custLo] == 4) ||
-      (fJPLPla && FBetween(i, 0, cThing) && rgObjJPL[i] > 0));
+    fJPL = FObjGeoSrc(i, fJPLPla, fFalse);
 #ifdef JPLWEB
     if (fJPL) {
       fSav = us.fTruePos;
       if (us.objCenter != oEar)
         us.fTruePos = fTrue;
-      j = FCust(i) ? rgObjSwiss[i - custLo] :
-        (i == oSun && us.fBarycenter ? 0 : rgObjJPL[i]);
+      j = NEphHorizonsId(i);
       fRet = GetJPLHorizons(j, &r1, &r2, &r3, &r4, &r5, &r6, NULL);
       us.fTruePos = fSav;
     } else
@@ -1299,8 +1330,7 @@ void ComputeEphem(real t)
       // Don't shift if object restricted, or if it's central object.
       if ((ignore[i] && i != oSun) || i == us.objCenter || !FThing(i))
         continue;
-      fJPL = FJPL((FCust(i) && rgTypSwiss[i - custLo] == 4) || (fJPLPla &&
-        (i == oEar || (FBetween(i, 0, cThing) && rgObjJPL[i] > 0))));
+      fJPL = FObjGeoSrc(i, fJPLPla, fTrue);
       // Don't shift if Swiss Ephemeris already shifted for us.
       if (!fJPL && !FNodal(i) && !FNodal(us.objCenter) &&
         us.objCenter <= oNorm && us.objCenter == objCentCalc)
@@ -1327,8 +1357,7 @@ void ComputeEphem(real t)
       if (ignore[i])
         continue;
       // Don't relocate if Swiss Ephemeris already relocated earlier.
-      fJPL = FJPL((FCust(i) && rgTypSwiss[i - custLo] == 4) || (fJPLPla &&
-        (i == oEar || (FBetween(i, 0, cThing) && rgObjJPL[i] > 0))));
+      fJPL = FObjGeoSrc(i, fJPLPla, fTrue);
       if (us.objCenter <= oNorm && !fJPL)
         continue;
       // Don't relocate if object already orbits Sun or central planet.

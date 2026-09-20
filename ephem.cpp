@@ -48,7 +48,13 @@ EPHSRCDEF * CONST rgephsrc[cEphSrcBuiltIn] = {
 #ifdef PROMETHEIA
   &ephsrcPrometheia,
 #endif
-  &ephsrcServer, &ephsrcNone
+  &ephsrcServer,
+#ifdef JPLWEB
+  // The other remote one, beside the server and before none for the same
+  // reason: a chain that reaches none is over.
+  &ephsrcHorizons,
+#endif
+  &ephsrcNone
 };
 
 
@@ -126,7 +132,11 @@ static int IEphSrcFromKeyN(CONST char *pch, int cch)
 // remote pair and phase 7 the Prometheia plugin, this table is deleted.
 
 static CONST char * CONST rgszEphSrcFuture[] = {
+#ifndef JPLWEB
+  // Only while the fetcher is absent, for the same reason as below: with
+  // JPLWEB the registry supplies this key itself.
   "horizons",
+#endif
 #ifndef PROMETHEIA
   // Only while it is genuinely absent: with the plugin compiled in, the
   // registry supplies this key and naming it here as well would be a
@@ -255,17 +265,51 @@ flag FEphSpeeds()
 }
 
 
+// The query's instant as a CI, for a source whose question is asked in
+// calendar terms rather than in Julian days -- JPL Horizons' URL is the
+// only one today. The PLACE is ciCore's, because a topocentric question
+// is asked from the chart's own site and the query carries no site of
+// its own; only the moment is replaced.
+//
+// The conversion is the exact inverse of the one that built rJD.
+// CastChart() writes UT back into ciCore.tim (TT = TT + (ZZ - SS)), sets
+// is.T = MdyToJulian(...) + TT/24, and then rescales it, so
+// JulianDayFromTime() undoes the rescale and leaves a half-day offset:
+// Astrolog counts a day from midnight where MdyToJulian() hands back the
+// noon-based integer. Hence the +0.5 here and the -0.5 into
+// JulianToMdy(), which is the same pairing FGetTimeNow() uses.
+//
+// zon and dst come out ZERO on purpose. The moment is already UT by the
+// time any of this runs, and leaving the chart's offsets in place would
+// make SzUrlJPLHorizons() shift it a second time.
+
+void CiFromJulianEph(real rJD, CI *pci)
+{
+  real jd = rJD + 0.5;
+
+  *pci = ciCore;
+  pci->tim = (jd - RFloor(jd)) * 24.0;
+  JulianToMdy(jd - 0.5, &pci->mon, &pci->day, &pci->yea);
+  pci->zon = 0.0;
+  pci->dst = 0.0;
+}
+
+
 // Whether the chain's head answers in the Earth's frame with no
 // light-time correction applied, so the host has to re-center the whole
 // row set itself (EPHCAPS fGeoUncorrected; ComputeEphem()'s
 // EphEmulateGeoRows()). ComputeEphem() asked this question five separate
 // times and spelled the answer "the chain's head is horizons" each time.
 //
-// The registry is asked first, so the day the horizons plugin registers
-// (phase 6h step 3) this becomes an ordinary capability read and the
-// clause below it is deleted. Until then the key resolves to no source --
-// it is one of rgszEphSrcFuture[] -- and the head's text is the only
-// thing there is to read, exactly as ComputeEphem() read it.
+// It is an ordinary capability read since phase 6h step 3 registered the
+// horizons plugin. It used to end with "or the head's text is literally
+// horizons", because the key resolved to no source while the plugin was
+// unwritten; that clause is gone, and the suite's check survived its
+// removal unchanged because it asks the capability rather than the text.
+//
+// A head naming a source this build does not have answers false, which
+// is right: an unresolvable head cannot be a geocentric-uncorrected one,
+// and the chain walk skips it in the same breath.
 
 flag FEphGeoUncorrected()
 {
@@ -276,15 +320,14 @@ flag FEphGeoUncorrected()
 
   SzEphChainHead(us.szEphemSource, S(sz));
   isrc = IEphSrcFromKey(sz);
-  if (isrc != ephSrcNone) {
-    pes = PephsrcGet(isrc);
-    if (pes != NULL) {
-      ClearB((pbyte)&caps, sizeof(EPHCAPS));
-      (pes->GetCaps)(&caps);
-      return caps.fGeoUncorrected;
-    }
-  }
-  return FEqSz(sz, "horizons");
+  if (isrc == ephSrcNone)
+    return fFalse;
+  pes = PephsrcGet(isrc);
+  if (pes == NULL)
+    return fFalse;
+  ClearB((pbyte)&caps, sizeof(EPHCAPS));
+  (pes->GetCaps)(&caps);
+  return caps.fGeoUncorrected;
 }
 
 
