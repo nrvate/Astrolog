@@ -160,18 +160,30 @@ version 3, and this section is the design authority behind it.
   a binary, which is why that column exists. Overwriting the file while
   the daemon holds it open changes both and silently invalidates their
   record's subject. As of 2026-09-20 the spare is
-  sha256 `1734d363…`, `mtime` 04:57:10Z, 1,735,488 bytes.
+  sha256 `1734d363…`, `mtime` 06:40:45Z, 1,735,488 bytes, pid 3448837.
 
-  **Nothing under `ephsrv/` changed between `21eaee2` and `5558135`**, so
+  **The Prometheia project's load tool (`prometheia-load`) has consent to
+  run against 47392** -- 16 connections, 30 s, modest, granted 2026-09-20.
+  The reasoning, in case it is needed again: 12 cores at load ~1.6, and
+  our daemon runs `--threads 2`, so the SERVER side is bounded at two
+  cores whatever the client opens. That bound is what makes it
+  proportionate on a box this project otherwise caps at `make -j4`.
+
+  **Nothing under `ephsrv/` changed between `21eaee2` and `6dc840a`**, so
   the whole of phase 6h left the served binary alone -- verified by an
-  empty `git diff 21eaee2 HEAD -- ephsrv/` plus building both commits at
-  one scratch path and getting one binary. **What is NOT proven** is that
-  the running spare was itself built from `21eaee2`: that rests on a
-  written record plus a timestamp. Proving it means building at this
-  tree's own path, which overwrites the file the daemon has open. If it
-  ever matters, rebuild and RESTART the spare at a named commit and tell
-  the peer the new hash, rather than trying to prove the old one in
-  place.
+  empty `git diff`, and then **settled by content**: a forced rebuild at
+  `6dc840a` in this tree's own path produced a **byte-identical** binary,
+  `1734d363…`, 1,735,488 bytes. The build is reproducible at a fixed
+  path, so the spare's provenance is measured rather than inferred from a
+  record and a timestamp.
+
+  **A RESTART IS NOT A REBUILD.** `tools/ephsrv-serve.sh` runs
+  `make ephsrv`, which on the first restart found nothing to do -- the
+  daemon came back up on the same binary while the restart *looked* like
+  it had proved something. The sources had to be `touch`ed to force the
+  comparison. The script prints the commit next to the binary's mtime,
+  and that commit is **HEAD, not the binary's provenance**: the two agree
+  only when a build actually ran.
 
   Comparing two `astrolog-ephd` builds only works at the SAME path: the
   binary embeds `/nvmraid/shares/Astrolog` and `/nvmraid/shares/swisseph`
