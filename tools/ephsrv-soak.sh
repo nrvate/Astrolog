@@ -31,9 +31,12 @@
 # Exit 0 with "SOAK PASS"; nonzero with the failed assertion. Re-runnable;
 # cleans up the farm unless KEEP_FARM is set.
 #
-# "--selftest" injects each memory fault and requires the RIGHT assertion
-# to red -- the falsification as a check rather than as a sentence in this
-# header. About three minutes.
+# "--selftest" covers LEG (e) ONLY, and says so because the scope is the
+# part a selftest lies about. It runs a control and one fault per
+# assertion leg (e) makes, requires the RIGHT one to red, and refuses to
+# start if leg (e) can fail in a way no case covers. Legs a-d still carry
+# their falsification as prose, like the other nine ephsrv-*.sh gates.
+# About four minutes.
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -48,6 +51,30 @@ ROOT=$PWD
 # image_audit.py --selftest.
 if [ "${1:-}" = "--selftest" ]; then
   fails=0
+  # THE CASE LIST IS CHECKED AGAINST THE LEG, before anything is run.
+  #
+  # A selftest declares which assertions it falsifies, and that claim rots
+  # the moment an assertion is added without a case -- the assertion could
+  # then be DELETED and every case would still go green, which is the
+  # exact overclaim this flag exists to prevent, in the flag itself. The
+  # Prometheia project found precisely that in their own selftest hours
+  # after writing it: nine assertions declared, seven exercised.
+  #
+  # So the list is read out of leg (e)'s own SOAK FAIL messages rather
+  # than kept by hand beside them, and a message no case claims stops
+  # this before a daemon is started. Add an assertion, get told to add a
+  # case.
+  SELF_WANT="not bounded by it|not filling|has not plateaued"
+  MISSING=$(awk '/^# e\. Memory is bounded/,0' "$0" \
+    | grep -oE 'SOAK FAIL: [^"]*' \
+    | grep -vE "$SELF_WANT" \
+    | grep -vE "daemon did not start" || true)
+  if [ -n "$MISSING" ]; then
+    echo "SELFTEST FAIL: leg (e) can fail in a way no case covers --"
+    printf '  %s\n' "$MISSING"
+    echo "               add a case, or this selftest overclaims."
+    exit 1
+  fi
   # The CONTROL first, and it is not ceremony. The two sabotages below
   # only ever prove the gate can go red; a leg that failed unconditionally
   # -- a bound mistyped to something nothing can satisfy, a daemon that
@@ -61,12 +88,20 @@ if [ "${1:-}" = "--selftest" ]; then
     echo "               the sabotages below would prove nothing"
     fails=$((fails+1))
   fi
-  for sab in unbounded nocache; do
+  # stillclimbing needs NO sabotage hook: it is the real gate, stopped
+  # before the cache plateaus. The bound and the cache-is-filling checks
+  # both pass on it, so it reds the plateau assertion alone -- which had
+  # no case until 2026-09-20 and could have been deleted unnoticed.
+  for sab in unbounded nocache stillclimbing; do
     case $sab in
-      unbounded) want="not bounded by it" ;;
-      nocache)   want="not filling" ;;
+      unbounded)    want="not bounded by it"; env="MEM_N=200" ;;
+      nocache)      want="not filling";       env="MEM_N=200" ;;
+      stillclimbing) want="has not plateaued"; env="MEM_CAP=24 MEM_N=140" ;;
     esac
-    out=$(FARM_N=200 MEM_N=200 MEM_SABOTAGE=$sab "$0" 2>&1) && rc=0 || rc=$?
+    case $sab in
+      stillclimbing) out=$(env FARM_N=200 $env "$0" 2>&1) && rc=0 || rc=$? ;;
+      *) out=$(env FARM_N=200 $env MEM_SABOTAGE=$sab "$0" 2>&1) && rc=0 || rc=$? ;;
+    esac
     if [ "$rc" = "0" ]; then
       echo "SELFTEST FAIL: the $sab sabotage PASSED the gate"; fails=$((fails+1))
     elif ! printf '%s' "$out" | grep -q "$want"; then
@@ -78,8 +113,8 @@ if [ "${1:-}" = "--selftest" ]; then
       echo "selftest: the $sab sabotage reds \"$want\""
     fi
   done
-  [ "$fails" = "0" ] || { echo "SELFTEST FAIL: $fails of 3"; exit 1; }
-  echo "SELFTEST PASS: the control passes and both sabotages red their own assertion"
+  [ "$fails" = "0" ] || { echo "SELFTEST FAIL: $fails of 4"; exit 1; }
+  echo "SELFTEST PASS: the control passes and all three faults red their own assertion"
   exit 0
 fi
 SWE_HOME=${SWE_HOME:-/shares/swisseph}

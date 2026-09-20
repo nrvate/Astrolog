@@ -221,6 +221,29 @@ version 3, and this section is the design authority behind it.
   **The hand injections all passed because they were the ones someone
   thought of.**
 
+  **The count, asked by the Prometheia project and answered without
+  running anything (2026-09-20).** `ephsrv-soak.sh` makes **eight**
+  substantive assertions -- startup time, zero directory scans, fd bound,
+  the missing asteroid's error code and its row count, and leg (e)'s
+  three. The selftest covered **two**. Within its own declared scope it
+  was one short: leg (e) asserts bounded, filling AND plateaued, and the
+  plateau check **had no case**, so it could have been deleted with every
+  case still green. That is exactly the defect they found in their own
+  selftest hours after writing it -- nine assertions declared, seven
+  exercised -- and the answer was a count, not a measurement.
+
+  Closed for leg (e): a third case, `stillclimbing`, which needs **no
+  sabotage hook at all** -- it is the real gate stopped before the cache
+  plateaus (`MEM_CAP=24 MEM_N=140`), so the bound and filling checks both
+  pass and the plateau assertion reds alone. And the case list is now
+  **read out of leg (e)'s own `SOAK FAIL` messages** rather than kept by
+  hand beside them: a message no case claims stops the selftest before a
+  daemon is started, naming it. Proven by adding a fourth assertion and
+  watching it refuse.
+
+  **Legs a-d still carry prose**, and the header says so. The scope is
+  the part a selftest lies about.
+
   **This does not close the hole both projects have named**: neither side
   has an oracle for its measuring code, and every instrument defect found
   on 2026-09-20 -- six here, four there -- was caught by someone deciding
