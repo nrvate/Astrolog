@@ -833,32 +833,59 @@ the two engines differ on every rate column by construction, and §3.5's text
 does not say which is meant — see §2.7. One sentence closes all four columns
 at once, which is why it should be general and not about distance.
 
-**And the distance bound has ONE KNOWN OUTLIER, recorded rather than
-swallowed (2026-09-20).** We advertise `ratesAuPerDay = 4e-3`, which covers
-our own worst row (Aldebaran, 1.5154e-3). The Prometheia project's grid,
-which is deliberately not ours, found a row ours does not reach:
+**And the distance bound's ONE KNOWN OUTLIER turned out to be the
+MEASUREMENT, not the rates (2026-09-20).** This section said, for about an
+hour, that the Prometheia project had found a row we could not reach —
+Polaris, topocentric Quito, JD 2415020.5, **7.4824e-3 AU/day** against our
+advertised 4e-3 — and explained it as a horizon effect on an object at 2.7e7
+AU. **Both halves of that were wrong, and the explanation was written down
+before anyone measured it.** What it actually is:
 
-| row | measured |
-|---|---|
-| **Polaris, topocentric Quito, JD 2415020.5 (1900)** | **7.4824e-3 AU/day — over the bound by 1.87×** |
-| Polaris, topocentric Quito, JD 2461300.5 | 6.7003e-4 (11× smaller) |
-| Vega, geocentric, 2100 | 5.8895e-4 |
+| precision | the five distances | central difference | \|reported − diff\| |
+|---|---|---|---|
+| **f64** | distinct, spanning 3.08e-5 AU (5071 ULP) | −7.8977e-3 AU/day | **3.99e-4 — under the bound** |
+| **f32** | **all five bit-identical** | **exactly 0** | **8.30e-3 — "over" by 2×** |
 
-It is the same two axes their grid has beaten ours on three times now —
-**Quito and 1900, not the object list.** Polaris seen from the equator sits on
-the horizon, and whatever the topocentric transform does at the horizon for an
-object at 2.7e7 AU spikes there and nowhere else.
+At f32 the ULP of a distance of 2.7356e7 AU is **3.26 AU**, and the distance
+changes by 3.08e-5 AU across the window. The column therefore cannot change at
+all, its central difference is identically zero, and the "discrepancy" is just
+the reported rate with the sign taken off. Polaris's own radial velocity is
+−14.4 km/s, which is −8.3e-3 AU/day — and 7.4824e-3 falls inside the range the
+reported rate itself spans over those five rows (7.4004e-3 … 8.3165e-3). That
+is the signature, not a coincidence.
 
-**The bound stays at 4e-3 anyway, and that is a decision rather than an
-oversight.** Covering 7.48e-3 with the 2–3× headroom the two projects agreed
-on means ~2e-2 AU/day — three million km a day — advertised as a promise about
-a distance column, which describes nothing. The sequence 1e-4 → 2e-4 → 4e-3 →
-2e-2 is not converging on a truth; it is measuring how far two grids happen to
-reach. **An advertised bound with one documented outlier is more honest than a
-bound chosen to swallow it.** Their row is at `docs/crosstest/2026-09-20-ratesweep-theirs-fixed.tsv`
-in their `db6ab56`. This is entangled with §3.5a's unmeetable 1e-6 AU/day for
-stars (open item 5b): if a star's distance column becomes nominal, the outlier
-and the bound both stop being about stars at all.
+**It is not a star problem.** The same query at f32 degrades every object by
+two to three orders, because the test differences positions over 0.004 day and
+f32 keeps ~7 significant digits:
+
+| object | distance | window change at f32 | \|reported − diff\| f64 → f32 |
+|---|---|---|---|
+| Sun | 0.983 AU | **0 ULP** | 2.6e-12 → 7.4e-6 |
+| Moon | 0.00269 AU | 226 ULP | 2.0e-9 → 1.3e-7 |
+| Jupiter (bary) | 4.62 AU | 110 ULP | 2.1e-6 → 1.8e-4 |
+| Pluto (bary) | 31.1 AU | **8 ULP** | 4.7e-5 → 1.0e-4 |
+
+The Sun's distance is *constant* at f32 over that window too. A star is only
+the extreme of a scale that starts at the Sun.
+
+**So §3.5a's tolerance has a hole, and it is not the one recorded as open item
+5b.** The spec says a server's rates must match "the central difference of its
+own positions over ±0.001 day" and **never says at what precision those
+positions are read.** f32 delivery is a normative part of the protocol (§3.1),
+so a conforming client can difference a column that is constant by
+construction and conclude the server's rates are wrong by their own magnitude.
+Both engines fail that way, on every object, and no implementation can pass
+it. The fix is one sentence pinning the test to f64, not a relative tolerance
+and not an exemption for stars. See §3.5a.
+
+**What this cost, and it is the point of writing it down.** The wrong
+explanation was committed and pushed (`7b2acba`) on a peer's measurement plus
+a plausible physical story, without once querying our own server. The story
+was good — a pole star seen from the equator sits on the horizon — and it was
+about a real thing that simply was not happening here. One `eph_wsclient` call
+at two precisions, five minutes, would have caught it before the commit rather
+than after. **A plausible mechanism is not evidence, and the more it explains
+the less it gets checked.**
 
 ### 2.9 The Moon's named points ignore a topocentric site — up to a degree, FIXED
 

@@ -168,8 +168,17 @@ for obs in geo topo-zurich topo-quito; do
     topo-quito)  OBSKIND=topo; SITE=",site=-78.5:-0.22:2850" ;;
     *)           OBSKIND=$obs; SITE="" ;;
   esac
+  # --precision 64 is NOT the default being restated. It is what 3.5a
+  # requires the comparison to be made at, and this leg is the reason the
+  # sentence exists: at f32 the distance column is quantised far above the
+  # change the difference is trying to see -- Polaris's ULP is 3.26 AU
+  # against a window change of 3.08e-5 -- so all five distances come back
+  # bit-identical, the central difference is exactly zero, and every star
+  # "misses" the bound by its own whole rate. The Sun's distance is
+  # constant at f32 over this window too. Measured 2026-09-20, after the
+  # other project's sweep reported an outlier that was this and not a rate.
   run_obs() {
-    ./eph_wsclient --host 127.0.0.1 --port "$PORT" --quiet \
+    ./eph_wsclient --host 127.0.0.1 --port "$PORT" --quiet --precision 64 \
       --jd "$(python3 -c "print(repr($2 - 2.0/1024.0))")" \
       --step-ns 84375000000 --count 5 \
       --profile "obs=$OBSKIND$SITE,plane=ecl,form=sph,speeds=1" \

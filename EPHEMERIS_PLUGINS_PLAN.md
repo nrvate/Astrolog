@@ -390,40 +390,49 @@ version 3, and this section is the design authority behind it.
      their maintainer's call because a golden test pins those columns" is
      the exact reasoning this project rejected: a gate asserting the
      wrong thing is a second thing to fix.
-  5b. **OPEN, and it is a hole in OUR specification: §3.5a's distance
-     tolerance cannot be met for a fixed star by any implementation.**
+  5b. **CLOSED 2026-09-20 by measurement, and the diagnosis it had
+     carried was wrong.** §3.5a now says the rate comparison is defined
+     on **f64 positions**, which is one sentence and closes it for every
+     object rather than for stars.
 
-     §3.5a asks a server whose distance rates differ from a central
-     difference of its own positions by more than **1e-6 AU/day** to
-     advertise its largest such difference. At a star's distance that is
-     below the floating-point noise floor. Polaris is served at
-     **2.7356e7 AU**, where one f64 ulp is 6.07e-9 AU; a five-point
-     stencil sums 18 ulp and divides by 12h = 0.0117 day, giving a
-     **~9.3e-6 AU/day** floor before any arithmetic — about four orders
-     of magnitude above the tolerance.
+     **What it was recorded as:** "§3.5a's 1e-6 AU/day distance tolerance
+     is below the f64 noise floor at a star's distance, so no
+     implementation can meet it", with three candidate fixes -- a
+     relative tolerance, exempting stars, or declaring a star's distance
+     nominal. Both engines measured themselves failing it, stars only,
+     which looked like confirmation.
 
-     Both implementations measure themselves failing it: 32 rows on ours,
-     218 on theirs, **every one a fixed star and not one a solar-system
-     object**. Neither is a defect.
+     **What it actually is.** The floor argument was about an order of
+     magnitude that is not reached. At f64 Polaris's five distances
+     across the window are distinct and span **5071 ulp**, the central
+     difference is clean, and the row is **under** the bound at 3.99e-4
+     AU/day. The failures were all at **f32**, where the ULP of 2.7356e7
+     AU is **3.26 AU** against a window change of 3.08e-5 AU: the column
+     is bit-identical at all five instants, its central difference is
+     exactly zero, and the "discrepancy" is the server's own rate with
+     the sign removed. Prometheia's 7.4824e-3 AU/day falls inside the
+     range the reported rate itself spans over those rows.
 
-     **What it cost us meanwhile:** `ratesAuPerDay` was advertised at
-     2e-4 for about an hour on 2026-09-19 and was simply false, because
-     this server's own bound grid had **no `--stars` in it** and could
-     not see the rows. The grid has them now and the figure is **4e-3**,
-     which is true. The solar-system-only figure is 9.0324e-5 (Saturn's
-     osculating aphelion, topocentric Quito, 2026), so a client that
-     cares only about planets should read §2.8, not the advertisement.
+     **And it was never about stars.** At f32 the SUN's distance is
+     constant over the same window, and Pluto's barycentre moves 8 ulp
+     where at f64 it moves 4.5e9. Every object degrades two to three
+     orders; a star is only where the scale ends.
 
-     **The fix is prose, not bytes**, and three shapes are on the table:
-     make the distance tolerance relative for distant objects; exempt
-     fixed stars from it; or declare a star's distance column nominal and
-     ungraded (there is precedent — `kMetaNoDistance` already exists).
-     **Not decided, deliberately**, and not at the end of a session. The
-     Prometheia side has no stake in which and has said so.
+     **`ratesAuPerDay` stays at 4e-3 for now.** The f64 star rows are
+     genuinely ~1e-3 (Aldebaran 1.5154e-3) -- real, and separate from
+     everything above. The solar-system-only figure is 9.0324e-5
+     (Saturn's osculating aphelion, topocentric Quito, 2026), so a client
+     that cares only about planets should read registry §2.8 rather than
+     the advertisement. Whether a per-observer or per-kind bound is worth
+     a capability field is a new question, not this one.
 
-     Once it is decided, `ratesAuPerDay` should come back to ~2e-4 and
-     `ephsrv-rates.sh`'s bound leg should grade stars under whichever
-     rule the sentence lands on.
+     **The method note, which is the part worth keeping.** The wrong
+     explanation was committed and pushed (`7b2acba`) on a peer's number
+     plus a plausible physical story -- a pole star seen from the equator
+     sits on the horizon -- without once querying our own server. One
+     `eph_wsclient` call at two precisions settled it in five minutes.
+     **A plausible mechanism is not evidence, and the more of the
+     observation it explains, the less likely anyone is to check it.**
 
   6. **Closed, recorded so it is not re-checked**: their dataset id's
      digest changed on 2026-09-19 (file hashing in 8 MiB pieces). Nothing
@@ -1813,6 +1822,17 @@ may select another from A.20):
   every change of the pipeline with time (light time, aberration, precession,
   nutation, the ayanamsa for sidereal zodiacs). Rectangular velocities are the
   derivatives of the answered x, y, z likewise.
+- **The comparison is defined on f64 positions.** `precision` (§3.4) is a
+  delivery choice, and at f32 the distance column is quantised far above the
+  change the test is trying to see: over ±0.001 day the Sun's distance and a
+  fixed star's are both **bit-identical at f32**, so their central difference
+  is exactly zero and the "difference" a client computes is the server's whole
+  rate with the sign taken off. Measured 2026-09-20 -- Polaris at 2.7356e7 AU
+  has an f32 ULP of **3.26 AU** against a window change of 3.08e-5 AU, and
+  Pluto's barycentre moves 8 f32 ULP where it moves 4.5e9 f64 ULP. A client
+  checking a server's rates asks for f64; a server measuring itself uses f64.
+  Neither tolerance below is meetable at f32 by any implementation, which is
+  how this was found: both engines measured each other failing it.
 - A server whose rates may differ from the central difference of its own
   positions over ±0.001 day by more than **1e-5 °/day** (angles) or
   **1e-6 AU/day** (distance) sets META's `ratesApprox` flag on the objects
