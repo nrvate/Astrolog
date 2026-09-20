@@ -1122,7 +1122,7 @@ time and asks whether any leg notices — reporting `--deltat` blind in all
 fifteen of their legs. See [§2.10](#210): the 1900 Polaris row recorded
 there as unresolved is now attributable to this.
 
-### 2.11a A topocentric star's distance rate collapses in a narrow region at the 1900.0 epoch — 7.5e-3 AU/day, over the advertised bound
+### 2.11a A topocentric star's distance rate collapses in scattered (instant, ΔT, site) cells — up to 8.2e-3 AU/day, over the advertised bound
 
 Distinct from [§2.11](#211), which was a stale observer and is fixed. This
 one survives that fix unchanged, needs a **supplied** ΔT, and puts the
@@ -1148,12 +1148,29 @@ the positions are consistent and it is the rate column that moves. That is
 and no protocol, returns the server's wire numbers bit for bit at every ΔT
 tried, including after the §2.11 fork fix.
 
-**It is a narrow region, and the instant is not arbitrary.** At ΔT 69.2 the
-neighbours are clean — 2415020.4990 gives 1.7e-04 and 2415020.5010 gives
-7.1e-04 — while 2415020.5000 and 2415020.5005 are over. 1800, J2000, 2026
-and 2100 are all clean at the same ΔT (1.6e-04 to 7.0e-04). **JD 2415020.5
-is the standard epoch 1900.0**, a catalogue epoch rather than an arbitrary
-date, which is suggestive and is as far as the evidence goes.
+**In JD, at ΔT 69.2, it is narrow.** The neighbours are clean —
+2415020.4990 gives 1.7e-04 and 2415020.5010 gives 7.1e-04 — while
+2415020.5000 and 2415020.5005 are over. JD 2415020.5 is the standard epoch
+**1900.0**, a catalogue epoch rather than an arbitrary date, which is
+suggestive and is as far as that evidence goes.
+
+**BUT IT IS NOT CONFINED TO THAT EPOCH, AND THE FIRST VERSION OF THIS ENTRY
+SAID IT WAS.** That version reported "1800, J2000, 2026 and 2100 are all
+clean at the same ΔT" and titled itself "at the 1900.0 epoch". The clause
+was true and the title was not: every one of those epochs had been asked at
+**one** ΔT, the one 1900 happened to fail at. Sweeping ΔT at **JD
+2461300.5 (2026)**, verified here against `libswe.a` with no server:
+
+| site | ΔT 0 | ΔT 30 | ΔT 69.2 | ΔT 140 |
+|---|---|---|---|---|
+| Quito (−78.47, −0.18, 2850) | **8.244e-03** | 2.965e-04 | 6.700e-04 | 1.537e-04 |
+| Zurich (8.55, 47.37, 500) | 2.345e-04 | 3.578e-05 | 4.634e-04 | **7.587e-03** |
+
+So 2026 is over the bound too — and **the two sites go over at different
+ΔT**, one at 0 and one at 140, with 69.2 (the value the earlier sweep used)
+clean at both. The region has more than one instant, it is reachable at
+ΔT 0 which any client may send, and it depends on the site. "A narrow
+region at 1900.0" was an artifact of the axis that sweep held fixed.
 
 **A tidy explanation was tested and failed, which is why none is offered.**
 The obvious one — that the region is TT in `[epoch, epoch + ΔT/86400]`,
@@ -1179,8 +1196,27 @@ column".
 cell against the fixed build and then **sweeping the axis the cell held
 fixed**. Their own sentences "exactly one row still exceeds it" and "the
 only row over in an eighteen-row subgrid" were true of a grid that holds ΔT
-constant — a count that was the width of a list, the fourth instance
-between the two projects this week and the first that was theirs.
+constant — a count that was the width of a list.
+
+*Corrected by them again within the hour*, after building the ΔT axis into
+their sweep as a separate assertion: a cell inside the bound at the swept
+value and outside it elsewhere fires its own check, kept apart from
+ordinary exceedance so that "exceeded here" and "exceeded only where the
+grid does not look" cannot be read as one thing. Fault-injected both ways —
+with the pass disabled the run prints "within its advertisement everywhere
+this sweep reached" and exits 0, which is the sentence to distrust. They
+note it is a floor and not a ceiling: cells are ranked by their error at
+the swept ΔT, so one clean there and ruinous elsewhere is caught only if it
+ranks anyway, which is how the Zurich cell nearly escaped.
+
+**The lesson this entry is really about.** Four times in one week between
+the two projects, a claim was bounded by an axis nobody varied: a floor
+that was exact when written, a count that was the width of a list, a bound
+measured on five bodies and stated about every object — and this one, which
+was *a conclusion* rather than a count, and therefore the most dangerous of
+the four. A count invites the question "how many?". A conclusion does not
+invite anything. The grep is any sentence with "all", "every" or "only" in
+it, read against the axes that were actually swept.
 
 ### 2.12 A fixed star's DISTANCE rate is not the derivative of its own distance — 0.6% to 3.4%, geocentric, every star
 
