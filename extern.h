@@ -522,6 +522,7 @@ extern void CoorXform P((real *, real *, real));
 extern void CoorXformFast P((real *, real *,
   real, real, real, real, real, real));
 extern void ProcessPlanet P((int, real));
+extern void EphEmulateGeoRows P((CONST EPHGEOROWS *, int, int));
 extern void ComputeEphem P((real));
 extern real CastChart P((int));
 extern void CastSectors P((void));
@@ -583,6 +584,7 @@ extern flag FEphSrcKeyKnownN P((CONST char *, int));
 extern flag FSrcChainHead P((CONST char *));
 extern flag FEphSpeeds P((void));
 extern flag FEphLegacyCast P((void));
+extern flag FEphGeoUncorrected P((void));
 extern int CEphChainSrc P((CONST char *, int *, int));
 extern int NEphSourceGen P((void));
 extern void EphQueryInit P((EPHQUERY *, real));

@@ -135,6 +135,25 @@ typedef struct _EphCaps {
   flag fSpeeds;      // The three rate columns are real rates.
   flag fLegacyCast;  // Matrix and None: CastChart()'s legacy hook answers;
                      // the source itself computes nothing.
+  flag fGeoUncorrected;
+                     // The rows come back GEOCENTRIC and with no
+                     // light-time correction applied, whatever the cast's
+                     // center is, and the host must re-center them itself
+                     // (EphEmulateGeoRows() in calc.cpp). JPL Horizons is
+                     // the source this exists for: it answers the question
+                     // Astrolog asks it from the Earth, so a heliocentric
+                     // or planet-centered chart needs the whole row set at
+                     // once -- an object's new position is a function of
+                     // the Earth's and the Sun's, not of its own row.
+                     //
+                     // It is a CAPABILITY rather than a rule in the caller
+                     // because the caller cannot ask. ComputeEphem() used
+                     // to carry five separate "don't shift, Horizons
+                     // already did" conditions spelled in the negative,
+                     // each naming Horizons directly; a second source with
+                     // the same frame would have had to be added to all
+                     // five, and a reader of any one of them could not tell
+                     // which frame the rows were actually in.
 } EPHCAPS;
 
 // One match of a name lookup (section 3.4 LOOKUP). A match whose kind a
@@ -214,6 +233,24 @@ typedef struct _EphQuery {
 } EPHQUERY;
 
 #define ephSrcNone (-1)
+
+// The rows a source declaring fGeoUncorrected answered, as that source
+// gave them. ComputeEphem() fills this as its object loop reads, and
+// EphEmulateGeoRows() re-centers the whole set afterwards -- from the raw
+// six rather than from what the loop made of them, because it re-derives
+// both the light-time shift and the object's true position from the
+// object's own distance and rates.
+//
+// Whole-set rather than per-object because the arithmetic IS cross-object:
+// a planet's heliocentric position is a function of the Earth's row and
+// the Sun's, not of its own. That is also why this is a type rather than
+// three globals -- the emulation takes its inputs as an argument, so the
+// suite can drive it over a recorded JPL reply with no network and no cast.
+
+typedef struct _EphGeoRows {
+  flag rgf[objMax];     // This object's row came from such a source.
+  real rgr[objMax][6];  // Its six columns, in FSwissPlanet()'s order.
+} EPHGEOROWS;
 
 // A source (section 4.1). All the pointers are non-NULL: a source that
 // has nothing to do in a slot points at a no-op, so the host never tests

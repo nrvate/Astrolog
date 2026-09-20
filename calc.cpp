@@ -1025,6 +1025,89 @@ flag FSkipEphem(int i, int objCentCalc, flag fJPLPla)
 }
 
 
+// Re-center a geocentric, light-time-uncorrected row set on the cast's
+// own center: the host-owned emulation of the one capability JPL
+// Horizons does not have (EPHCAPS fGeoUncorrected,
+// EPHEMERIS_PLUGINS_PLAN.md phase 6h step 2).
+//
+// This is cross-object arithmetic -- an object's new position is a
+// function of the Earth's and the Sun's rows, not of its own -- and it
+// lived inside ComputeEphem()'s per-object loop until 2026-09-20, where
+// it worked only because i ascends and oEar < oSun, so the Earth's arm
+// had always run by the time any planet's did. Nothing in the code said
+// so. Taking the whole row set at once states the dependency instead of
+// relying on it, and is what lets a source answer rows in any order --
+// which is what FRead() over a remote plugin actually does.
+//
+// Earth's own RATES are deliberately not touched. In this path the Earth
+// is skipped by FSkipEphem(), so ret[oEar], retalt[oEar] and retlen[oEar]
+// are still the Matrix values ComputePlanets() left in place before
+// ComputeEphem() ran, and the arithmetic below has always read them.
+// That is load-bearing, not incidental: computing them here instead
+// would move every Horizons position.
+
+void EphEmulateGeoRows(CONST EPHGEOROWS *pgr, int objCentCalc, int imax)
+{
+  int i;
+  real r1, r2, r3, r4, r5, r6, objPla, altPla, objEar, altEar, rT;
+  PT3R ptPla, ptEar, vEar;
+
+  // Nothing to do when the cast is already in the source's own frame.
+  if (objCentCalc == oEar)
+    return;
+
+  // The Earth first, and alone, because every object below reads the
+  // result: heliocentric Earth is opposite the geocentric Sun. The Sun's
+  // own row stays geocentric here, as it always has -- the central
+  // object is set opposite the Earth by ComputeEphem() further down.
+  for (i = oEar; i <= Min(oSun, imax); i++) {
+    if (!pgr->rgf[i] || FNodal(i))
+      continue;
+    PtNeg2(space[oEar], space[oSun]);
+    ProcessPlanet(oEar, 0.0);
+  }
+
+  for (i = oSun + 1; i <= imax; i++) {
+    if (!pgr->rgf[i] || FNodal(i))
+      continue;
+    r1 = pgr->rgr[i][0]; r2 = pgr->rgr[i][1]; r3 = pgr->rgr[i][2];
+    r4 = pgr->rgr[i][3]; r5 = pgr->rgr[i][4]; r6 = pgr->rgr[i][5];
+
+    PtAdd2(space[i], space[oEar]);
+    ProcessPlanet(i, is.rSid);
+
+    // Compute Earth's motion vector, to get Earth's true position.
+    ptEar = space[oEar]; objEar = planet[oEar]; altEar = planetalt[oEar];
+    SphToRec(PtLen(space[oEar]) + retlen[oEar], Mod(planet[oEar] +
+      is.rSid + ret[oEar]), planetalt[oEar] + retalt[oEar],
+      &space[oEar].x, &space[oEar].y, &space[oEar].z);
+    ProcessPlanet(oEar, is.rSid);
+    vEar = space[oEar]; PtSub2(vEar, ptEar);
+    space[oEar] = ptEar; planet[oEar] = objEar; planetalt[oEar] = altEar;
+
+    // Adjust true position of planet by true position of Earth.
+    ptPla = space[i]; objPla = planet[i]; altPla = planetalt[i];
+    SphToRec(r4 + r6, Mod(r1 + is.rSid + r3), r2 + r5,
+      &space[i].x, &space[i].y, &space[i].z);
+    PtAdd2(space[i], space[oEar]);
+    PtAdd2(space[i], vEar);
+    ProcessPlanet(i, is.rSid);
+    ret[i] = (planet[i] - objPla);
+    retalt[i] = (planetalt[i] - altPla);
+    retlen[i] = (PtLen(space[i]) - PtLen(ptPla));
+    space[i] = ptPla; planet[i] = objPla; planetalt[i] = altPla;
+
+    if (!us.fTruePos) {
+      // Convert AU to speed of light in days.
+      rT = PtLen(ptPla) * rDayInYear / rLYToAU;
+      SphToRec(PtLen(ptPla) - retlen[i]*rT, Mod(planet[i] - ret[i]*rT),
+        planetalt[i] - retalt[i]*rT, &space[i].x, &space[i].y, &space[i].z);
+      ProcessPlanet(i, 0.0);
+    }
+  }
+}
+
+
 // Compute the positions of the planets at a certain time using the Swiss
 // Ephemeris accurate formulas. This will supersede the Matrix routine values
 // and is only called when the -b switch is in effect. Not all objects or
@@ -1035,21 +1118,26 @@ flag FSkipEphem(int i, int objCentCalc, flag fJPLPla)
 void ComputeEphem(real t)
 {
   int objCentCalc, objOrbit, imax, i, j;
-  real r1, r2, r3, r4, r5, r6, dist1 = 0.0, dist2 = 0.0, objPla, altPla, objEar, altEar,
-    rT;
+  real r1, r2, r3, r4, r5, r6, dist1 = 0.0, dist2 = 0.0;
   flag fJPLPla, fJPL, fRet;
 #ifdef SWISS
   EPHQUERY eq;
 #endif
-  PT3R ptPla, ptEar, vEar;
+  EPHGEOROWS egr;
 #ifdef JPLWEB
   flag fSav;
 #endif
 
+  ClearB((pbyte)&egr, sizeof(EPHGEOROWS));
+
   // Can compute the positions of Sun through Pluto, Chiron, the four
   // asteroids, Lilith, North Node, and Uranians using ephemeris files.
 
-  fJPLPla = FSrcChainHead("horizons");
+  // Whether the source answers in the Earth's frame with no light-time
+  // correction, so this function has to re-center the rows itself. It
+  // asked "is the chain's head horizons" five times over; the capability
+  // is one question with one answer (EPHCAPS fGeoUncorrected).
+  fJPLPla = FEphGeoUncorrected();
   objCentCalc = us.objCenter;
   if (objCentCalc > oNorm || FNodal(objCentCalc) ||
     (fJPLPla && us.objCenter > oSun) ||
@@ -1160,47 +1248,18 @@ void ComputeEphem(real t)
     SphToRec(r4, planet[i], planetalt[i],
       &space[i].x, &space[i].y, &space[i].z);
 
-    // JPL Horizons always generated geocentric, so make heliocentric.
-    if (fJPL && objCentCalc != oEar && !FNodal(i)) {
-      if (i <= oSun) {
-        // Heliocentric Earth is opposite geocentric Sun.
-        PtNeg2(space[oEar], space[oSun]);
-        ProcessPlanet(oEar, 0.0);
-        continue;
-      }
-      PtAdd2(space[i], space[oEar]);
-      ProcessPlanet(i, is.rSid);
-
-      // Compute Earth's motion vector, to get Earth's true position.
-      ptEar = space[oEar]; objEar = planet[oEar]; altEar = planetalt[oEar];
-      SphToRec(PtLen(space[oEar]) + retlen[oEar], Mod(planet[oEar] +
-        is.rSid + ret[oEar]), planetalt[oEar] + retalt[oEar],
-        &space[oEar].x, &space[oEar].y, &space[oEar].z);
-      ProcessPlanet(oEar, is.rSid);
-      vEar = space[oEar]; PtSub2(vEar, ptEar);
-      space[oEar] = ptEar; planet[oEar] = objEar; planetalt[oEar] = altEar;
-
-      // Adjust true position of planet by true position of Earth.
-      ptPla = space[i]; objPla = planet[i]; altPla = planetalt[i];
-      SphToRec(r4 + r6, Mod(r1 + is.rSid + r3), r2 + r5,
-        &space[i].x, &space[i].y, &space[i].z);
-      PtAdd2(space[i], space[oEar]);
-      PtAdd2(space[i], vEar);
-      ProcessPlanet(i, is.rSid);
-      ret[i] = (planet[i] - objPla);
-      retalt[i] = (planetalt[i] - altPla);
-      retlen[i] = (PtLen(space[i]) - PtLen(ptPla));
-      space[i] = ptPla; planet[i] = objPla; planetalt[i] = altPla;
-
-      if (!us.fTruePos) {
-        // Convert AU to speed of light in days.
-        rT = PtLen(ptPla) * rDayInYear / rLYToAU;
-        SphToRec(PtLen(ptPla) - retlen[i]*rT, Mod(planet[i] - ret[i]*rT),
-          planetalt[i] - retalt[i]*rT, &space[i].x, &space[i].y, &space[i].z);
-        ProcessPlanet(i, 0.0);
-      }
+    // The source answered in the Earth's frame, uncorrected: keep the row
+    // as it gave it, and let the emulation below re-center the whole set
+    // at once. Nothing cross-object happens inside this loop any more.
+    if (fJPL) {
+      egr.rgf[i] = fTrue;
+      egr.rgr[i][0] = r1; egr.rgr[i][1] = r2; egr.rgr[i][2] = r3;
+      egr.rgr[i][3] = r4; egr.rgr[i][4] = r5; egr.rgr[i][5] = r6;
     }
   } // i
+
+  // JPL Horizons always generated geocentric, so make heliocentric.
+  EphEmulateGeoRows(&egr, objCentCalc, imax);
 
   // If Sun is solar system barycenter, offset it by Earth's position.
   if (us.fBarycenter && !fJPLPla && objCentCalc == oEar) {

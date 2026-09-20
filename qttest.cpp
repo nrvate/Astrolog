@@ -18018,6 +18018,8 @@ void PrintHorizonsUrlsQt()
 }
 
 
+static void TestHorizonsEmulationQt();
+
 static void TestHorizonsQt()
 {
   char szUrl[cchSzLine*2], szPath[cchSzMax], szName[cchSzMax], szLine[cchSzLine];
@@ -18180,6 +18182,193 @@ static void TestHorizonsQt()
     if (fileBody != NULL) fclose(fileBody);
     if (fileBary != NULL) fclose(fileBary);
   }
+
+  TestHorizonsEmulationQt();
+}
+
+
+// One recorded reply turned into the six columns GetJPLHorizons() hands
+// ComputeEphem() for it. The arithmetic below is that function's, copied
+// rather than called on purpose: GetJPLHorizons() reaches the network and
+// takes its instant from ciCore, and the whole point of a recorded corpus
+// is to need neither. If the two ever disagree the group above goes red
+// first -- it drives the real parser over these same bytes.
+
+static flag FHorizonsRowQt(CONST char *szStem, flag fTruePos, real *rgr)
+{
+  char szPath[cchSzMax], szName[cchSzMax];
+  PT3R pt[3];
+  FILE *file;
+  real len[3], rT;
+  int i;
+
+  sprintf2(S(szPath), "%s/%s.txt", szHorDirQt, szStem);
+  file = fopen(szPath, "r");
+  if (file == NULL)
+    return fFalse;
+  i = FParseJPLHorizons(file, pt, S(szName));
+  fclose(file);
+  if (!i)
+    return fFalse;
+  for (i = 0; i < 3; i++)
+    // Convert speed of light in min to AU.
+    len[i] = pt[i].z / (1440.0*rDayInYear) * rLYToAU;
+  rgr[0] = pt[1].x;                      // Longitude.
+  rgr[1] = pt[1].y;                      // Latitude.
+  rgr[2] = (pt[2].x - pt[0].x) * 144.0;  // Longitude rate.
+  rgr[3] = len[1];                       // Distance.
+  rgr[4] = (pt[2].y - pt[0].y) * 144.0;  // Latitude rate.
+  rgr[5] = (len[2] - len[0]) * 144.0;    // Distance rate.
+  if (fTruePos) {
+    rT = pt[1].z / 1440.0;
+    rgr[0] += rgr[2] * rT;
+    rgr[1] += rgr[4] * rT;
+    rgr[3] += rgr[5] * rT;
+  }
+  return fTrue;
+}
+
+
+// Store one answered row into the object arrays exactly as
+// ComputeEphem()'s loop does, so the emulation below is handed the state
+// a real cast would have handed it.
+
+static void StoreHorizonsRowQt(int iobj, CONST real *rgr, EPHGEOROWS *pegr)
+{
+  int i;
+
+  planet[iobj]    = Mod(rgr[0] + is.rSid);
+  planetalt[iobj] = rgr[1];
+  ret[iobj]       = rgr[2];
+  retalt[iobj]    = rgr[4];
+  retlen[iobj]    = rgr[5];
+  SphToRec(rgr[3], planet[iobj], planetalt[iobj],
+    &space[iobj].x, &space[iobj].y, &space[iobj].z);
+  pegr->rgf[iobj] = fTrue;
+  for (i = 0; i < 6; i++)
+    pegr->rgr[iobj][i] = rgr[i];
+}
+
+
+// The re-centring emulation, over a recorded reply. This is the ONE part
+// of the Horizons path that is cast-level arithmetic rather than parsing,
+// and no differential matrix can see it: none of the four reaches the
+// network, so all four are byte-identical across a change that rewrites
+// this entirely. EPHEMERIS_PLUGINS_PLAN.md phase 6h step 2 names exactly
+// this check -- cast the same body heliocentrically through Swiss, then
+// through the recorded GEOCENTRIC reply plus EphEmulateGeoRows(), and
+// require agreement. Before the corpus existed there was no way to ask,
+// which is why 6h was called unverifiable.
+//
+// Venus and Mars, because Horizons is asked for x99 (the BODY centre) and
+// Swiss answers the plain body: for these two those are the same point to
+// well under the band, which the Pluto pair above measures and Jupiter's
+// would not satisfy.
+
+static void TestHorizonsEmulationQt()
+{
+  EPHGEOROWS egr;
+  real rgrSun[6], rgrVen[6], rgrMar[6];
+  real lonVen, lonMar, latVen, latMar, dVen, dMar;
+  CI ciSav = ciMain, ciCoreSav = ciCore;
+  int objCenterSav = us.objCenter;
+  flag fTruePosSav = us.fTruePos, fTopoSav = us.fTopoPos;
+
+  // The rows the loop would have been handed. ComputeEphem() forces
+  // fTruePos on for the fetch whenever the centre is not the Earth, and
+  // restores it before the emulation reads it -- so the rows are built
+  // true and the emulation runs under the real setting, as in a cast.
+  // The seam this whole emulation hangs off: ComputeEphem() asks a
+  // CAPABILITY now, where it used to ask five times whether the chain's
+  // head was spelled "horizons". The two must answer the same thing
+  // while the plugin is unwritten, and the day it registers (phase 6h
+  // step 3) the capability is what keeps answering -- so a check that
+  // only tested the text would go quietly vacuous exactly then.
+  {
+    EphSelBorrow ebT("horizons,jpl");
+    Check(FEphGeoUncorrected(), "the horizons chain head declares rows "
+      "that are geocentric and light-time-uncorrected");
+  }
+  {
+    EphSelBorrow ebT("swiss");
+    Check(!FEphGeoUncorrected(), "and the Swiss files do not, since they "
+      "answer in the cast's own frame");
+  }
+
+  if (!FHorizonsRowQt("sun-1990", fTrue, rgrSun) ||
+    !FHorizonsRowQt("venus-1990", fTrue, rgrVen) ||
+    !FHorizonsRowQt("mars-1990", fTrue, rgrMar)) {
+    printf("  (skipped: no recorded corpus in %s; the re-centring "
+      "emulation is unverified)\n", szHorDirQt);
+    return;
+  }
+
+  ciMain.mon = 6; ciMain.day = 15; ciMain.yea = 1990; ciMain.tim = 12.0;
+  ciMain.zon = 0.0; ciMain.dst = 0.0;
+  ciMain.lon = rHorLonQt; ciMain.lat = rHorLatQt;
+  ciCore = ciMain;
+  us.fTopoPos = fFalse;
+  us.fTruePos = fFalse;
+
+  // The reference: the same instant, heliocentric, from the Swiss files.
+  us.objCenter = oSun;
+  CastChart(0);
+  lonVen = planet[oVen]; latVen = planetalt[oVen];
+  lonMar = planet[oMar]; latMar = planetalt[oMar];
+
+  // Now the same three bodies from JPL's own geocentric rows, re-centred
+  // by the host. Earth's rates are left as the Swiss cast set them, which
+  // is what the emulation reads and never writes.
+  //
+  // But Earth's POSITION is poisoned first, and that is not tidiness. In
+  // a real Horizons cast the Earth is skipped outright (FSkipEphem: it is
+  // the centre the queries are made from, and JPL refuses it as
+  // degenerate -- earth-1990 in the corpus is that refusal), so
+  // space[oEar] reaching the emulation holds whatever the surrounding
+  // cast last left there. Leaving the Swiss cast's own correct
+  // heliocentric Earth in place made this check BLIND to the Earth arm:
+  // deleting that arm entirely still passed, because the state it
+  // produces was already there. Measured 2026-09-20, by sabotaging it.
+  ClearB((pbyte)&egr, sizeof(EPHGEOROWS));
+  space[oEar].x = space[oEar].y = space[oEar].z = 0.0;
+  planet[oEar] = planetalt[oEar] = 0.0;
+  StoreHorizonsRowQt(oSun, rgrSun, &egr);
+  StoreHorizonsRowQt(oVen, rgrVen, &egr);
+  StoreHorizonsRowQt(oMar, rgrMar, &egr);
+  EphEmulateGeoRows(&egr, oSun, oNorm);
+
+  // Compared as an angular SEPARATION, not a longitude difference: a
+  // longitude difference is a projection and exaggerates near the poles.
+  dVen = SphDistance(planet[oVen], planetalt[oVen], lonVen, latVen) * 60.0;
+  dMar = SphDistance(planet[oMar], planetalt[oMar], lonMar, latMar) * 60.0;
+  printf("  re-centred Horizons vs heliocentric Swiss: Venus %.3f', "
+    "Mars %.3f'\n", dVen, dMar);
+
+  // The band is what it is because the emulation is an EMULATION: it
+  // recovers a heliocentric position from a geocentric one using rates
+  // JPL reported over an 11-minute window and an Earth whose own rates
+  // come from the surrounding cast. It is not, and cannot be, a
+  // bit-for-bit second opinion. What it CAN catch is the class of defect
+  // 6h actually risks -- a re-centring that is right geocentrically and
+  // wrong heliocentrically lands degrees out, not arcminutes.
+  Check(dVen < 2.0, "the re-centred Horizons Venus agrees with "
+    "heliocentric Swiss to under 2 arcmin (got %.3f')", dVen);
+  Check(dMar < 2.0, "the re-centred Horizons Mars agrees with "
+    "heliocentric Swiss to under 2 arcmin (got %.3f')", dMar);
+
+  // And the half that says the check has teeth: the SAME rows read
+  // geocentrically are nowhere near the heliocentric answer, so an
+  // emulation that did nothing at all would fail the two above by
+  // degrees. Without this a band of 2 arcmin could not be told from a
+  // band of 2 degrees.
+  Check(SphDistance(Mod(rgrVen[0] + is.rSid), rgrVen[1], lonVen, latVen) >
+    1.0, "and the raw geocentric Venus is degrees from the heliocentric "
+    "one, so the agreement above is the emulation's doing");
+
+  ciMain = ciSav; ciCore = ciCoreSav;
+  us.objCenter = objCenterSav;
+  us.fTruePos = fTruePosSav; us.fTopoPos = fTopoSav;
+  CastChart(0);
 }
 #endif // JPLWEB
 

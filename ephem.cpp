@@ -255,6 +255,39 @@ flag FEphSpeeds()
 }
 
 
+// Whether the chain's head answers in the Earth's frame with no
+// light-time correction applied, so the host has to re-center the whole
+// row set itself (EPHCAPS fGeoUncorrected; ComputeEphem()'s
+// EphEmulateGeoRows()). ComputeEphem() asked this question five separate
+// times and spelled the answer "the chain's head is horizons" each time.
+//
+// The registry is asked first, so the day the horizons plugin registers
+// (phase 6h step 3) this becomes an ordinary capability read and the
+// clause below it is deleted. Until then the key resolves to no source --
+// it is one of rgszEphSrcFuture[] -- and the head's text is the only
+// thing there is to read, exactly as ComputeEphem() read it.
+
+flag FEphGeoUncorrected()
+{
+  char sz[cchSzDef];
+  EPHSRCDEF *pes;
+  EPHCAPS caps;
+  int isrc;
+
+  SzEphChainHead(us.szEphemSource, S(sz));
+  isrc = IEphSrcFromKey(sz);
+  if (isrc != ephSrcNone) {
+    pes = PephsrcGet(isrc);
+    if (pes != NULL) {
+      ClearB((pbyte)&caps, sizeof(EPHCAPS));
+      (pes->GetCaps)(&caps);
+      return caps.fGeoUncorrected;
+    }
+  }
+  return FEqSz(sz, "horizons");
+}
+
+
 // Changing the source: the new source's warning latch is not the old
 // one's. The Swiss path latch is FSwissPlanet()'s (see below), and the
 // server's window cache needs nothing here: it is keyed on the server's
