@@ -1488,11 +1488,57 @@ considerable."
 
 Two published sources, not a defect on either side.
 
-### 4.4 Vega's distance rate — the two engines differ by 60%, and no rate gate can see it
+### 4.4 Vega's distance rate — one radial velocity, two vintages of one catalogue
 
-Recorded 2026-09-20 at the Prometheia project's request, so it is not lost
-if this side is picked up first. Geocentric Vega, JD 2415020.5, h = 1/1024 d,
-f64, AU/day:
+**DIAGNOSED 2026-09-20, hours after it was recorded: it is a catalogue
+radial velocity and nothing else.**
+
+`sefstars.txt` line 951 gives Vega `alLyr` a radial velocity of
+**−20.6 km/s**. The Prometheia project reads **−13.5 ± 0.4** (SIMBAD,
+HIP 91262, quality C), with the Bright Star Catalogue's field for HR 7001
+independently at −14. Their derivation predicted ours at −20.60 before
+either side looked it up, from the observer's projection measured on
+Sirius (−5.5 catalogue both sides, −6.550 ours and −6.551 theirs, 0.001
+km/s apart) — so the projection is not in dispute and the whole 60% is
+the catalogue line.
+
+**And it is not two sources disagreeing.** `sefstars.txt`'s own header
+says it was "updated with data from the SIMBAD Astronomical Database" on
+11 Jan 2006, 22 May 2016 and 4 Jan 2018. Theirs is current SIMBAD. Same
+database, different vintages — and −20.6 is a real published value for
+Vega, which is a pole-on rapid rotator whose measured radial velocity has
+a wide literature spread. Neither number is wrong; one is older.
+
+*Not adjudicated and not changed here.* Editing it would edit a shipped
+catalogue file against its upstream, which is the maintainer's call, and
+the resolution is a re-query rather than an argument.
+
+**How Sirius separated the two possibilities, which is the method worth
+keeping.** A distance-rate disagreement can be a rate column or a
+catalogue line, and one star cannot tell them apart. Sirius can:
+
+| | reported | differenced from its own distances |
+|---|---|---|
+| Sirius, ours | −3.655958e-03 | −3.783623e-03 |
+| Sirius, theirs | −3.783236e-03 | −3.783097e-03 |
+
+Our *differenced* Sirius agrees with theirs to five digits while our
+*reported* one does not — so Sirius is [§2.12](#212), a rate column. Vega's
+differenced disagrees too, so Vega is not. Two stars, four numbers, and
+the two defects come apart. Found by reading them, not by a tool.
+
+**Why a radial velocity reaches the wire only here**, which is the reason
+every position leg was always going to be green: direction is proper
+motion and parallax, distance is parallax alone, and radial velocity
+moves neither. It enters the distance RATE and nothing else. So a
+quantity both engines report self-consistently and differently from each
+other passes a positions comparison and a self-consistency comparison
+both — the gap named below, exactly.
+
+### 4.4a The instrument gap this fell through — and it stays open
+
+The diagnosis above closes the Vega question and leaves this one exactly
+where it was. Geocentric Vega, JD 2415020.5, h = 1/1024 d, f64, AU/day:
 
 | | reported | differenced from its own distances |
 |---|---|---|
@@ -1518,10 +1564,16 @@ consistent to within their own tolerances. And the cross-engine leg that
 One instrument compares two engines on positions; the other compares one
 engine with itself on rates; the gap between them is exactly this.
 
-A third instrument would be needed — two engines compared on *rates* — and
-neither project has one. That is a real hole and it is named rather than
-filled, because filling it means deciding which engine is the reference, and
-nothing here can.
+A third instrument would be needed -- two engines compared on *rates* --
+and neither project has one. **It stays unfilled for a stated reason**: a
+rate disagreement between two engines needs an outside reference, and
+Horizons, the anchor the other cross-engine legs lean on, **does not serve
+fixed stars**. So the one class of object where this gap exists is the one
+class the usual referee cannot adjudicate.
+
+That the Vega case was solved anyway, by reading four numbers across two
+stars, is not an argument that the gap does not matter -- it is what
+having no instrument looks like when someone happens to look.
 
 *See also* [§2.12](#212), where the same Vega row sits above its
 quantisation floor on this side, so it is model rather than noise.
