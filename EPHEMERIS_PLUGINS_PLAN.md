@@ -499,8 +499,46 @@ version 3, and this section is the design authority behind it.
      digest changed on 2026-09-19 (file hashing in 8 MiB pieces). Nothing
      of ours pins it -- `ephsrv/conformance/welcome_prometheia.hex` is a
      synthetic "prometheiad-like" WELCOME, not their real identity.
-  7. **Phase 6h** is deferred with its own pickup checklist (work-log item
-     22).
+  7. **Phase 6h** steps 1-3 are landed (`df8a565`, `b2fcc07`); one
+     routing decision is named for the maintainer in the Status block at
+     the top of this section.
+
+  8. **CHECKED 2026-09-20, nothing found, recorded so it is not
+     re-derived.** The Prometheia project's JSON/MCP surface review
+     produced a rule worth applying to any interface: **ask which
+     arguments move a number without appearing in the answer.** Theirs
+     found three -- the observer, the sidereal plane and the precession
+     model were all absent from provenance, so two answers 8.8" apart
+     carried byte-identical descriptions of themselves.
+
+     Applied here, to the three places an argument could be dropped and
+     the answer still look right:
+
+     - **The server's cache key** (`eph_cache.h`, `CacheKey`) is the
+       datasetId plus **the question block's raw bytes**, so every field
+       in it -- observer and its site, plane, form, frame, speeds,
+       anchor epoch, profile index, every TLV -- is in the key by
+       construction rather than by a hand-kept list. `ephsrv-cache.sh`'s
+       per-field assertions are spot-checks of that, which is the right
+       relationship between them.
+     - **The Qt client's window cache** (`KeyWindowQt`) is the same bytes
+       plus the precision. `KeyShapeWindowQt` erases `deltaTSec`, which
+       looked like exactly the defect being hunted -- it is not: an
+       animation window is built with `deltaTSec` already canonical-NaN
+       and `timeScale = kTimeTT`, so the erasure normalises a field that
+       is constant across every window it can match.
+     - **`ephsrv-golden.sh`** grades against an independent Swiss oracle
+       given the SAME flags, over topocentric at two sites, planet-centred,
+       heliocentric, barycentric, two sidereal planes and a user anchor.
+       A server that ignored one of those arguments would disagree with
+       the oracle, so arrival is checked by construction here too.
+
+     **Astrolog has no agent-facing data API** (§7B, the maintainer's
+     decision), so the provenance half of their finding has no surface
+     here to land on. The wire's DATA is correlated to its REQUEST by
+     `requestId` and the client holds the request, which is why the
+     answer does not repeat the question -- and the two caches above are
+     where that assumption could have been violated.
 
 - **STATUS (2026-09-18, phase 6 substantially landed).** Phases 2, 3, 4,
   5 and 7 are on this branch and gated, and phase 6 is most of the way
