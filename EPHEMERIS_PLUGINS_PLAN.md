@@ -150,10 +150,34 @@ version 3, and this section is the design authority behind it.
   | `16303ef` | the rates bound gets headroom; the sweep gets the site that found it |
   | `97a18db` | open item 3 closed, and its diagnosis had been wrong |
 
-  **A daemon may still be listening on 127.0.0.1:47392** for the
-  Prometheia cross-test (`tools/ephsrv-serve.sh 47392`). It is not needed
-  for 6h. Stop it with the pid in `/nvm/work/ephd47392.pid`, never
-  `pkill`.
+  **A daemon is listening on 127.0.0.1:47392** for the Prometheia
+  cross-test (`tools/ephsrv-serve.sh 47392`), pid in
+  `/nvm/work/ephd47392.pid`. Stop it by that pid, never `pkill`.
+
+  **DO NOT REBUILD `astrolog-ephd` IN THIS TREE without saying so to the
+  peer session first.** Their cross-test record identifies our daemon by
+  the binary's `mtime` and size, not by a commit — a commit can postdate
+  a binary, which is why that column exists. Overwriting the file while
+  the daemon holds it open changes both and silently invalidates their
+  record's subject. As of 2026-09-20 the spare is
+  sha256 `1734d363…`, `mtime` 04:57:10Z, 1,735,488 bytes.
+
+  **Nothing under `ephsrv/` changed between `21eaee2` and `5558135`**, so
+  the whole of phase 6h left the served binary alone -- verified by an
+  empty `git diff 21eaee2 HEAD -- ephsrv/` plus building both commits at
+  one scratch path and getting one binary. **What is NOT proven** is that
+  the running spare was itself built from `21eaee2`: that rests on a
+  written record plus a timestamp. Proving it means building at this
+  tree's own path, which overwrites the file the daemon has open. If it
+  ever matters, rebuild and RESTART the spare at a named commit and tell
+  the peer the new hash, rather than trying to prove the old one in
+  place.
+
+  Comparing two `astrolog-ephd` builds only works at the SAME path: the
+  binary embeds `/nvmraid/shares/Astrolog` and `/nvmraid/shares/swisseph`
+  as compiled-in defaults, so a scratch-worktree build differs in bytes
+  from an identical-source build here. That difference reads exactly like
+  a code change and is not one.
 
   **Two things are owed outward and neither blocks 6h.** A reply may
   arrive from the Prometheia session about (a) whether a **geocentric**
