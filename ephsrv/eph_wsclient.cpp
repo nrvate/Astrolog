@@ -465,9 +465,33 @@ int main(int argc, char **argv) {
     req.objs.push_back(std::move(o));
   };
 
+  // EPH_DROP: the arrival affordance. A comma-separated list of option
+  // spellings; each occurrence is removed from this run's own argv, WITH
+  // whatever it consumes, and the client then behaves as though it had
+  // never been given. tools/ephsrv-blindspots.sh runs a gate once per
+  // option this way and calls a gate that still passes blind to it.
+  //
+  // WHY IT LIVES HERE rather than in a shell wrapper: the arity of every
+  // option is in the parse loop below and nowhere else, so a wrapper
+  // guessing "does the next token look like a value?" would duplicate it
+  // and be wrong the first time an option takes a negative number. This
+  // records what the REAL parse consumed and then re-runs with those argv
+  // slots removed, so the arity is never written down twice. The three
+  // -W switches in the main program are this project's standing lesson
+  // about triplicated arity; this is the same mistake declined.
+  //
+  // It is in the diagnostic client, which ships to nobody: astrolog-ephd
+  // and the Qt build do not compile this file.
+  const char *szDrop = getenv("EPH_DROP");
+  const bool fDropPass = szDrop != nullptr && *szDrop && getenv("EPH_DROPPED") == nullptr;
+  std::vector<std::string> dropWant;
+  if (fDropPass) for (const std::string &t : split(szDrop, ',')) dropWant.push_back(t);
+  std::vector<std::pair<int, int> > dropCut;   // [first, last] argv slots to remove
+
   for (int i = 1; i < argc; i++) {
     const char *a = argv[i];
     const char *v = nullptr;
+    const int iFlagAt = i;
     auto next = [&]() -> bool { if (i + 1 < argc) { v = argv[++i]; return true; } return false; };
     if (!strcmp(a, "--host") && next()) host = v;
     else if (!strcmp(a, "--port") && next()) port = (uint16_t)atoi(v);
@@ -545,6 +569,46 @@ int main(int argc, char **argv) {
     else if (!strcmp(a, "--proto-min") && next()) protoMin = atoi(v);
     else if (!strcmp(a, "--token") && next()) szToken = v;
     else { fprintf(stderr, "wsclient: unknown/incomplete option %s\n", a); return 1; }
+    // i now points at the LAST slot this option consumed, whatever its
+    // arity was, because the branch above advanced it through next().
+    if (fDropPass)
+      for (const std::string &w : dropWant)
+        if (w == a) { dropCut.push_back(std::make_pair(iFlagAt, i)); break; }
+    // EPH_TRACE: append every option spelling this run actually saw. The
+    // blindspots tool takes its candidate list from ONE baseline run of a
+    // gate rather than from a grep of the gate's text -- derived by
+    // EXECUTION, so an option that stops being sent disappears from the
+    // list and is noticed, where a pattern that stops matching would
+    // quietly shorten the sweep instead.
+    if (const char *szTrace = getenv("EPH_TRACE")) {
+      FILE *ft = fopen(szTrace, "a");
+      if (ft != nullptr) { fprintf(ft, "%s\n", a); fclose(ft); }
+    }
+  }
+
+  // Re-run without the dropped options. The count goes to stderr so the
+  // caller can assert the drop REMOVED something: a spelling that appears
+  // in no invocation removes nothing, and a gate that then passes is not
+  // blind to the option -- it simply never sent it, which is a different
+  // finding and must not be reported as the first.
+  if (fDropPass) {
+    fprintf(stderr, "wsclient: EPH_DROP removed %zu occurrence(s) of %s\n",
+            dropCut.size(), szDrop);
+    if (!dropCut.empty()) {
+      std::vector<char *> av;
+      av.push_back(argv[0]);
+      for (int i = 1; i < argc; i++) {
+        bool fCut = false;
+        for (size_t k = 0; k < dropCut.size(); k++)
+          if (i >= dropCut[k].first && i <= dropCut[k].second) { fCut = true; break; }
+        if (!fCut) av.push_back(argv[i]);
+      }
+      av.push_back(nullptr);
+      setenv("EPH_DROPPED", "1", 1);
+      execv("/proc/self/exe", av.data());
+      fprintf(stderr, "wsclient: EPH_DROP re-exec failed\n");
+      return 1;
+    }
   }
 
   // The question: the time block, then whatever objects and profiles the

@@ -1,0 +1,26 @@
+# tools/ephsrv-blindspots.sh -- which option, if it never arrived,
+# would the gate still pass? One line per gate and option:
+#
+#   <gate>\t<option>\tcovered|blind\t<reason, for blind>
+#
+# 'covered' means the gate REDS when the option is dropped from every
+# invocation. 'blind' means it passes, and must carry a reason saying
+# why that is correct rather than a hole.
+golden	--count	covered
+golden	--deltat	covered
+golden	--deltat-table	covered
+golden	--desig	covered
+golden	--hypo	covered
+golden	--jd	covered
+golden	--jd2	covered
+golden	--list	covered
+golden	--meta	covered
+golden	--objs	covered
+golden	--out	covered
+golden	--points	covered
+golden	--port	covered
+golden	--profile	covered
+golden	--quiet	blind	verbosity only: it suppresses the client stdout that no leg reads. Being blind to it is right.
+golden	--stars	covered
+golden	--step	covered
+golden	--ut	covered

@@ -1143,10 +1143,38 @@ distance column by **one to three percent of the rate**.
 | Aldebaran | 2415020.5 | 4.21e6 | 4.115136e-02 | 4.051161e-02 | 6.398e-04 | 1.58% | 1.1e-07 |
 | Aldebaran | 2451545.0 | 4.21e6 | 4.098947e-02 | 4.021176e-02 | 7.777e-04 | 1.93% | 1.9e-07 |
 
-**It is the DISTANCE channel alone.** The longitude-rate column of the
-same rows misses by 1e-07 to 3e-06 deg/day, which is the differencing
-floor — that channel is the derivative of its own positions and this one
-is not. Whatever term is missing is in the radial component only.
+**"It is the DISTANCE channel alone" — WITHDRAWN, 2026-09-20, the same
+day it was written.** The first version of this entry read the
+longitude-rate column of the same rows (1e-07 to 3e-06 deg/day) as "the
+differencing floor", concluded that channel was clean, and inferred the
+missing term was radial only. **That inference is invalid and its own
+numbers point the other way.**
+
+A longitude rate is a transverse velocity **divided by r**. The two raw
+misses are not comparable quantities, and at these distances the divisor
+is enormous — so an angular channel carrying a large velocity error
+still prints a small number. Put r back:
+
+| star | r (AU) | radial miss | longitude miss | as transverse velocity |
+|---|---|---|---|---|
+| Polaris | 2.74e7 | 9.896e-05 | 4.2e-07 °/d | **2.005e-01** (2026× the radial) |
+| Sirius | 5.44e5 | 1.277e-04 | 5.2e-07 °/d | 4.938e-03 (39×) |
+| Vega | 1.58e6 | 2.484e-04 | 1.3e-06 °/d | 3.595e-02 (145×) |
+| Aldebaran | 4.21e6 | 6.398e-04 | 1.1e-07 °/d | 8.089e-03 (13×) |
+
+Graded as velocity against velocity, the **transverse** discrepancy is
+13× to 2026× the radial one. So the honest statement is the weaker one:
+**both channels disagree with their own positions, and the angular one
+only looked clean because of the 1/r.** Which term is missing is not
+established here, and "radial only" was an artifact of comparing a
+number in AU/day against a number in deg/day.
+
+*How to do this properly, and it is cheap:* compare transverse velocity
+against transverse velocity, or grade each channel against **its own
+quantisation floor** — one f64 ulp of the position differenced over the
+stencil, which at 2.74e7 AU and h = 1/1024 d is about 3.8e-06 AU/day.
+Both of these rows are above that floor, so both are model and neither
+is noise.
 
 **Not ours.** Reproduced by `swe_fixstar2_r` called directly against
 `libswe.a`, no server and no protocol, giving the server's wire numbers
@@ -1170,9 +1198,19 @@ reconcile.
 *Found by:* the Ephemeris Prometheia project, who measured the same
 geocentric cell on this server at 9.896e-05 and said plainly that it was
 the number worth chasing rather than the topocentric 7.48e-03 — "it is
-the simpler configuration and it is stable". They were right, and they
-carry the same defect at 1.7e-05, an order milder, which makes the two
-engines comparable channel by channel for the first time.
+the simpler configuration and it is stable". They were right.
+
+*The withdrawal above is theirs too*, within the hour, and it is the
+better contribution: they put the 1/r back and showed the inference
+could not carry weight — having diagnosed their own milder version
+(1.7e-05) as **quantisation** rather than a missing term. Eliminated as
+a correction (same size at `corrections 0`), eliminated as the checking
+step (stable while h moved eightfold), and predicted within a factor of
+three across five stars spanning a hundredfold in distance by one f64
+ulp of position differenced over the stencil. They declined to say what
+ours is, on the grounds that they cannot see this tree and had been
+wrong twice that day reasoning about the other side's — which is the
+right refusal, and is why the correction was worth acting on.
 
 ## 3. Divergences deliberately DECLINED
 
