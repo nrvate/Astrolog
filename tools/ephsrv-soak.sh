@@ -104,6 +104,29 @@ stillclimbing|plateaued|MEM_CAP=24 MEM_N=140"
   RAN=$(sort -u "$SELF_LOG" 2>/dev/null | tr '\n' ' ' | sed 's/ *$//')
   WANT=$(printf '%s\n' $SELF_CASES | sort -u | tr '\n' ' ' | sed 's/ *$//')
   rm -f "$SELF_LOG"
+  # DEAD ASSERTIONS FIRST, and the ordering is the point rather than a
+  # preference. RAN comes from execution, so an assertion the control
+  # never REACHES is simply absent from it -- and if nobody wrote a case
+  # for it either, both lists agree and it is invisible. That is the same
+  # false green the Prometheia project hit in their adjudicator coverage:
+  # a function defined and never called, reported as "no case drives it",
+  # which is the wrong instruction. "Write a case for it" is wrong advice
+  # for code that decides nothing; "it is never reached" is the finding.
+  #
+  # This grep rots RED, not green: if it stops matching, DECLARED shrinks
+  # BELOW what ran and the comparison fails loudly. That is the opposite
+  # direction from the grep this check used to be, and is why a source
+  # scan is safe here and was not safe there.
+  DECLARED=$(awk '/^# Every leg-\(e\) assertion goes through memassert/,0' "$0" \
+    | grep -oE '^memassert [a-z]+' | awk '{print $2}' \
+    | sort -u | tr '\n' ' ' | sed 's/ *$//')
+  if [ "$DECLARED" != "$RAN" ]; then
+    echo "SELFTEST FAIL: leg (e) declares [$DECLARED] but the control"
+    echo "               evaluated [$RAN]. An assertion that is never"
+    echo "               reached decides nothing -- it is not a missing"
+    echo "               case, it is dead."
+    exit 1
+  fi
   if [ "$RAN" != "$WANT" ]; then
     echo "SELFTEST FAIL: leg (e) evaluated [$RAN] but this selftest has"
     echo "               cases for [$WANT]. Add a case, or drop one."
