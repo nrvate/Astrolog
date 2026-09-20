@@ -91,9 +91,30 @@ version 3, and this section is the design authority behind it.
   `-limits`, `-ops`, `-robust`, `-tls`. Most of `-robust` is
   server-bound -- 20000 connections, backpressure, timing -- so the
   tractable slice there is its fixture-verdict logic, not the whole
-  gate. The cheap axis is now swept clean across all ten: every count
-  each gate reports is asserted, exactly, by something that cannot
-  narrow with it.
+  gate.
+
+  **The cheap axis is swept across all ten now, and the sentence is
+  worth stating exactly**, because a looser one stood here first and was
+  not true. What holds: every count any of the ten gates REPORTS is
+  asserted against a number that cannot narrow with it. What does NOT
+  follow: `-limits`, `-ops`, `-tls` and `-image` report no count at all,
+  so a deleted LEG is still invisible in them. That half is untouched
+  deliberately -- no leg has been seen to go missing there, where golden
+  had lost four and robust's corpus had outgrown its floor by 42.
+
+  Two nulls measured while checking that claim: every `metric()`
+  comparison in `-limits` and `-ops` is against `1` or `base + N`, so an
+  absent counter reads 0 and reds; and the suite's four ephemeris groups
+  run real assertions here rather than skipping (`ephem-server-live` 97,
+  `ephem-server` 235, `ephem-registry` 138, `ephem-no-source` 5).
+
+  **And the axis that matters more, learned the hard way (item 32):**
+  a count is about whether a check RAN. It says nothing about whether
+  the check could have failed for the reason it claims. Three
+  `deltaTSec` legs, all geocentric, all countable, all green, and
+  between them they could not see the field go missing. The question
+  that finds that is the Prometheia project's: **which argument, if it
+  never arrived, would this still pass?**
 
 - **Superseded (2026-09-20). Phase 6h steps 1, 2 and most of 3 landed;
   the routing was still inline at this point.**
