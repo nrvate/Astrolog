@@ -1509,6 +1509,11 @@ database, different vintages — and −20.6 is a real published value for
 Vega, which is a pole-on rapid rotator whose measured radial velocity has
 a wide literature spread. Neither number is wrong; one is older.
 
+*Parked on both sides, symmetrically.* The Prometheia project's record is
+`68ab841` on `initial` — their section retitled "Vega: one database at two
+vintages" after this file's header corrected their "source difference"
+framing, and parked for the same reason given here.
+
 *Not adjudicated and not changed here.* Editing it would edit a shipped
 catalogue file against its upstream, which is the maintainer's call, and
 the resolution is a re-query rather than an argument.
@@ -1526,6 +1531,17 @@ Our *differenced* Sirius agrees with theirs to five digits while our
 *reported* one does not — so Sirius is [§2.12](#212), a rate column. Vega's
 differenced disagrees too, so Vega is not. Two stars, four numbers, and
 the two defects come apart. Found by reading them, not by a tool.
+
+**And the second method, which is what made the answer checkable rather
+than merely agreed: derive the disputed value from geometry BEFORE
+looking it up.** A control star — Sirius, where both catalogues carry the
+same radial velocity — fixes the observer-motion projection; subtracting
+it from the other side's measured rate predicts what their file must
+hold. The prediction was −20.60 and the file says −20.6. Neither side had
+to take the other's word for a number in a tree it cannot read, and a
+mismatch would have been a finding rather than a stalemate. Worth reaching
+for whenever two implementations disagree and each can see only its own
+inputs.
 
 **Why a radial velocity reaches the wire only here**, which is the reason
 every position leg was always going to be green: direction is proper
