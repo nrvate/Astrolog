@@ -13,10 +13,55 @@ version 3, and this section is the design authority behind it.
 
 ## Status — how to pick this back up
 
-- **START HERE (2026-09-20, latest). Phase 6h steps 1, 2 and most of 3
-  are LANDED. `ephhorizons.cpp` exists and is a registered source. ONE
-  piece is left and it is named below: ComputeEphem() still FETCHES
-  through its own inline branch rather than through the chain walk.**
+- **START HERE (2026-09-20, final). PHASE 6h IS COMPLETE AND THIS PLAN
+  HAS NO OPEN ITEMS. Nothing here is queued.**
+
+  The source-plugin model is finished end to end: every ephemeris the
+  cast path uses arrives through the registry, and `ComputeEphem()`
+  reaches nothing by name. Phases 1-8 are done, open items 1-5b are
+  closed, and 6f/6g remain declined rather than pending.
+
+  **If you are picking this up cold, the three things worth knowing
+  before you touch anything:**
+
+  1. **No gate here reaches the network**, so the JPL fetch itself is
+     covered only by its parts -- the id mapping, the instant
+     conversion, the emulation over the recorded corpus, and the routing
+     assertions. A change to `ephhorizons.cpp`'s fetch can go green
+     while being wrong, and the four differential matrices will be
+     byte-identical either way because none of them casts through it.
+  2. **`ephsrv/` is a second copy of the same arithmetic.** A fix to
+     `calc.cpp` that belongs in the server too is half a fix, and the
+     missing half is silent: positions match to the last bit while a
+     rate or a frame disagrees. Four defects in one fortnight were
+     exactly this. Three shared headers exist for it --
+     `ephsidplane.h`, `ephstarorb.h`, `ephnodrate.h`.
+  3. **`tools/ephsrv-serve.sh` rebuilds and restarts the daemon the
+     Prometheia session's cross-test measures.** Their record identifies
+     it by the binary's mtime and size, not by a commit. Tell them
+     before rebuilding it.
+
+  **The one policy question left open on purpose**, because it is the
+  maintainer's and not a defect: a custom slot of Swiss type 4 fetches
+  from JPL even under a `swiss` chain, so the selection does not mention
+  the network and the program uses it anyway. The routing change of
+  2026-09-20 deliberately preserved that rather than changing user-facing
+  behaviour under cover of a refactor. It is now one condition in one
+  place (`FObjGeoSrc()` in `calc.cpp`) instead of five.
+
+  **And the honest number from the day this finished:** seven defects
+  were found in the MEASUREMENT rather than the program -- a false
+  explanation committed on a peer's number without querying our own
+  server, an assertion off by the timezone it was testing, a probe that
+  drained the rate limiter on its first request and discarded 387
+  ERROR 6 replies into /dev/null, a selftest whose failures were counted
+  in a subshell and discarded. Every one was caught by someone deciding
+  to distrust a green. `ephsrv-soak.sh --selftest` narrows that for one
+  leg of one gate; the other nine `ephsrv-*.sh` scripts still carry their
+  falsification as prose.
+
+- **Superseded (2026-09-20). Phase 6h steps 1, 2 and most of 3 landed;
+  the routing was still inline at this point.**
 
   **What step 3 landed.** `ephhorizons.cpp` implements the full
   `EPHSRCDEF` — availability, capabilities (`fBody`, `fSpeeds`,
@@ -3260,7 +3305,16 @@ instructions for a human to copy is the thing this direction exists to stop.
    Prometheia project measured fetching its own corpus on 2026-09-17.
    **Nothing in any gate reaches the network.**
 
-   ### DEFERRED BY THE MAINTAINER, 2026-09-19
+   ### DEFERRED 2026-09-19, COMPLETED 2026-09-20
+
+   **Everything from here to the end of this item is history.** The three
+   steps it specifies were all taken on 2026-09-20 and the Status block
+   at the top of this document is what to read. It is kept because the
+   REASONING is still the best account of why the work was shaped this
+   way, and because the four defects found getting here are recorded
+   nowhere else.
+
+   ### What the deferral said at the time
 
    **Not declined like 6f and 6g, and not started: deferred, to be picked
    up on a fresh session.** The reasoning to carry forward is that the

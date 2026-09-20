@@ -338,6 +338,40 @@ is nothing to bend. By elongation alone it is indistinguishable from
 Jupiter's 0.318° row and physically its opposite. It is recorded as
 grading nothing rather than as an agreement.
 
+**The TOPOCENTRIC leg followed on 2026-09-20 and also passes**, 23 rows
+(`41281f1`, harness `62b8f80`). The 20 deflection rows repeat the
+geocentric numbers — ours 0.000011″ against their 0.000000″, four graded
+rows a site, Jupiter's term 1.2063″ from Zurich and 1.2034″ from Quito,
+with 1% on the textbook GM reddening those four and leaving the controls
+green.
+
+**And the other three rows are the ones that make it mean anything.**
+Every deflection row grades a server against *its own* mask-1 answer, so
+a server that ignored `--topo` would return geocentric directions for
+both masks and the row would still read "agree" — the same shape as our
+frozen orbit points. So the leg also asserts each site *differs* from its
+own geocentric answer, and the two sites from each other:
+
+| | ours | ours vs theirs |
+|---|---|---|
+| Zurich vs its own geocentric answer | 11.5576″ | 11.5574″ |
+| Quito vs its own geocentric answer | 15.4138″ | 15.4139″ |
+| Zurich vs Quito | 19.3633″ | 19.3632″ |
+
+against a 0.5″ floor where the deflection band is 0.0002″. Dropping
+`--topo` leaves all twenty deflection rows **green** and reds exactly
+those three. The floor is on the *largest* shift over the rows rather
+than each one, because a body near a site's zenith or nadir shifts along
+the line of sight and can move almost nothing — a geometric coincidence
+should not read as a defect.
+
+**That pairing is the general lesson and it outlived the leg.** A check
+judged against a server's own other answer measures *consistency*, never
+*arrival*; it needs a row asserting the things that should DIFFER do, and
+only fault injection tells the two kinds apart. The same shape turned up
+the same day in our own memory gate, where a bound assertion stayed green
+against a server caching nothing.
+
 Our 0.000011″ against their 0.000000″ on Jupiter is inside the band by
 20×; if it is ever chased it will be a retardation choice — which epoch
 the Sun's position is taken at — rather than a model difference.
