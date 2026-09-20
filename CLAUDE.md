@@ -1277,8 +1277,25 @@ runs in seconds on a laptop.
   found via `xdotool search --pid`, never by name substring. (A private
   Xvfb display is exempt; see above.) **Stop a test instance by the PID
   you started it with** -- `xdotool getwindowpid` if you only have the
-  window -- never `pkill -f astrolog`: that matches the maintainer's own
-  running copy, and did kill it once (work log item 169).
+  window -- and **never kill by NAME at all**, in any spelling: `pkill -f
+  astrolog`, `pkill -x astrolog-qt`, `killall`, `pgrep | xargs kill`.
+  `pkill -f` matched the maintainer's own running copy and did kill it
+  once (work log item 169).
+
+  **The rule is about the blast radius, not the flag**, because naming
+  one spelling is how the next one survives. `tools/qtdrive.sh` carried
+  `pkill -x astrolog-qt` in a cleanup trap until 2026-09-20 -- pointed at
+  the maintainer's desktop copy on `:0`, on every run of the driver --
+  and it sat there precisely because `-x` reads as *narrower* than the
+  `-f` this rule used to name. It is not: `-x` matches the process NAME
+  exactly, which is not the same as matching one process. The Prometheia
+  session made the identical mistake the same day with
+  `pkill -x prometheiad` and took down their own long-running daemon.
+
+  When there is genuinely no PID to hand -- the app was started by
+  something else in the pipeline -- scope the kill to something only your
+  instance can have: `qtdrive.sh` now filters `pgrep` by each process's
+  own `DISPLAY` against its private Xvfb, which nothing outside it uses.
 - **The source is LF**, since 2026-09-01 (work log item 159) — the C++,
   the headers, the makefiles this fork owns, the tools and the docs. It
   used to be a 55/53 split with a per-file rule about preserving it, and
