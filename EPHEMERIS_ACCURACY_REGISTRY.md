@@ -313,12 +313,38 @@ a body-centred observer. All 72 rows came back with an empty
 still *their* measurement of *our* pre-`050a5a4` server rather than
 anything a gate of ours re-derives.
 
-**So the gap this entry leaves is narrower than it was and has moved.**
-Deflection where we *do* claim it — the geocentric and topocentric
-observers — has never been refereed against USNO 179 by either side; their
-leg is planet-centred, and their `apparent` leg grades the two servers
-against each other, which cannot see a term both get wrong. That is the
-open question, and it is asked in the plan rather than here.
+**And the gap that left — deflection where we DO claim it — was closed
+the same day, 2026-09-20. We pass.** Their `deflection-geo` leg
+(`d98cead`) referees a geocentric observer against the same USNO 179
+`grav_vec`: **0.000011″ worst, against a 0.0002″ band**, on rows carrying
+up to **1.2″** of real bending. Ten rows, all agreeing.
+
+**Why that number means something, which is the part to keep.** Deflection
+falls off as roughly 1/elongation — 1.75″ at the solar limb, 0.004″ at
+quadrature — so a leg built on a calendar grid would test almost nothing
+and both engines would "pass" by never being asked. That is the
+empty-diff failure in another costume, and it is the failure this registry
+has hit three times. Their leg instead **searches 800 instants per body
+for the smallest elongation** and **records the size of the term each row
+tested**, so a verdict can be read against what it graded. Nine of ten
+rows carry a term above the band. It is fault-injected: 1% on the
+textbook's GM turns four rows red and correctly leaves the
+wide-elongation controls green.
+
+**The tenth row is the one worth knowing about.** Mercury at 0.339°
+elongation tested a term of **0.0000″** — an *inferior* conjunction, the
+planet between Earth and Sun, so its light never passes the Sun and there
+is nothing to bend. By elongation alone it is indistinguishable from
+Jupiter's 0.318° row and physically its opposite. It is recorded as
+grading nothing rather than as an agreement.
+
+Our 0.000011″ against their 0.000000″ on Jupiter is inside the band by
+20×; if it is ever chased it will be a retardation choice — which epoch
+the Sun's position is taken at — rather than a model difference.
+
+**Still not refereed: the TOPOCENTRIC observer**, which we also advertise.
+Expected to be the same code path and therefore fine, but this fortnight
+has been an argument against "expected".
 
 **A second, smaller thing the run surfaced:** NAIF **599** is refused as an
 observer while **5** is served. `BodyFromNaif(599)` returns the

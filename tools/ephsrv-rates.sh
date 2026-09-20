@@ -175,6 +175,7 @@ for obs in geo topo-zurich topo-quito; do
       --profile "obs=$OBSKIND$SITE,plane=ecl,form=sph,speeds=1" \
       --objs 10,301,199,299,499,5,6,7,8,9 \
       --points 301:0:1,301:1:1,301:3:1,4:2:0,5:2:0,199:2:0,4:0:0,199:2:1 \
+      --stars Sirius,Polaris,Aldebaran,Vega \
       --out "$3" > /dev/null
   }
   # 1800 is in the grid on purpose: the worst case is there, not at J2000.

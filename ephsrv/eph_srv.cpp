@@ -3663,11 +3663,38 @@ static void BuildWelcome(const EphDiscovery &disc, const char *szSwe) {
   // documented difference; it does not hide an unknown one.
   //
   // UNITS ARE ABSOLUTE AU/day, per 3.5a's own "1e-6 AU/day (distance)" and
-  // its worked example of 3e-5 for Uranus. The other project normalises
-  // theirs per AU when comparing, which is a different quantity -- a
-  // distinction worth keeping in view, since the two are a factor of the
-  // body's distance apart and Pluto is 30 of them.
-  c.ratesAuPerDay = 2e-4f;
+  // its worked example of 3e-5 for Uranus. The other project normalised
+  // theirs per AU, which understates a distant body by its distance -- 30x
+  // at Pluto -- and they have corrected it.
+  //
+  // AND THE NUMBER IS 4e-3 BECAUSE OF FIXED STARS, not because of anything
+  // in the solar system. 2e-4 was advertised for about an hour on
+  // 2026-09-19 and was FALSE: 32 rows exceeded it, every one a star, and
+  // this server's own gate could not see them because its bound grid had
+  // no --stars in it. The same blind spot as every other one this week.
+  //
+  // THE CAUSE IS THE f64 REPRESENTATION, not an error either side can fix.
+  // Polaris is served at 2.7356e7 AU, where one ulp is 6.07e-9 AU. A
+  // five-point central difference sums |1|+|8|+|8|+|1| = 18 ulp and divides
+  // by 12h = 0.0117 day, so the NOISE FLOOR of the measurement is about
+  // 9.3e-6 AU/day before any arithmetic happens. 3.5a's tolerance is 1e-6
+  // AU/day -- roughly four orders of magnitude below what the column can
+  // represent at that distance. No conforming server can meet it for a
+  // star, and the other project measures itself failing it on 218 rows.
+  //
+  // So this is a HOLE IN 3.5a, which is ours to fix, and the fix is prose
+  // rather than bytes: the distance tolerance wants to be relative for
+  // distant objects, or fixed stars want exempting, or a star's distance
+  // column wants declaring nominal. That decision is an open item and is
+  // NOT made here. What is made here is the only honest choice available
+  // under the spec as it stands today: state a figure that is true.
+  //
+  // Measured worst with stars in the grid: 1.5154e-3 AU/day (Aldebaran,
+  // topocentric, J2000). Without them the server's real figure is
+  // 9.0324e-5 (Saturn's osculating aphelion, topocentric Quito, 2026), and
+  // 2e-4 would have been right and useful. A client that cares only about
+  // solar-system distance rates should read 2.8, not this number.
+  c.ratesAuPerDay = 4e-3f;
   for (int i = 0; i < eph::kHypotheticalTokenCount; i++)
     c.hypotheticals.push_back(eph::kHypotheticalTokens[i]);
   eph::Welcome w;

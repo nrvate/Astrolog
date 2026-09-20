@@ -13,6 +13,57 @@ version 3, and this section is the design authority behind it.
 
 ## Status — how to pick this back up
 
+- **START HERE (2026-09-20). The accuracy work is at a clean stop and
+  every open item but one is closed. THE ONE LEFT IS PHASE 6h, and it was
+  deliberately saved for a fresh session — this one.**
+
+  **Read `### PHASE 6h` below and work-log item 22, in that order.** Item
+  22 is the specification and its `calc.cpp` line references were
+  re-verified on 2026-09-19. Nothing else in this plan is queued.
+
+  **Before touching anything: take a baseline binary.** `git worktree add`
+  at HEAD, build `./astrolog-base`, and require all four matrices
+  byte-identical against it afterwards. 6h refactors `ComputeEphem()`,
+  which every chart in the program goes through, and a re-centring change
+  that is right geocentrically and wrong heliocentrically shows in the
+  **chart** matrix and in nothing else.
+
+  **What landed on 2026-09-19/20**, eight commits `e2caa6e`..`97a18db`,
+  all gated and pushed:
+
+  | | |
+  |---|---|
+  | `e2caa6e` | the mean-apsis rate fix had reached the server and **not** the application; shared header `ephsrv/ephnodrate.h` |
+  | `1539da9` | and the server did not call the header it was named for |
+  | `96aef21` | the push address is the GitHub **noreply** one now |
+  | `36b2f95` | `ratesApprox` names the objects concerned, not all of them |
+  | `b631333` | the Moon's named points ignored a topocentric site — registry **2.9**, fixed in both halves |
+  | `f390e2a` | two outside referees run: stars pass FK5, deflection cannot grade us |
+  | `16303ef` | the rates bound gets headroom; the sweep gets the site that found it |
+  | `97a18db` | open item 3 closed, and its diagnosis had been wrong |
+
+  **A daemon may still be listening on 127.0.0.1:47392** for the
+  Prometheia cross-test (`tools/ephsrv-serve.sh 47392`). It is not needed
+  for 6h. Stop it with the pid in `/nvm/work/ephd47392.pid`, never
+  `pkill`.
+
+  **Two things are owed outward and neither blocks 6h.** A reply may
+  arrive from the Prometheia session about (a) whether a **geocentric**
+  deflection leg is cheap for them — the largest claim we make that no
+  textbook has ever refereed, see registry 2.3 — and (b) the AU-unit
+  question, their bound being per-AU where §3.5a's is absolute.
+
+  **The lesson this fortnight actually taught**, because it is the thing
+  most likely to bite 6h too: **four separate defects were a fix landing
+  in one of two places.** The plane-2 origin (stars vs planets), the
+  mean-apsis rates (server vs application), the shared header that only
+  one caller used, and the topocentric named points (both again). Whenever
+  a change touches `ephsrv/` arithmetic, ask what `calc.cpp` does with the
+  same question, and the reverse. Three shared headers now exist for
+  exactly this reason — `ephsidplane.h`, `ephstarorb.h`, `ephnodrate.h` —
+  and the rule is that arithmetic two copies must agree on lives in one
+  file rather than in two disciplined ones.
+
 - **FOR THE MAINTAINER: this branch is ready for your squash decision,
   with three things named rather than buried.**
 
@@ -292,6 +343,41 @@ version 3, and this section is the design authority behind it.
      their maintainer's call because a golden test pins those columns" is
      the exact reasoning this project rejected: a gate asserting the
      wrong thing is a second thing to fix.
+  5b. **OPEN, and it is a hole in OUR specification: §3.5a's distance
+     tolerance cannot be met for a fixed star by any implementation.**
+
+     §3.5a asks a server whose distance rates differ from a central
+     difference of its own positions by more than **1e-6 AU/day** to
+     advertise its largest such difference. At a star's distance that is
+     below the floating-point noise floor. Polaris is served at
+     **2.7356e7 AU**, where one f64 ulp is 6.07e-9 AU; a five-point
+     stencil sums 18 ulp and divides by 12h = 0.0117 day, giving a
+     **~9.3e-6 AU/day** floor before any arithmetic — about four orders
+     of magnitude above the tolerance.
+
+     Both implementations measure themselves failing it: 32 rows on ours,
+     218 on theirs, **every one a fixed star and not one a solar-system
+     object**. Neither is a defect.
+
+     **What it cost us meanwhile:** `ratesAuPerDay` was advertised at
+     2e-4 for about an hour on 2026-09-19 and was simply false, because
+     this server's own bound grid had **no `--stars` in it** and could
+     not see the rows. The grid has them now and the figure is **4e-3**,
+     which is true. The solar-system-only figure is 9.0324e-5 (Saturn's
+     osculating aphelion, topocentric Quito, 2026), so a client that
+     cares only about planets should read §2.8, not the advertisement.
+
+     **The fix is prose, not bytes**, and three shapes are on the table:
+     make the distance tolerance relative for distant objects; exempt
+     fixed stars from it; or declare a star's distance column nominal and
+     ungraded (there is precedent — `kMetaNoDistance` already exists).
+     **Not decided, deliberately**, and not at the end of a session. The
+     Prometheia side has no stake in which and has said so.
+
+     Once it is decided, `ratesAuPerDay` should come back to ~2e-4 and
+     `ephsrv-rates.sh`'s bound leg should grade stars under whichever
+     rule the sentence lands on.
+
   6. **Closed, recorded so it is not re-checked**: their dataset id's
      digest changed on 2026-09-19 (file hashing in 8 MiB pieces). Nothing
      of ours pins it -- `ephsrv/conformance/welcome_prometheia.hex` is a
