@@ -82,10 +82,18 @@ version 3, and this section is the design authority behind it.
   while two of its three legs passed outright on an all-error answer.
   `make check` runs this one too.
 
-  **Six gates still have no runnable injection**: `-bench`, `-image`,
-  `-limits`, `-ops`, `-robust`, `-tls`. `-robust` is the one to take
-  next -- it is the largest, and a gate whose whole subject is hostile
-  input is the one most able to refuse everything and call it a pass.
+  `-robust` was next (item 30) and it answered the question it was
+  picked for: its conformance leg already counted, but as a FLOOR of 30
+  over a corpus that had grown to 72, so 42 fixtures could have gone
+  missing behind a pass. Exact and per category now.
+
+  **Six gates still have no runnable `--selftest`**: `-bench`, `-image`,
+  `-limits`, `-ops`, `-robust`, `-tls`. Most of `-robust` is
+  server-bound -- 20000 connections, backpressure, timing -- so the
+  tractable slice there is its fixture-verdict logic, not the whole
+  gate. The cheap axis is now swept clean across all ten: every count
+  each gate reports is asserted, exactly, by something that cannot
+  narrow with it.
 
 - **Superseded (2026-09-20). Phase 6h steps 1, 2 and most of 3 landed;
   the routing was still inline at this point.**
@@ -3282,6 +3290,34 @@ instructions for a human to copy is the thing this direction exists to stop.
      bug into their own `corrapplied.py` and caught it by fault
      injection rather than by trusting the green. The symptom to grep
      for in any existing leg is a column of suspiciously exact zeros.
+
+30. **A floor is a denominator that was exact once (2026-09-20).**
+   `ephsrv-robust.sh`'s conformance leg already counted what it sent --
+   the author had applied the lesson -- but as `[ "$nfix" -ge 30 ]`. The
+   corpus is **72** client fixtures now and nobody moved the floor, so
+   42 of them could have stopped being sent with the gate still
+   reporting a pass. Exact and per category now: 72 = 43 malformed +
+   20 ok + 9 unsupported, per category because a total cannot see a
+   fixture being RE-LABELLED (all nine `unsupported` rows becoming `ok`
+   leaves 72 intact while replacing nine assertions of "ERROR 11
+   exactly" with nine of "anything but ERROR 1").
+
+   **The falsification is the lesson here.** The first injection proved
+   nothing and looked like it had: truncating the manifest to 45 lines
+   gives 18 fixtures, which the OLD floor also refused, so a "did it go
+   red" reading would have credited a check that was already adequate.
+   The injection that decides it is 70 lines -> **35 fixtures (15
+   malformed, 20 ok, 0 unsupported)**, which `-ge 30` passes having
+   dropped 37 of 72 including every unsupported case. Reverse-patched to
+   a file byte-identical to the one that ran ROBUST PASS.
+
+   The gate's other nine thresholds were read and deliberately left
+   alone: they are directional (timing, resident memory, "at least one
+   refused"), not denominators, so they rot red.
+
+   **Generalisation worth carrying**: grep `-ge` on any count a check
+   asserts. A floor is what an exact count decays into when the thing it
+   counts grows.
 
 29. **The rates gate asked for 1800 and graded 266 of 330 without
    saying so (2026-09-20).** Second gate on the expensive axis, and the

@@ -1030,6 +1030,22 @@ number believable?* — is what caught it. See [§2.7](#27) and
 [§2.8](#28), which are the same "the rate is not the derivative of what was
 answered" family, and §2.4's fourth prerequisite on grading a magnitude.
 
+**What this entry does NOT claim, measured 2026-09-20.** It is about the
+first days of a file and nothing else. The Ephemeris Prometheia project
+reports 7.4824e-3 AU/day for Polaris topocentric at Quito on
+**JD 2415020.5** — 1900, a century inside `sepl_18`, where no edge effect
+can apply — and that figure **does not reproduce here**. At that cell this
+server misses by **3.9949e-04** AU/day, stable to two figures at
+h = 1/256, 1/512, 1/1024, 1/2048 and 1/4096, so it is model error rather
+than differencing noise. Neither the frame (true-of-date 3.9949e-04 vs
+J2000 3.9946e-04) nor the server instance moves it. `|reported|` is
+8.2972e-03 and `|differenced|` is 7.8977e-03 at that cell, and the reported
+7.4824e-3 lies between them rather than near their difference, which
+suggests the two harnesses subtract different quantities. Unresolved and
+recorded as unresolved: their side holds it as an already-adjudicated
+standing exception (the `1e-4 → 2e-4 → 4e-3` chase that does not converge),
+not as a new finding, and the advertisement stays 5e-3/4e-3.
+
 ## 3. Divergences deliberately DECLINED
 
 ### 3.1 The Gaussian constant's truncation
