@@ -60,6 +60,15 @@ version 3, and this section is the design authority behind it.
   leg of one gate; the other nine `ephsrv-*.sh` scripts still carry their
   falsification as prose.
 
+  **First bite taken out of that, 2026-09-20 (work-log item 27):**
+  `ephsrv-golden.sh` reported how many comparisons it made and asserted
+  nothing about the number, so a leg that stopped running printed PASS
+  with a smaller count. It asserts 161 exactly now, sabotage-proven.
+  The other eight were swept for the same shape and are clean -- they
+  are fail-fast rather than tallied, which rots red. That leaves the
+  real gap where it was: **eight gates with no runnable injection at
+  all.**
+
 - **Superseded (2026-09-20). Phase 6h steps 1, 2 and most of 3 landed;
   the routing was still inline at this point.**
 
@@ -308,7 +317,11 @@ version 3, and this section is the design authority behind it.
   on 2026-09-20 -- six here, four there -- was caught by someone deciding
   to distrust a green, not by anything structural. `--selftest` narrows
   it for one leg of one gate. The other nine `ephsrv-*.sh` gates still
-  carry their falsification as prose.
+  carry their falsification as prose -- eight of them as of 2026-09-20,
+  when `ephsrv-golden.sh` gained an assertion on its own comparison
+  count (work-log item 27). That one was the cheap axis: a number the
+  gate reported and never checked. The expensive axis, a runnable
+  injection per assertion, is still undone everywhere but `-soak.sh`.
 
   **`ephsrv-soak.sh` has a memory leg now (e), because nothing here
   watched memory at all** -- the fd bound was the only resource this
@@ -3248,6 +3261,57 @@ instructions for a human to copy is the thing this direction exists to stop.
      bug into their own `corrapplied.py` and caught it by fault
      injection rather than by trusting the green. The symptom to grep
      for in any existing leg is a column of suspiciously exact zeros.
+
+27. **The golden gate counted nothing (2026-09-20).** The first of the
+   nine gates that carry their falsification as prose, taken on the
+   cheapest axis first: **a number a gate reports is a number it should
+   assert.** `ephsrv-golden.sh` ended in
+   `echo "GOLDEN PASS: $TRIED comparisons bit-exact"` and asserted
+   nothing whatever about `$TRIED`. Every comparison that ran was
+   checked bit-exact; how many ran was decoration.
+
+   **This is not hypothetical in this file of all files.** Four legs
+   have already been deleted from it on purpose -- the three fixed-plane
+   sidereal ones and `true-citra`, both in the 2026-09-18 anchors drop,
+   each for the good reason that a leg which must MISMATCH does not
+   belong in a gate whose contract is bit-exactness. Nothing in the
+   script distinguished those removals from a leg that stopped running
+   by accident: both paths print PASS with a smaller number nobody
+   reads. The same shape was `ephsrv-soak.sh`'s `FARM_N`, printed three
+   times and never counted.
+
+   **Fixed** with `GOLDEN_COMPARISONS=161` asserted exactly -- not a
+   floor, because a floor cannot see a leg that was duplicated instead
+   of moved. **Falsified inside the script that ships**, not a copy:
+   commenting out the `zodiac lahiri` leg gives
+   `GOLDEN FAIL: 160 comparisons ran, expected 161`, and the run is
+   otherwise entirely green -- `FAIL` stays 0, so it is the new
+   assertion that reddens and not some other one catching it by luck.
+   Before this change that same sabotage printed `GOLDEN PASS: 160`.
+   Reverse-patched rather than checked out. Confirmed at 161 on all
+   three configurations the gate has -- plain, `TLS=1` over `wss://`,
+   and `PROTO=5` -- so the assertion is safe to be unconditional.
+
+   **The hand-kept literal is the safe direction, not a weakness.** It
+   is not derived from anything `$TRIED` is derived from, so the two
+   cannot narrow in step: a leg that stops running lowers `$TRIED`
+   alone and the comparison fails loudly. Contrast a check whose
+   expectation is itself a pattern over the thing it is checking, which
+   rots green. That is rule 4 of the falsification method, and the
+   reason this fix is three lines rather than a scan.
+
+   **The sweep that produced it, and its nulls.** All nine gates were
+   read for the same shape. The other eight are clean, for a structural
+   reason worth recording: they are written as fail-fast assertions
+   (`fail "..."`, `|| { echo ...; exit 1; }`) rather than as a tally, so
+   a check that stops running takes its own `exit 1` with it but leaves
+   no count to contradict -- they rot red on a broken case and are
+   simply absent on a deleted one, which is the hole `--selftest` is
+   for and not this. `ephsrv-rates.sh` was read in particular, since it
+   is the newest and grades an agreement, and its first leg was checked
+   for yesterday's f32 quantization artifact: it runs at the client's
+   default precision, which is **f64** (`eph_wsclient.cpp:458`), so the
+   star rows in it are measuring something real. Null, reported.
 
 22. **Phase 6h unblocked: a seam, a recorded corpus, and four defects
    (2026-09-18).** The maintainer's decision -- "they should test it

@@ -580,4 +580,29 @@ if [ "$FAIL" -gt 0 ]; then
   echo "GOLDEN FAIL: $FAIL of $TRIED comparisons mismatched"
   exit 1
 fi
+
+# HOW MANY comparisons, not just whether the ones that ran agreed.
+#
+# Until 2026-09-20 this gate printed $TRIED in its PASS line and asserted
+# nothing about it, so a leg that stopped running took its own assertion with
+# it and the gate still said PASS -- with a smaller number nobody reads. That
+# is not hypothetical here: FOUR legs have already been deleted from this file
+# on purpose (the three fixed-plane sidereal ones and true-citra, both in the
+# 2026-09-18 anchors drop), and nothing distinguished those removals from an
+# accidental one. The same shape was found in ephsrv-soak.sh's FARM_N, which
+# was printed three times and never counted.
+#
+# The number is hand-kept ON PURPOSE, and that is the safe direction rather
+# than a weakness: it is not derived from anything $TRIED is derived from, so
+# the two cannot shrink together. A leg that stops running lowers $TRIED alone
+# and this fails loudly. Changing the legs means changing this line in the
+# same commit, which is the point -- a deliberate removal says so in the diff.
+GOLDEN_COMPARISONS=161
+[ "$TRIED" -eq "$GOLDEN_COMPARISONS" ] || {
+  echo "GOLDEN FAIL: $TRIED comparisons ran, expected $GOLDEN_COMPARISONS."
+  echo "  Every comparison that ran AGREED -- this is about the ones that did not run."
+  echo "  A leg stopped running, or legs were added or removed without updating"
+  echo "  GOLDEN_COMPARISONS at the foot of this script."
+  exit 1
+}
 echo "GOLDEN PASS: $TRIED comparisons bit-exact against $SWE_HOME$([ "${TLS:-0}" = 1 ] && echo ", over wss://")$([ -n "${PROTO:-}" ] && echo ", protocol $PROTO client")"
