@@ -159,8 +159,20 @@ survive a clone and all three have bitten:
 git remote -v                                    # upstream push must read
 git remote set-url --push upstream DISABLED      # DISABLED; set it yourself
 git config user.name  nrvate                     # or commits land under
-git config user.email nrvate@gmail.com           # the wrong author
+git config user.email 11264848+nrvate@users.noreply.github.com
 ```
+
+**That address is the NOREPLY one, and it is not a preference.** It used
+to read `nrvate@gmail.com`, and on 2026-09-19 GitHub began refusing the
+push outright -- `remote rejected ... push declined due to email privacy
+restrictions` -- because the account turned on "Block command line pushes
+that expose my email". The failure is confusing in the usual way: nothing
+is wrong with the commit, the author and committer are identical to the
+last commit that pushed fine an hour earlier, and the tree is clean. Only
+the *address inside the commit object* is the problem, so a re-push and a
+new commit both fail the same way, and the fix is to rewrite the commits
+that already carry it -- which is the one case in this project where
+history is rewritten rather than added to.
 
 And **`/swe` is a machine-local ephemeris mount, not part of this repo** —
 887,000-odd files, kept on the NAS. `nrvate.as` points `-Yi1`/`-Yi2`/
