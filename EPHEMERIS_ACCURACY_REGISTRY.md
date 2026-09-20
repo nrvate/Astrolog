@@ -1488,6 +1488,44 @@ considerable."
 
 Two published sources, not a defect on either side.
 
+### 4.4 Vega's distance rate — the two engines differ by 60%, and no rate gate can see it
+
+Recorded 2026-09-20 at the Prometheia project's request, so it is not lost
+if this side is picked up first. Geocentric Vega, JD 2415020.5, h = 1/1024 d,
+f64, AU/day:
+
+| | reported | differenced from its own distances |
+|---|---|---|
+| this server | −1.160224e-02 | −1.135381e-02 |
+| theirs | −7.253626e-03 | −7.253885e-03 |
+
+**Both columns disagree, by about 60%**, which is the part that makes this a
+catalogue-or-model question rather than a rate-column one: the *differenced*
+figures come from each engine's own answered positions, so the two engines
+disagree about how Vega's distance CHANGES WITH TIME, not merely about what
+they report for its rate. Ours is 1.58e6 AU at that instant; theirs is not
+recorded here. Radial velocity, parallax, or the epoch the catalogue line is
+propagated from would all produce this shape. No outside reference has been
+consulted, so neither side is claimed right.
+
+**Why no gate of either project reports it, which is the reusable part.**
+`ephsrv-rates.sh` grades **a server against itself** — its stated oracle is
+"the server's own positions", deliberately, so that it needs nothing
+external. That makes it structurally incapable of seeing a disagreement with
+another engine, however large: both of the rows above are internally
+consistent to within their own tolerances. And the cross-engine leg that
+*does* compare the two servers compares **positions**, where Vega agrees.
+One instrument compares two engines on positions; the other compares one
+engine with itself on rates; the gap between them is exactly this.
+
+A third instrument would be needed — two engines compared on *rates* — and
+neither project has one. That is a real hole and it is named rather than
+filled, because filling it means deciding which engine is the reference, and
+nothing here can.
+
+*See also* [§2.12](#212), where the same Vega row sits above its
+quantisation floor on this side, so it is model rather than noise.
+
 ## How to add an entry
 
 An entry earns its place by **measurement against something outside this
