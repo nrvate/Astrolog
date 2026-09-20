@@ -26,7 +26,23 @@ export QTDRIVE_DISPLAY=$DISP
 cleanup() {
   [ -n "$WMPID" ] && kill "$WMPID" 2>/dev/null
   [ -n "$XPID" ] && kill "$XPID" 2>/dev/null
-  pkill -x astrolog-qt 2>/dev/null
+  # Only the copies on OUR private display. This was "pkill -x
+  # astrolog-qt" until 2026-09-20, which reads as "exactly this one" and
+  # means "every process with this name" -- the maintainer's own copy on
+  # :0 included. CLAUDE.md's hard rule names "pkill -f"; -x has the same
+  # blast radius through a different flag, which is how it sat here. The
+  # Prometheia project hit the identical bug the same day with
+  # "pkill -x prometheiad" and took down their own long-running daemon.
+  #
+  # The app is started from inside qtdrive.py, so there is no PID here to
+  # kill; the private Xvfb display is the next-best scope, and it is an
+  # exact one -- nothing outside this script ever has DISPLAY=$DISP.
+  for p in $(pgrep -x astrolog-qt 2>/dev/null); do
+    if tr '\0' '\n' < "/proc/$p/environ" 2>/dev/null \
+         | grep -qx "DISPLAY=$DISP"; then
+      kill "$p" 2>/dev/null
+    fi
+  done
   return 0
 }
 trap cleanup EXIT INT TERM

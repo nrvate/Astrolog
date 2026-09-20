@@ -64,30 +64,39 @@ if [ "${1:-}" = "--selftest" ]; then
   # than kept by hand beside them, and a message no case claims stops
   # this before a daemon is started. Add an assertion, get told to add a
   # case.
-  SELF_WANT="not bounded by it|not filling|has not plateaued"
-  MISSING=$(awk '/^# e\. Memory is bounded/,0' "$0" \
-    | grep -oE 'SOAK FAIL: [^"]*' \
-    | grep -vE "$SELF_WANT" \
-    | grep -vE "daemon did not start" || true)
-  if [ -n "$MISSING" ]; then
-    echo "SELFTEST FAIL: leg (e) can fail in a way no case covers --"
-    printf '  %s\n' "$MISSING"
-    echo "               add a case, or this selftest overclaims."
-    exit 1
-  fi
+  SELF_CASES="bounded filling plateaued"
+  SELF_LOG=$(mktemp /tmp/ephsrv-soak-asserts.XXXXXX)
   # The CONTROL first, and it is not ceremony. The two sabotages below
   # only ever prove the gate can go red; a leg that failed unconditionally
   # -- a bound mistyped to something nothing can satisfy, a daemon that
   # stopped starting -- would satisfy both of them and be useless. This is
   # the "these agree" row of the pair, and here it is the one that carries
   # the weight, which is the reverse of the usual way round.
-  if FARM_N=200 MEM_N=200 "$0" > /dev/null 2>&1; then
+  if FARM_N=200 MEM_N=200 MEM_ASSERT_LOG="$SELF_LOG" "$0" > /dev/null 2>&1; then
     echo "selftest: the control passes"
   else
     echo "SELFTEST FAIL: the gate does not pass with nothing injected --"
     echo "               the sabotages below would prove nothing"
     fails=$((fails+1))
   fi
+  # THE CASE LIST, CHECKED AGAINST WHAT THE LEG ACTUALLY EVALUATED.
+  #
+  # The control passes, so every assertion in leg (e) ran and recorded
+  # itself. An assertion added without a case appears here and has no
+  # case below; a case for an assertion that no longer exists appears
+  # below with nothing here. Either stops the selftest, because a
+  # selftest that silently covers less than it claims is the thing this
+  # flag exists to prevent -- and the Prometheia project found exactly
+  # that in their own, hours after writing it: nine declared, seven run.
+  RAN=$(sort -u "$SELF_LOG" 2>/dev/null | tr '\n' ' ' | sed 's/ *$//')
+  WANT=$(printf '%s\n' $SELF_CASES | sort -u | tr '\n' ' ' | sed 's/ *$//')
+  rm -f "$SELF_LOG"
+  if [ "$RAN" != "$WANT" ]; then
+    echo "SELFTEST FAIL: leg (e) evaluated [$RAN] but this selftest has"
+    echo "               cases for [$WANT]. Add a case, or drop one."
+    exit 1
+  fi
+  echo "selftest: leg (e) evaluated [$RAN], one case each"
   # stillclimbing needs NO sabotage hook: it is the real gate, stopped
   # before the cache plateaus. The bound and the cache-is-filling checks
   # both pass on it, so it reds the plateau assertion alone -- which had
@@ -338,14 +347,42 @@ GREW=$(( (MEM1 - MEM0) / 1024 ))
 SETTLE=$(( (MEM1 - MEMHALF) / 1024 ))
 echo "memory: ${GREW}MB growth over $MEM_N distinct windows, cap ${MEM_CAP}MB;" \
      "${SETTLE}MB more in the second half"
+# Every leg-(e) assertion goes through memassert, so the list of
+# assertions the selftest checks itself against is WHAT RAN, not what a
+# pattern matched in this file. The first version grepped these messages
+# out of the source, which the Prometheia project pointed out trades a
+# list that can rot for a regex that can rot -- and the regex rots GREEN:
+# it stops matching, the derived list shrinks to nothing, and every case
+# is trivially covered. Recording at evaluation has no such direction.
+#
+# $1 token, $2 the test's exit status, $3 the message.
+memassert() {
+  # Two set -e traps live here and both were hit on the commit that
+  # introduced this helper. A BARE "[ ... ]" whose test fails exits the
+  # script instantly under set -e, before any message -- which is why the
+  # callers write "memok=0; [ ... ] || memok=$?", a form set -e exempts.
+  # And "[ -n "$X" ] && printf" as a statement fails when X is unset,
+  # which is every run but the control. The selftest caught both as three
+  # sabotages failing "not on their own assertion", which is exactly the
+  # clause it exists for, on the commit that broke it.
+  if [ -n "${MEM_ASSERT_LOG:-}" ]; then
+    printf '%s\n' "$1" >> "$MEM_ASSERT_LOG"
+  fi
+  [ "$2" = "0" ] && return 0
+  echo "SOAK FAIL: $3"
+  exit 1
+}
 # Bounded: the cap plus slack for the farm's own working set.
-[ "$GREW" -le "$((MEM_CAP + 12))" ] \
-  || { echo "SOAK FAIL: RSS grew ${GREW}MB against a ${MEM_CAP}MB cache cap -- the result cache is not bounded by it"; exit 1; }
+memok=0; [ "$GREW" -le "$((MEM_CAP + 12))" ] || memok=$?
+memassert bounded $memok \
+  "RSS grew ${GREW}MB against a ${MEM_CAP}MB cache cap -- the result cache is not bounded by it"
 # Real: a cache that stored nothing would also be "bounded".
-[ "$GREW" -ge "$((MEM_CAP / 2))" ] \
-  || { echo "SOAK FAIL: RSS grew only ${GREW}MB against a ${MEM_CAP}MB cap -- the cache is not filling, so the bound above proves nothing"; exit 1; }
+memok=0; [ "$GREW" -ge "$((MEM_CAP / 2))" ] || memok=$?
+memassert filling $memok \
+  "RSS grew only ${GREW}MB against a ${MEM_CAP}MB cap -- the cache is not filling, so the bound above proves nothing"
 # Plateaued: the second half must add far less than the first.
-[ "$SETTLE" -le 2 ] \
-  || { echo "SOAK FAIL: RSS rose ${SETTLE}MB in the second half of the run -- it has not plateaued, so this cannot tell a filling cache from a leak"; exit 1; }
+memok=0; [ "$SETTLE" -le 2 ] || memok=$?
+memassert plateaued $memok \
+  "RSS rose ${SETTLE}MB in the second half of the run -- it has not plateaued, so this cannot tell a filling cache from a leak"
 
 echo "SOAK PASS: farm of $FARM_N files, startup ${STARTUP_S}s, zero scans, fds stable, memory bounded by the cache cap"
