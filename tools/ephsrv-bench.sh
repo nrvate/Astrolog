@@ -114,7 +114,7 @@ for i in $(seq 0 $((COLD - 1))); do
 done
 grep -oE "cache=miss compute_ms=[0-9.]+" "$LOG" | awk -F= '{print $3 * 1000}' > "$SCRATCH/cold.srv"
 read -r cold_p50 cold_p99 cold_n < <(pct "$SCRATCH/cold.lat")
-read -r cold_s50 cold_s99 _ < <(pct "$SCRATCH/cold.srv")
+read -r cold_s50 cold_s99 cold_sn < <(pct "$SCRATCH/cold.srv")
 
 # 2. hot f64: one window, REPEAT times on one connection. The cache is
 #    per event loop and a new connection lands on whichever loop the
@@ -185,6 +185,41 @@ cN_wps=$(python3 -c "print('%.1f' % ($cN_n / ($T1 - $T0)))")
 for f in cold hot64 hot32 hotN coldN; do
   [ -s "$SCRATCH/$f.lat" ] || { echo "BENCH FAIL: no latency samples for $f"; exit 1; }
 done
+# ...AND HOW MANY. Non-empty is not the claim each row of the table makes.
+# "cold x 8 clients, p99 = X over n samples" is a claim about 8 clients
+# finishing 5 windows each; with three of them dead it is a p99 over the
+# survivors, printed under the same label, and until 2026-09-20 nothing
+# compared n against what was asked for. These numbers get quoted into
+# documents, which is what makes an unasserted denominator worse here than
+# in a pass/fail gate.
+#
+# Each expected count is derived from the loop parameters that DRIVE the
+# scenario, so it catches the failure that actually happens -- a client
+# dying, or the client emitting fewer latency lines than requests -- while
+# following CLIENTS/REPEAT/COLD when they are overridden from the
+# environment, as they are meant to be. The +1-and-drop-one on the hot legs
+# is the first-request miss the comments above explain.
+nbad=0
+check_n() {   # check_n <label> <got> <want>
+  [ "$2" -eq "$3" ] && return 0
+  echo "BENCH FAIL: $1: $2 latency samples, expected $3 -- the row below would"
+  echo "  have been a percentile over whatever survived, under a label saying"
+  echo "  otherwise"
+  nbad=$((nbad + 1))
+}
+check_n "cold"                    "$cold_n" "$COLD"
+check_n "hot f64"                 "$h64_n"  "$REPEAT"
+check_n "hot f32"                 "$h32_n"  "$REPEAT"
+check_n "hot f64 x $CLIENTS"      "$hN_n"   "$((CLIENTS * REPEAT))"
+check_n "cold x $CLIENTS"         "$cN_n"   "$((CLIENTS * COLD))"
+[ "$nbad" -eq 0 ] || exit 1
+# The SERVER-side row is read from the log by a grep and was in neither
+# check: an empty cold.srv makes pct() print "nan nan 0", and the table
+# printed "nan" for the two columns the whole scenario exists to report
+# while the gate exited 0. Its count was discarded into "_".
+[ -s "$SCRATCH/cold.srv" ] ||
+  { echo "BENCH FAIL: no server-side compute samples -- the log's"
+    echo "  'cache=miss compute_ms=' shape moved and the grep found nothing"; exit 1; }
 
 echo "ephsrv bench: $LOOPS event loop(s), window = 30 bodies x $ROWS rows @ ${STEP}s, $(nproc) cores"
 echo
