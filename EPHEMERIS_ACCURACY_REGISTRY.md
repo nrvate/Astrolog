@@ -1122,6 +1122,58 @@ time and asks whether any leg notices — reporting `--deltat` blind in all
 fifteen of their legs. See [§2.10](#210): the 1900 Polaris row recorded
 there as unresolved is now attributable to this.
 
+### 2.12 A fixed star's DISTANCE rate is not the derivative of its own distance — 0.6% to 3.4%, geocentric, every star
+
+The plainest member of this family and the one to read first: no
+topocentric site, no ΔT, no ephemeris edge, no observer subtlety. A
+geocentric fixed star at an ordinary instant, and Swiss's distance-rate
+column disagrees with a five-point central difference of Swiss's own
+distance column by **one to three percent of the rate**.
+
+`swe_fixstar2_r`, `SEFLG_SWIEPH|SEFLG_SPEED`, h = 1/1024 day, f64:
+
+| star | JD | distance AU | reported | differenced | miss | of rate | longitude-rate miss |
+|---|---|---|---|---|---|---|---|
+| Polaris | 2415020.5 | 2.74e7 | −7.993480e-03 | −7.894516e-03 | 9.896e-05 | 1.25% | 4.2e-07 |
+| Polaris | 2451545.0 | 2.74e7 | −8.190524e-03 | −8.032799e-03 | 1.577e-04 | 1.96% | 2.7e-07 |
+| Sirius | 2415020.5 | 5.44e5 | −3.655958e-03 | −3.783623e-03 | 1.277e-04 | 3.37% | 5.2e-07 |
+| Sirius | 2451545.0 | 5.44e5 | −4.010874e-03 | −4.034917e-03 | 2.404e-05 | 0.60% | 1.2e-06 |
+| Vega | 2415020.5 | 1.58e6 | −1.160224e-02 | −1.135381e-02 | 2.484e-04 | 2.19% | 1.3e-06 |
+| Vega | 2451545.0 | 1.58e6 | −1.148921e-02 | −1.119208e-02 | 2.971e-04 | 2.65% | 3.0e-06 |
+| Aldebaran | 2415020.5 | 4.21e6 | 4.115136e-02 | 4.051161e-02 | 6.398e-04 | 1.58% | 1.1e-07 |
+| Aldebaran | 2451545.0 | 4.21e6 | 4.098947e-02 | 4.021176e-02 | 7.777e-04 | 1.93% | 1.9e-07 |
+
+**It is the DISTANCE channel alone.** The longitude-rate column of the
+same rows misses by 1e-07 to 3e-06 deg/day, which is the differencing
+floor — that channel is the derivative of its own positions and this one
+is not. Whatever term is missing is in the radial component only.
+
+**Not ours.** Reproduced by `swe_fixstar2_r` called directly against
+`libswe.a`, no server and no protocol, giving the server's wire numbers
+bit for bit (9.8964e-05 for the first row). `astrolog-ephd` relays it
+exactly; there is nothing here to fix in this repo.
+
+**Within the advertisement, which is why no gate caught it.** The worst
+here is 7.8e-04 AU/day against the 4e-3 A.3 0x0013 advertises. The
+`ephsrv-rates.sh` bound sweep does grade fixed stars and does grade this
+cell — it simply passes, correctly, because the figure is inside the
+promise. A bound cannot report a defect that fits under it.
+
+*Relationship to the neighbours, stated rather than assumed:*
+[§2.10](#210) is a much larger excursion (a whole rate, ~100%) confined
+to instants within days of a file's start, and [§2.11](#211) was a stale
+observer that needed a *changed* ΔT. This one is present at every instant
+tried, at every ΔT including none, and geocentrically. Whether the three
+share a root is **not established here** and the sizes do not obviously
+reconcile.
+
+*Found by:* the Ephemeris Prometheia project, who measured the same
+geocentric cell on this server at 9.896e-05 and said plainly that it was
+the number worth chasing rather than the topocentric 7.48e-03 — "it is
+the simpler configuration and it is stable". They were right, and they
+carry the same defect at 1.7e-05, an order milder, which makes the two
+engines comparable channel by channel for the first time.
+
 ## 3. Divergences deliberately DECLINED
 
 ### 3.1 The Gaussian constant's truncation
