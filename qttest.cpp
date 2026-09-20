@@ -18302,6 +18302,42 @@ static void TestHorizonsEmulationQt()
   // fTruePos on for the fetch whenever the centre is not the Earth, and
   // restores it before the emulation reads it -- so the rows are built
   // true and the emulation runs under the real setting, as in a cast.
+  // THE ROUTING, which is the part no matrix can see and no offline test
+  // can exercise end to end. ComputeEphem() submits the
+  // geocentric-uncorrected objects down a chain of exactly one source,
+  // found by its capability. Two things have to hold for that to work at
+  // all, and if either breaks every Horizons object silently gets no row
+  // -- which looks exactly like a network that is down.
+  {
+    int isrcGeo = IEphSrcGeoUncorrected();
+    int rgisrcT[cEphSrcBuiltIn], cisrcT, iT;
+    flag fInChain = fFalse;
+
+    Check(isrcGeo != ephSrcNone,
+      "a geocentric-uncorrected source is registered, so the objects "
+      "routed to it have somewhere to go");
+    if (isrcGeo != ephSrcNone)
+      Check(FEqSz(PephsrcGet(isrcGeo)->szKey, "horizons"),
+        "and it is the horizons plugin (got %s)",
+        PephsrcGet(isrcGeo)->szKey);
+
+    // And it must NOT be reachable as a fallback from an ordinary
+    // chain. If it were, a Swiss row that failed would become a network
+    // fetch nobody asked for -- which is why ComputeEphem() submits
+    // those objects down their own one-source chain instead of adding
+    // this source to the cast's.
+    {
+      EphSelBorrow ebT("swiss");
+      cisrcT = CEphChainSrc(us.szEphemSource, rgisrcT, cEphSrcBuiltIn);
+      for (iT = 0; iT < cisrcT; iT++)
+        if (rgisrcT[iT] == isrcGeo)
+          fInChain = fTrue;
+      Check(!fInChain,
+        "and a plain swiss chain does not reach it, so a failed local "
+        "row can never turn into a network fetch");
+    }
+  }
+
   // The seam this whole emulation hangs off: ComputeEphem() asks a
   // CAPABILITY now, where it used to ask five times whether the chain's
   // head was spelled "horizons". The two must answer the same thing

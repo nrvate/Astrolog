@@ -311,6 +311,37 @@ void CiFromJulianEph(real rJD, CI *pci)
 // is right: an unresolvable head cannot be a geocentric-uncorrected one,
 // and the chain walk skips it in the same breath.
 
+// The registry index of the source that answers in the Earth's frame
+// uncorrected, or ephSrcNone. Found by its CAPABILITY, not its key, so
+// the day a second such source exists this keeps working and nothing
+// here learns a name.
+//
+// ComputeEphem() needs the index rather than the flag because it submits
+// those objects down a chain of exactly this one source. Putting it in
+// the cast's own chain instead would make it a FALLBACK for every other
+// object too, and a Swiss row that failed would quietly become a network
+// fetch -- which is not what the selection asked for and not what the
+// program did before.
+
+int IEphSrcGeoUncorrected()
+{
+  EPHSRCDEF *pes;
+  EPHCAPS caps;
+  int isrc;
+
+  for (isrc = 0; isrc < cEphSrcBuiltIn; isrc++) {
+    pes = PephsrcGet(isrc);
+    if (pes == NULL)
+      continue;
+    ClearB((pbyte)&caps, sizeof(EPHCAPS));
+    (pes->GetCaps)(&caps);
+    if (caps.fGeoUncorrected)
+      return isrc;
+  }
+  return ephSrcNone;
+}
+
+
 flag FEphGeoUncorrected()
 {
   char sz[cchSzDef];

@@ -1155,12 +1155,9 @@ void ComputeEphem(real t)
   real r1, r2, r3, r4, r5, r6, dist1 = 0.0, dist2 = 0.0;
   flag fJPLPla, fJPL, fRet;
 #ifdef SWISS
-  EPHQUERY eq;
+  EPHQUERY eq, eqGeo;
 #endif
   EPHGEOROWS egr;
-#ifdef JPLWEB
-  flag fSav;
-#endif
 
   ClearB((pbyte)&egr, sizeof(EPHGEOROWS));
 
@@ -1198,18 +1195,38 @@ void ComputeEphem(real t)
   {
     {
       EphQueryInit(&eq, JulianDayFromTime(t));
+      EphQueryInit(&eqGeo, JulianDayFromTime(t));
       for (i = oEar; i <= imax; i++) {
         if (FSkipEphem(i, objCentCalc, fJPLPla))
           continue;
         if (FCust(i) && rgTypSwiss[i - custLo] == 5)
           continue;
-        fJPL = FObjGeoSrc(i, fJPLPla, fFalse);
-        if (fJPL)
-          continue;
         objOrbit = us.fMoonMove ? ObjOrbit(i) : -1;
         if (objOrbit < 0 || objOrbit == oSun)
           objOrbit = objCentCalc;
-        FEphQueryAdd(&eq, i, 0, objOrbit, NULL);
+        // Two queries, because the two sets must not share a chain.
+        // The geocentric-uncorrected objects go down a chain of exactly
+        // their own source; putting that source in the CAST's chain
+        // would make it a fallback for every other object as well, and a
+        // Swiss row that failed would quietly become a network fetch.
+        // The selection did not ask for that and the program never did
+        // it. The other direction matters too: these objects must not
+        // fall back to Swiss, because the frame they come back in is the
+        // whole reason the emulation below exists.
+        if (FObjGeoSrc(i, fJPLPla, fFalse))
+          FEphQueryAdd(&eqGeo, i, 0, objOrbit, NULL);
+        else
+          FEphQueryAdd(&eq, i, 0, objOrbit, NULL);
+      }
+      // The geocentric-uncorrected half, through its own source alone.
+      // This is where the JPL Horizons fetch happens now: ComputeEphem()
+      // used to call GetJPLHorizons() inline, per object, from the read
+      // loop below -- the last place in the program that reached an
+      // ephemeris without going through the registry.
+      if (eqGeo.cobj > 0) {
+        int isrcGeo = IEphSrcGeoUncorrected();
+        if (isrcGeo != ephSrcNone)
+          FEphSubmitChain(&eqGeo, &isrcGeo, 1);
       }
       // A chain that answered NOTHING is the one failure that looks like a
       // success: every body at 0Ari00'00", no error, and the houses right,
@@ -1241,19 +1258,14 @@ void ComputeEphem(real t)
     if (FSkipEphem(i, objCentCalc, fJPLPla))
       continue;
 
-    // Calculate planet using Swiss Ephemeris or JPL Horizons
+    // Read the row, from whichever of the two queries asked for it.
+    // Every ephemeris this function uses now arrives through the
+    // registry; there is no source it reaches for by name.
     fRet = fFalse;
     fJPL = FObjGeoSrc(i, fJPLPla, fFalse);
-#ifdef JPLWEB
     if (fJPL) {
-      fSav = us.fTruePos;
-      if (us.objCenter != oEar)
-        us.fTruePos = fTrue;
-      j = NEphHorizonsId(i);
-      fRet = GetJPLHorizons(j, &r1, &r2, &r3, &r4, &r5, &r6, NULL);
-      us.fTruePos = fSav;
+      fRet = FEphRead(&eqGeo, i, &r1, &r2, &r3, &r4, &r5, &r6);
     } else
-#endif
     {
 #ifdef SWISS
       if (FCust(i) && rgTypSwiss[i - custLo] == 5)

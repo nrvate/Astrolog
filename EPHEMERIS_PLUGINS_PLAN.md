@@ -38,24 +38,38 @@ version 3, and this section is the design authority behind it.
   has a half-day offset in it, because Astrolog counts a day from
   midnight where `MdyToJulian()` returns the noon-based integer.
 
-  **THE PIECE THAT IS LEFT, and why it was not done in the same commit.**
-  `ComputeEphem()`'s object loop still excludes this source's objects
-  from the `EPHQUERY` and fetches them inline. Routing them through the
-  chain is the last of step 3, and it is **not** additive:
+  **THE LAST PIECE IS DONE (2026-09-20, on the maintainer's
+  instruction).** `ComputeEphem()` no longer fetches anything itself. The
+  cast path reaches no ephemeris outside the registry.
 
-  - It changes **when the program reaches the network.** Today a custom
-    slot of Swiss type 4 fetches from JPL even when the chain says
-    `swiss` — the selection does not mention the network and the program
-    uses it anyway. Under the chain model the user would have to name
-    `horizons`. That is arguably the better behaviour and it is
-    certainly a **user-visible change**, so it is the maintainer's.
-  - **No gate here can see it.** Not one of the four matrices reaches
-    the network, and neither does the suite. The change would be made,
-    gated green, and unverified.
+  **Two queries, not one chain, and the reason is the network.** The
+  geocentric-uncorrected objects are submitted down a chain of **exactly
+  their own source**, found by capability (`IEphSrcGeoUncorrected()`).
+  Adding that source to the CAST's chain instead would have made it a
+  **fallback for every other object**, so a Swiss row that failed would
+  quietly become a network fetch -- which the selection did not ask for
+  and the program never did. The other direction matters too: those
+  objects must not fall back to Swiss, because the frame they come back
+  in is the whole reason `EphEmulateGeoRows()` exists.
 
-  So the duplicate that remains is a routing decision, not a second copy
-  of any arithmetic: the mapping, the instant, the frame and the
-  re-centring all have exactly one implementation now.
+  So **when the program reaches the network is unchanged**, which was the
+  worry that deferred this: a custom slot of Swiss type 4 still fetches
+  under a `swiss` chain, exactly as before, and nothing else newly does.
+  Whether that policy is right is now a separate question, and it is one
+  line in one place rather than five conditions spread through the
+  function.
+
+  **`GetJPLHorizons()` still has one caller and it is not a cast.**
+  `SzObjSelName()` asks JPL what a body is called when the user hits
+  Lookup Names -- synchronous and over the network, as Windows'
+  `DlgCustom` has always done. That is a name query, not a row, and it
+  belongs on the `ciCore` wrapper.
+
+  **What is still NOT exercised offline**, unchanged by any of this: the
+  fetch itself. No gate reaches the network, so the plugin's
+  `FSubmitHorizons()` is covered only by its parts -- the id mapping, the
+  instant conversion, the emulation over the recorded corpus, and the
+  routing assertions below.
 
   **How this was verified.** Four matrices byte-identical against
   `022b0a4` (chart 7568, switch 119691, influence 762, graphics 579),
@@ -691,7 +705,7 @@ version 3, and this section is the design authority behind it.
   | 6e the required-server dialog, its ladder and exit 86 deleted | landed `05a0c21` |
   | 6f the console transport (`eph_wsclient.cpp`'s framing, reusable) | **DECLINED 2026-09-18 by the maintainer.** Not an omission: Qt is the shipped interface on every platform, and the console build is the CLI and the matrices' oracle, where nobody has asked to reach a remote ephemeris. The extraction cost is real -- the framing is in a PROGRAM, not a library, and ten gate scripts drive that program |
   | 6g the WinHTTP transport (Win32) | **DECLINED 2026-09-18 by the maintainer**, same reasoning, and it additionally needs a Windows runner to test, which is the slowest loop in this project |
-  | 6h the `horizons` plugin | **STEPS 1-3 LANDED 2026-09-20; one routing decision is left, and it is the maintainer's.** `ephhorizons.cpp` is a registered source with `fGeoUncorrected`; `NEphHorizonsId()` is the one object-to-target mapping where `ComputeEphem()` had four near-copies (two of which also counted the Earth); `GetJPLHorizonsAt()` takes its instant rather than reading `ciCore`. What is NOT done is routing the fetch through the chain walk, because that changes when the program reaches the network -- a custom slot of Swiss type 4 fetches from JPL today even under a `swiss` chain -- and no gate here can see a network path. See the Status block above. Previously: **STEPS 1-2 LANDED 2026-09-20 (`df8a565`); step 3 is what remains.** The capability (`EPHCAPS fGeoUncorrected`) and the host-owned re-centring (`EphEmulateGeoRows()`) are in, with an offline net over the recorded corpus and both arms sabotage-proven; the four matrices cannot see any of it, which is recorded in the Status block above. What is left is the plugin itself: one request per body, three instants each, `ephErrOutsideCover` per object from the recorded boundaries, Earth never asked for. Previously: **DEFERRED by the maintainer 2026-09-19 -- not declined, and not started.** The seam, the recorded corpus and the offline replay harness are landed (work-log item 22), and the rewrite is specified there in three steps, with a pickup checklist for a fresh session. It buys the chain, the fallback and provenance rather than function: `GetJPLHorizons()` already casts charts, with the one-minute error fixed. Its real content is a refactor of `ComputeEphem()`'s core, so it wants a baseline binary and the four matrices, not the end of a long session. Four defects were found getting here, one a one-minute error in every position Horizons has ever returned |
+  | 6h the `horizons` plugin | **COMPLETE 2026-09-20.** Steps 1-3 plus the routing: `ComputeEphem()` fetches nothing itself, and the cast path reaches no ephemeris outside the registry. The geocentric-uncorrected objects go down a chain of exactly their own source, so that source can never become a fallback for an ordinary row -- when the program reaches the network is unchanged. Previously: **STEPS 1-3 LANDED; one routing decision is left, and it is the maintainer's.** `ephhorizons.cpp` is a registered source with `fGeoUncorrected`; `NEphHorizonsId()` is the one object-to-target mapping where `ComputeEphem()` had four near-copies (two of which also counted the Earth); `GetJPLHorizonsAt()` takes its instant rather than reading `ciCore`. What is NOT done is routing the fetch through the chain walk, because that changes when the program reaches the network -- a custom slot of Swiss type 4 fetches from JPL today even under a `swiss` chain -- and no gate here can see a network path. See the Status block above. Previously: **STEPS 1-2 LANDED 2026-09-20 (`df8a565`); step 3 is what remains.** The capability (`EPHCAPS fGeoUncorrected`) and the host-owned re-centring (`EphEmulateGeoRows()`) are in, with an offline net over the recorded corpus and both arms sabotage-proven; the four matrices cannot see any of it, which is recorded in the Status block above. What is left is the plugin itself: one request per body, three instants each, `ephErrOutsideCover` per object from the recorded boundaries, Earth never asked for. Previously: **DEFERRED by the maintainer 2026-09-19 -- not declined, and not started.** The seam, the recorded corpus and the offline replay harness are landed (work-log item 22), and the rewrite is specified there in three steps, with a pickup checklist for a fresh session. It buys the chain, the fallback and provenance rather than function: `GetJPLHorizons()` already casts charts, with the one-minute error fixed. Its real content is a refactor of `ComputeEphem()`'s core, so it wants a baseline binary and the four matrices, not the end of a long session. Four defects were found getting here, one a one-minute error in every position Horizons has ever returned |
 
   Phase 8's three reviews are done and their thirteen findings fixed
   (work-log items 19-21). **Nothing else on this branch is implementable

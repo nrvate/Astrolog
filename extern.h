@@ -594,6 +594,7 @@ extern flag FSrcChainHead P((CONST char *));
 extern flag FEphSpeeds P((void));
 extern flag FEphLegacyCast P((void));
 extern flag FEphGeoUncorrected P((void));
+extern int IEphSrcGeoUncorrected P((void));
 extern void CiFromJulianEph P((real, CI *));
 #ifdef JPLWEB
 extern int NEphHorizonsId P((int));
