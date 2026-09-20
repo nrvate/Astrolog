@@ -48,6 +48,19 @@ ROOT=$PWD
 # image_audit.py --selftest.
 if [ "${1:-}" = "--selftest" ]; then
   fails=0
+  # The CONTROL first, and it is not ceremony. The two sabotages below
+  # only ever prove the gate can go red; a leg that failed unconditionally
+  # -- a bound mistyped to something nothing can satisfy, a daemon that
+  # stopped starting -- would satisfy both of them and be useless. This is
+  # the "these agree" row of the pair, and here it is the one that carries
+  # the weight, which is the reverse of the usual way round.
+  if FARM_N=200 MEM_N=200 "$0" > /dev/null 2>&1; then
+    echo "selftest: the control passes"
+  else
+    echo "SELFTEST FAIL: the gate does not pass with nothing injected --"
+    echo "               the sabotages below would prove nothing"
+    fails=$((fails+1))
+  fi
   for sab in unbounded nocache; do
     case $sab in
       unbounded) want="not bounded by it" ;;
@@ -65,8 +78,8 @@ if [ "${1:-}" = "--selftest" ]; then
       echo "selftest: the $sab sabotage reds \"$want\""
     fi
   done
-  [ "$fails" = "0" ] || { echo "SELFTEST FAIL: $fails of 2"; exit 1; }
-  echo "SELFTEST PASS: both memory sabotages red their own assertion"
+  [ "$fails" = "0" ] || { echo "SELFTEST FAIL: $fails of 3"; exit 1; }
+  echo "SELFTEST PASS: the control passes and both sabotages red their own assertion"
   exit 0
 fi
 SWE_HOME=${SWE_HOME:-/shares/swisseph}
@@ -238,10 +251,19 @@ echo "missing asteroid: clean per-object failure (error 4, no rows), connection 
 # agree" row is green when neither answer arrived. So the growth is required
 # to be REAL as well as bounded.
 #
-# Its own daemon: this needs an unthrottled budget (one 3000-cell window a
-# request would otherwise drain the default 100000-cell bucket in 33
-# requests and then trickle) and a small cap, so it fills in seconds rather
-# than the 56 minutes the shipped defaults would take.
+# Its own daemon, and a COLD one, which is load-bearing in a way that is
+# easy to optimize away later: this leg measures GROWTH, so a daemon whose
+# cache has already reached its plateau grows by nothing and passes ANY
+# bound. Reusing a warm daemon here -- across the legs above, across the
+# selftest's cases, or by pointing this at something long-running -- turns
+# the assertion into a confident green that measures nothing. The
+# Prometheia project shipped exactly that caveat in their own load tool
+# and found it by reusing one daemon across their selftest's cases.
+#
+# It also needs an unthrottled budget (one 3000-cell window a request
+# would otherwise drain the default 100000-cell bucket in 33 requests and
+# then trickle) and a small cap, so it fills in seconds rather than the 56
+# minutes the shipped defaults would take.
 MEM_CAP=${MEM_CAP:-8}
 MEM_N=${MEM_N:-300}
 MEM_PORT=$((PORT + 1))

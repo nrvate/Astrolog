@@ -194,11 +194,32 @@ version 3, and this section is the design authority behind it.
   -- which is a measurement taken once and never taken again.
   `tools/ci-selftest.sh` already fixes exactly this for the `ci-*.sh`
   family, 49 cases; **not one of the ten `ephsrv-*.sh` gates was in it.**
-  `--selftest` injects each memory fault and requires the RIGHT assertion
-  to red, which is stricter than requiring a failure: weakening the bound
-  makes the *plateau* check catch the unbounded case instead, and the
-  selftest reports that as a failure by name. Proven by weakening the
-  bound and watching it say so.
+  `--selftest` runs a CONTROL plus each memory fault, and requires the
+  RIGHT assertion to red -- stricter than requiring a failure. Two
+  meta-injections prove it, and each is caught by a different half:
+
+  - **Weaken the bound** to a number nothing can exceed: the *plateau*
+    check catches the unbounded case instead, and the selftest reports
+    "failed, but not on its own assertion" by name.
+  - **Make the "is it really caching" check fire unconditionally**: both
+    sabotage cases still red their own assertion and **both pass** --
+    only the control catches it.
+
+  **The control is why it is three cases and not two.** Sabotages prove a
+  gate can go red; a gate that is red unconditionally -- a mistyped
+  bound, a daemon that stopped starting -- satisfies every sabotage and
+  is useless. It is the "these agree" row of the pair, and here it
+  carries the weight, which is the reverse of the usual way round.
+
+  **The leg's daemon must be COLD, and that is now written down** rather
+  than being a property it happens to have. The leg measures GROWTH, so a
+  daemon already at its plateau grows by nothing and passes ANY bound.
+  The Prometheia project shipped exactly that caveat in their own load
+  tool and found it by reusing one daemon across their selftest's cases
+  -- a check written the day before, documented, and hand-falsified five
+  ways, with the hole found by the structural selftest on its first run.
+  **The hand injections all passed because they were the ones someone
+  thought of.**
 
   **This does not close the hole both projects have named**: neither side
   has an oracle for its measuring code, and every instrument defect found
