@@ -188,6 +188,25 @@ version 3, and this section is the design authority behind it.
   windows; a 64 MB cap grows 64 MB and is flat by 350, through 900. At
   the shipped 256 MB default the plateau is ~285 MB.
 
+  **And `ephsrv-soak.sh --selftest` makes that leg's falsification a
+  CHECK rather than a sentence.** Every gate in this project documents
+  its own falsification in prose -- "falsified when written, four ways"
+  -- which is a measurement taken once and never taken again.
+  `tools/ci-selftest.sh` already fixes exactly this for the `ci-*.sh`
+  family, 49 cases; **not one of the ten `ephsrv-*.sh` gates was in it.**
+  `--selftest` injects each memory fault and requires the RIGHT assertion
+  to red, which is stricter than requiring a failure: weakening the bound
+  makes the *plateau* check catch the unbounded case instead, and the
+  selftest reports that as a failure by name. Proven by weakening the
+  bound and watching it say so.
+
+  **This does not close the hole both projects have named**: neither side
+  has an oracle for its measuring code, and every instrument defect found
+  on 2026-09-20 -- six here, four there -- was caught by someone deciding
+  to distrust a green, not by anything structural. `--selftest` narrows
+  it for one leg of one gate. The other nine `ephsrv-*.sh` gates still
+  carry their falsification as prose.
+
   **`ephsrv-soak.sh` has a memory leg now (e), because nothing here
   watched memory at all** -- the fd bound was the only resource this
   project gated, so a leaking result cache would have passed everything.

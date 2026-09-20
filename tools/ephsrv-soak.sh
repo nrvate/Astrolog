@@ -24,15 +24,51 @@
 #   FD_TOL      allowed fd growth over the barrage(default 20)
 #   BARRAGE     requests in the fd barrage         (default 200)
 #   MEM_CAP     cache cap for the memory leg, MB   (default 8)
+#   MEM_SABOTAGE  "unbounded" or "nocache" -- fault injection for --selftest
 #   MEM_N       distinct windows it asks for       (default 300)
 #   KEEP_FARM   set to keep the farm directory
 #
 # Exit 0 with "SOAK PASS"; nonzero with the failed assertion. Re-runnable;
 # cleans up the farm unless KEEP_FARM is set.
+#
+# "--selftest" injects each memory fault and requires the RIGHT assertion
+# to red -- the falsification as a check rather than as a sentence in this
+# header. About three minutes.
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
 ROOT=$PWD
+
+# --selftest: run the memory leg with each fault injected and require the
+# RIGHT assertion to red. This exists because every gate in this project
+# documents its own falsification in PROSE -- "falsified when written,
+# four ways" -- which is a measurement taken once and never taken again.
+# tools/ci-selftest.sh already does this for the ci-*.sh family; no
+# ephsrv-*.sh gate was in it. The precedent for the flag itself is
+# image_audit.py --selftest.
+if [ "${1:-}" = "--selftest" ]; then
+  fails=0
+  for sab in unbounded nocache; do
+    case $sab in
+      unbounded) want="not bounded by it" ;;
+      nocache)   want="not filling" ;;
+    esac
+    out=$(FARM_N=200 MEM_N=200 MEM_SABOTAGE=$sab "$0" 2>&1) && rc=0 || rc=$?
+    if [ "$rc" = "0" ]; then
+      echo "SELFTEST FAIL: the $sab sabotage PASSED the gate"; fails=$((fails+1))
+    elif ! printf '%s' "$out" | grep -q "$want"; then
+      echo "SELFTEST FAIL: the $sab sabotage failed, but not on its own"
+      echo "               assertion (wanted \"$want\"):"
+      printf '%s\n' "$out" | grep -E "^SOAK FAIL" || true
+      fails=$((fails+1))
+    else
+      echo "selftest: the $sab sabotage reds \"$want\""
+    fi
+  done
+  [ "$fails" = "0" ] || { echo "SELFTEST FAIL: $fails of 2"; exit 1; }
+  echo "SELFTEST PASS: both memory sabotages red their own assertion"
+  exit 0
+fi
 SWE_HOME=${SWE_HOME:-/shares/swisseph}
 FARM_N=${FARM_N:-100000}
 STARTUP_MAX=${STARTUP_MAX:-2}
@@ -209,8 +245,19 @@ echo "missing asteroid: clean per-object failure (error 4, no rows), connection 
 MEM_CAP=${MEM_CAP:-8}
 MEM_N=${MEM_N:-300}
 MEM_PORT=$((PORT + 1))
+# MEM_SABOTAGE is the fault injection --selftest drives, and it is here
+# rather than in a copy of this leg so that what is falsified is THIS code
+# (see --selftest below). "unbounded" gives the daemon a cache far larger
+# than the bound asserted, which is what a cache that stopped evicting
+# looks like from outside; "nocache" disables it, which is what a bound
+# that proves nothing looks like.
+MEM_CACHE=$MEM_CAP
+case "${MEM_SABOTAGE:-}" in
+  unbounded) MEM_CACHE=$((MEM_CAP * 16)) ;;
+  nocache)   MEM_CACHE=0 ;;
+esac
 "$ROOT/astrolog-ephd" --bind 127.0.0.1 --port "$MEM_PORT" --threads 1 \
-  --cache-mb "$MEM_CAP" --cells-per-sec 0 --ephe "$ROOT/ephem;$ROOT" \
+  --cache-mb "$MEM_CACHE" --cells-per-sec 0 --ephe "$ROOT/ephem;$ROOT" \
   > "$SCRATCH/ephd-mem.log" 2>&1 &
 MEM_PID=$!
 sleep 3
