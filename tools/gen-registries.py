@@ -37,8 +37,15 @@ def die(msg):
 
 # ---- finding a subsection -------------------------------------------------
 
+# Every label subsection() is asked for. Appendix A's own headings are
+# checked against this at the end of registries(), so a registry ADDED to
+# the appendix and not to this generator cannot ship unpinned.
+SEEN = set()
+
+
 def subsection(text, label):
     """The lines of '**A.n ...**' up to the next such heading or '## '."""
+    SEEN.add(label)
     lines = text.split("\n")
     start = None
     for i, line in enumerate(lines):
@@ -266,6 +273,36 @@ def build():
         "source": PLAN + " Appendix A",
         "registries": dict(sorted(reg.items())),
     }
+    # APPENDIX A'S OWN HEADINGS ARE THE LIST. subsection() dies when a
+    # label it is asked for is absent, so a registry REMOVED from the
+    # appendix already fails loudly. The other direction was invisible:
+    # the labels above are written out by hand, so a registry ADDED to
+    # the appendix is simply never asked for, never lands in
+    # registries.json, and the make check diff passes because the
+    # committed file does not have it either. It would ship unpinned, and
+    # a second implementation vendoring this file would never see it.
+    #
+    # Reported by the Prometheia project, who had the same blind
+    # direction in the checker that pins their vendored copy of this
+    # file: its loop ran over the JSON's own keys, so a registry the file
+    # stopped carrying dropped out of the loop and out of the count in
+    # one move, and it still printed "22 of 23 registries checked".
+    #
+    # The second comparison is not decoration. Scanning for headings is a
+    # pattern, and a pattern that stops matching finds FEWER -- which
+    # would satisfy the first check trivially. Requiring at least as many
+    # headings as labels actually consumed makes that direction fail
+    # instead: the two counts cannot both shrink.
+    heads = set(re.findall(r"^\*\*(A\.\d+)[ .]", text, re.M))
+    missing = sorted(heads - SEEN, key=lambda s: int(s.split(".")[1]))
+    if missing:
+        die("Appendix A carries %s, which this generator never asks for: "
+            "add %s to registries() or the registry ships unpinned"
+            % (", ".join(missing), ", ".join(missing)))
+    if len(heads) < len(SEEN):
+        die("found %d '**A.n' headings but consumed %d labels -- the "
+            "heading scan is matching fewer than it should, which would "
+            "hide a missing registry" % (len(heads), len(SEEN)))
     return json.dumps(doc, indent=2, sort_keys=False, ensure_ascii=True) + "\n"
 
 
