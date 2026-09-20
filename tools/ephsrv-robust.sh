@@ -174,7 +174,7 @@ fi
 # The conformance fixtures a client could send, each on its own connection
 # after HELLO: an "ok" one must not draw ERROR 1 or 11, the others must
 # draw exactly the ERROR their MANIFEST line names.
-nfix=0
+nfix=0; nmal=0; nok=0; nuns=0
 while IFS=$'\t' read -r file dir type expect note; do
   case "$file" in ''|'#'*) continue ;; esac
   [ "$dir" = c2s ] || continue
@@ -191,9 +191,31 @@ while IFS=$'\t' read -r file dir type expect note; do
     # got wrong.
     ok) [ "$code" != 1 ] || fail "V4: $file ($note): a valid message was refused as malformed: $out" ;;
   esac
+  case "$expect" in
+    malformed) nmal=$((nmal + 1)) ;;
+    unsupported) nuns=$((nuns + 1)) ;;
+    ok) nok=$((nok + 1)) ;;
+  esac
   nfix=$((nfix + 1))
 done < ephsrv/conformance/MANIFEST.tsv
-[ "$nfix" -ge 30 ] || fail "V4: only $nfix client fixtures were sent"
+# EXACT, AND PER CATEGORY. This was `-ge 30`, a floor set when the corpus
+# was about that size; it had grown to 72 and nobody moved the floor, so
+# 42 of the 72 fixtures -- 58% -- could have stopped being sent with this
+# still reporting a pass. The loop's denominator is the MANIFEST, which is
+# also the thing it is grading: drop rows, or change the `c2s` or type
+# column that filters them, and the loop simply goes round fewer times.
+#
+# Per category rather than one total, because a total cannot see a fixture
+# being RE-LABELLED. All nine `unsupported` rows becoming `ok` leaves 72
+# intact while replacing nine assertions of "ERROR 11 exactly" with nine
+# of "anything but ERROR 1" -- a strictly weaker gate, invisible to a
+# count of the whole.
+#
+# These four numbers are declared here and the manifest is read there, so
+# they cannot narrow together. Adding fixtures means changing this line in
+# the same commit, which is the point.
+[ "$nfix" -eq 72 ] && [ "$nmal" -eq 43 ] && [ "$nok" -eq 20 ] && [ "$nuns" -eq 9 ] ||
+  fail "V4: sent $nfix client fixtures ($nmal malformed, $nok ok, $nuns unsupported), expected 72 (43/20/9) -- rows were lost from MANIFEST.tsv, re-labelled, or filtered out by the dir/type columns"
 alive "$A" || { echo "ROBUST FAIL: V4: the server died on a conformance fixture"; exit 1; }
 $CLI --port "$PORT" --objs 10 --count 1 --quiet || fail "V4: not answering after the fixtures"
 
