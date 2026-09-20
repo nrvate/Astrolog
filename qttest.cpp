@@ -18026,6 +18026,7 @@ static void TestHorizonsQt()
   PT3R pt[3];
   FILE *file;
   int i, cCase = (int)(sizeof(rghorizonsQt)/sizeof(HORIZONSCASE)), cFix = 0;
+  int cRow = 0, cUrl = 0;
 
   // The builder is deterministic and takes no globals, so this half runs
   // with or without a recorded corpus: the same case must give the same
@@ -18119,10 +18120,12 @@ static void TestHorizonsQt()
     char *pchName, *pchUrl;
     if (szLine[0] == '#' || szLine[0] == chNull)
       continue;
+    cRow++;
     pchName = szLine;
     pchUrl = (char *)strstr(szLine, "https://");
     if (pchUrl == NULL)
       continue;
+    cUrl++;
     for (i = 0; pchUrl[i] && pchUrl[i] != '\n' && pchUrl[i] != '\r'; i++)
       ;
     pchUrl[i] = chNull;
@@ -18142,6 +18145,27 @@ static void TestHorizonsQt()
   }
   fclose(file);
   Check(cFix > 0, "the recorded corpus has at least one reply in it");
+  // The URL comparison above is the assertion that keeps the corpus
+  // honest -- and it could be skipped to ZERO in silence. A row with no
+  // "https://" in it is passed over by the reader, so a manifest whose
+  // shape drifted (a column dropped, the URL moved, the file rewritten
+  // by a newer fetcher) would compare nothing at all and this group
+  // would pass, reporting a corpus it had never checked. cFix counts
+  // FILES; nothing counted ROWS.
+  //
+  // Reported by the Prometheia project, who found the identical shape in
+  // a reader of their own COMMITTED star catalogue: a regex that matched
+  // fewer records let the star set shrink and the leg reported the
+  // remainder as the catalogue. Committed and deterministic bought
+  // nothing, because the question was never whether the file changed --
+  // it was whether the reader still understood it.
+  Check(cRow > 0 && cUrl == cRow,
+    "every manifest row carried a URL and was compared (%d of %d rows); "
+    "a reader that silently skips rows checks nothing and passes",
+    cUrl, cRow);
+  Check(cRow == cCase,
+    "the manifest has one row per case the corpus defines (%d rows, %d "
+    "cases)", cRow, cCase);
 
   // Body centre against system barycentre, measured rather than reasoned
   // about. ephswiss.h maps NAIF x99 to SE_MARS+n PLUS SEFLG_CENTER_BODY
