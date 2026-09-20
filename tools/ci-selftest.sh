@@ -199,6 +199,21 @@ else
   skip "green: SELFTEST_ONLINE=1 to run the gh-backed case"
 fi
 
+# The ephemeris gates' own selftests. These are not ci-*.sh scripts and were
+# outside this file's remit until 2026-09-20, which is how ephsrv-soak.sh's
+# --selftest came to be written, documented, and then RUN BY NOTHING -- the
+# same shape as the prose falsifications it was written to replace, one level
+# up. Only the ones that need no server belong here; the rest are named below
+# so the gap is visible rather than assumed.
+if [ -x tools/ephsrv-cache.sh ]; then
+  expect 0 "ephsrv-cache: the cache gate's own decisions" tools/ephsrv-cache.sh --selftest
+else
+  skip "ephsrv-cache: not present"
+fi
+# ephsrv-soak.sh --selftest is NOT here on purpose: it starts a real server
+# and takes a minute, and trebling the pre-commit command is how a check
+# stops being run (CLAUDE.md). It is a by-hand gate like the other nine.
+
 echo "== $n cases, $skipped skipped"
 [ "$fail" -eq 0 ] || { echo "SELFTEST FAILED: a CI assertion script accepted input it must refuse (or refused good input)"; exit 1; }
 echo "selftest clean: every assertion script refuses what it must"

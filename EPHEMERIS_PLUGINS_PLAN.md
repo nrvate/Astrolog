@@ -60,14 +60,26 @@ version 3, and this section is the design authority behind it.
   leg of one gate; the other nine `ephsrv-*.sh` scripts still carry their
   falsification as prose.
 
-  **First bite taken out of that, 2026-09-20 (work-log item 27):**
+  **First bites taken out of that, 2026-09-20 (work-log items 27, 28):**
   `ephsrv-golden.sh` reported how many comparisons it made and asserted
   nothing about the number, so a leg that stopped running printed PASS
   with a smaller count. It asserts 161 exactly now, sabotage-proven.
   The other eight were swept for the same shape and are clean -- they
-  are fail-fast rather than tallied, which rots red. That leaves the
-  real gap where it was: **eight gates with no runnable injection at
-  all.**
+  are fail-fast rather than tallied, which rots red.
+
+  Then `ephsrv-cache.sh --selftest`, the first gate to grade its own
+  decisions: a control and eight injections over crafted log lines, no
+  server, about a second, and it found two holes in its first run (a
+  `sed` that returned the whole log line when a field was missing, and
+  an `expect` that could grade the previous request). **`make check`
+  runs it**, via `tools/ci-selftest.sh` -- which is where the free
+  finding came from: `ephsrv-soak.sh --selftest`, written the day
+  before, was run by nothing at all.
+
+  **Seven gates still have no runnable injection**: `-bench`, `-image`,
+  `-limits`, `-ops`, `-rates`, `-robust`, `-tls`. `-rates` is the one to
+  take next -- it grades an agreement, which is the family that passes
+  hardest when neither side arrived.
 
 - **Superseded (2026-09-20). Phase 6h steps 1, 2 and most of 3 landed;
   the routing was still inline at this point.**
@@ -317,11 +329,14 @@ version 3, and this section is the design authority behind it.
   on 2026-09-20 -- six here, four there -- was caught by someone deciding
   to distrust a green, not by anything structural. `--selftest` narrows
   it for one leg of one gate. The other nine `ephsrv-*.sh` gates still
-  carry their falsification as prose -- eight of them as of 2026-09-20,
-  when `ephsrv-golden.sh` gained an assertion on its own comparison
-  count (work-log item 27). That one was the cheap axis: a number the
-  gate reported and never checked. The expensive axis, a runnable
-  injection per assertion, is still undone everywhere but `-soak.sh`.
+  carry their falsification as prose -- **seven** of them as of
+  2026-09-20, when `ephsrv-golden.sh` gained an assertion on its own
+  comparison count (item 27, the cheap axis: a number the gate reported
+  and never checked) and `ephsrv-cache.sh` gained a full `--selftest`
+  (item 28, the expensive one). Item 28 also found that soak's own
+  selftest was wired into no runner, so "narrows it for one leg of one
+  gate" had been overstating even that. `tools/ci-selftest.sh` runs the
+  cache selftest now.
 
   **`ephsrv-soak.sh` has a memory leg now (e), because nothing here
   watched memory at all** -- the fd bound was the only resource this
@@ -3261,6 +3276,56 @@ instructions for a human to copy is the thing this direction exists to stop.
      bug into their own `corrapplied.py` and caught it by fault
      injection rather than by trusting the green. The symptom to grep
      for in any existing leg is a column of suspiciously exact zeros.
+
+28. **The cache gate grades itself now, and it found two holes in the
+   first run (2026-09-20).** The expensive axis, on the first gate: a
+   runnable `--selftest` rather than a paragraph saying it was falsified
+   once. `tools/ephsrv-cache.sh --selftest` runs the gate's OWN
+   decisions -- `expect`, `field_of`, `f32_is_rounded_copy` -- against
+   crafted log lines, with no server and no compiler, in about a second.
+   One control and eight injections, each required to red its own
+   assertion.
+
+   **Two real holes, neither of them one the author had thought of**,
+   which is the whole argument for the method over prose:
+
+   - **`kib_of`/`entries_of`/`evictions_of` were bare substitutions**
+     (`sed -E 's/.* cache_kib=([0-9.]+).*/\1/'`), and sed prints the
+     line UNCHANGED when it does not match. A log that stopped carrying
+     a field therefore handed the WHOLE LOG LINE downstream as if it
+     were a number. What happened next was luck, and it was measured
+     rather than assumed: the KiB cap compares in awk and failed; the
+     eviction count hit bash's "integer expression expected" and
+     failed; but the oversize check is `[ "$(entries_of)" = "$before" ]`
+     -- two whole log lines compared as TEXT -- and those are unequal
+     **only because their timestamps differ**. Take the timestamps out
+     of the format and that check reports "oversize window was not
+     stored" having measured nothing. Now one `field_of` that fails
+     loudly on a missing field.
+   - **`expect` never required that a new line had appeared.** It read
+     `grep " evt=req " | tail -1`, so a request the server never logged
+     was graded on the PREVIOUS request's line: green, about the wrong
+     request. The server's own logging is race-free on purpose (it
+     writes the line before the last chunk, one `fwrite`+`fflush` under
+     `flockfile` -- both checked in `eph_srv.cpp` before concluding
+     anything), so the hole is not a race but a request that logs
+     nothing at all. `nSeen` now requires the count to move.
+
+   **Falsified by restoring each defect**, inside the shipping script
+   rather than a copy: the old `sed` reds exactly the two `field_of`
+   cases, `if false` in place of the `nSeen` guard reds exactly the
+   stale-line case, and in both runs the control and every other case
+   stay green -- so it is the right assertion reddening and not a
+   blanket failure. Reverse-patched. The full gate then passes against a
+   live server, which is what says the new guard is not merely strict.
+
+   **And the finding that came free: `ephsrv-soak.sh --selftest` was run
+   by nothing.** Written 2026-09-19, documented, wired into no runner --
+   the exact rot it was built to replace, one level up. A rule existing
+   is not a rule running. `tools/ci-selftest.sh` now runs the cache one
+   (serverless, ~1 s, so `make check` carries it); soak's starts a real
+   server and takes a minute, so it stays a by-hand gate and this says
+   so out loud rather than leaving it to be rediscovered.
 
 27. **The golden gate counted nothing (2026-09-20).** The first of the
    nine gates that carry their falsification as prose, taken on the

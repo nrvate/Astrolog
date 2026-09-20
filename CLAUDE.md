@@ -618,10 +618,14 @@ python3 tools/vcxproj_audit.py       # Astrolog.vcxproj lists exactly the
 `make check` runs all seventeen, plus a set of assertions that are scripts
 rather than workflow steps so they can be falsified in a second instead
 of by pushing. Since 2026-09-05 `tools/ci-selftest.sh` feeds each of them
-input it must refuse and, where cheap, input it must accept -- 49 cases,
-run by the release lane -- so the falsification is a check rather than
-a memory. They are worth knowing about because several are
-useful by hand:
+input it must refuse and, where cheap, input it must accept -- it prints
+its own count, which was 49 when this was written and grows, and the
+number that matters is "selftest clean" -- so the falsification is a
+check rather than a memory. Since 2026-09-20 it also runs
+`tools/ephsrv-cache.sh --selftest`, the one ephemeris-gate selftest that
+needs no server: `ephsrv-soak.sh --selftest` was written the day before
+and was run **by nothing**, which is the same rot one level up. They are
+worth knowing about because several are useful by hand:
 
 ```sh
 tools/w-switch-arity.sh ./astrolog            # every "-W" spelling's
