@@ -833,6 +833,33 @@ the two engines differ on every rate column by construction, and §3.5's text
 does not say which is meant — see §2.7. One sentence closes all four columns
 at once, which is why it should be general and not about distance.
 
+**And the distance bound has ONE KNOWN OUTLIER, recorded rather than
+swallowed (2026-09-20).** We advertise `ratesAuPerDay = 4e-3`, which covers
+our own worst row (Aldebaran, 1.5154e-3). The Prometheia project's grid,
+which is deliberately not ours, found a row ours does not reach:
+
+| row | measured |
+|---|---|
+| **Polaris, topocentric Quito, JD 2415020.5 (1900)** | **7.4824e-3 AU/day — over the bound by 1.87×** |
+| Polaris, topocentric Quito, JD 2461300.5 | 6.7003e-4 (11× smaller) |
+| Vega, geocentric, 2100 | 5.8895e-4 |
+
+It is the same two axes their grid has beaten ours on three times now —
+**Quito and 1900, not the object list.** Polaris seen from the equator sits on
+the horizon, and whatever the topocentric transform does at the horizon for an
+object at 2.7e7 AU spikes there and nowhere else.
+
+**The bound stays at 4e-3 anyway, and that is a decision rather than an
+oversight.** Covering 7.48e-3 with the 2–3× headroom the two projects agreed
+on means ~2e-2 AU/day — three million km a day — advertised as a promise about
+a distance column, which describes nothing. The sequence 1e-4 → 2e-4 → 4e-3 →
+2e-2 is not converging on a truth; it is measuring how far two grids happen to
+reach. **An advertised bound with one documented outlier is more honest than a
+bound chosen to swallow it.** Their row is at `docs/crosstest/2026-09-20-ratesweep-theirs-fixed.tsv`
+in their `db6ab56`. This is entangled with §3.5a's unmeetable 1e-6 AU/day for
+stars (open item 5b): if a star's distance column becomes nominal, the outlier
+and the bound both stop being about stars at all.
+
 ### 2.9 The Moon's named points ignore a topocentric site — up to a degree, FIXED
 
 `SE_TRUE_NODE`, `SE_MEAN_APOG`, `SE_OSCU_APOG` and `SE_INTP_APOG` are

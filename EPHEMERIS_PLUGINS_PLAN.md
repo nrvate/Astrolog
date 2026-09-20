@@ -13,13 +13,60 @@ version 3, and this section is the design authority behind it.
 
 ## Status — how to pick this back up
 
-- **START HERE (2026-09-20). The accuracy work is at a clean stop and
-  every open item but one is closed. THE ONE LEFT IS PHASE 6h, and it was
-  deliberately saved for a fresh session — this one.**
+- **START HERE (2026-09-20, later). Phase 6h steps 1 and 2 are LANDED
+  (`df8a565`). Step 3 — `ephhorizons.cpp` itself — is what is left, and
+  it is the additive one.**
+
+  Step 2 was the whole of 6h's risk and it is spent. What landed:
+
+  - **`EPHCAPS` has `fGeoUncorrected`**, and `FEphGeoUncorrected()`
+    (`ephem.cpp`) reads it. `ComputeEphem()` used to ask "is the chain's
+    head spelled `horizons`" five separate times, each phrased in the
+    negative. It asks the capability once now.
+  - **`EphEmulateGeoRows()` (`calc.cpp`) is the re-centring**, host-owned,
+    over the whole row set after the loop. Inside the per-object loop it
+    worked only because `i` ascends with `oEar < oSun`; that is now stated
+    rather than relied on, which is what lets a plugin answer rows in any
+    order — what `FRead()` over a remote source actually does.
+  - **`EPHGEOROWS` moved to `ephem.h`** so the suite can drive the
+    emulation with no cast and no network.
+
+  **The transitional clause to delete in step 3** is the last line of
+  `FEphGeoUncorrected()`: `return FEqSz(sz, "horizons");`. It exists only
+  because the key resolves to no registered source yet. Register
+  `ephsrcHorizons` with `fGeoUncorrected` set, drop the key from
+  `rgszEphSrcFuture[]` in `ephem.cpp`, and that line goes — the suite's
+  own check (`the horizons chain head declares rows that are geocentric
+  and light-time-uncorrected`) keeps answering either way, which is why
+  it tests the capability and not the text.
+
+  **How step 2 was verified, because the obvious gate cannot see it.**
+  All four matrices are byte-identical against a baseline at `21eaee2` —
+  and they would have been byte-identical against a rewrite of the whole
+  emulation too, because **not one of the four reaches the network.** The
+  real net is `TestHorizonsEmulationQt()` in `qttest.cpp`: it drives the
+  recorded 1990 corpus through `EphEmulateGeoRows()` and requires
+  agreement with a heliocentric Swiss cast of the same instant. Measured
+  Venus 0.273′, Mars 0.211′, band 2′; the raw geocentric rows sit ~52°
+  away, which is what makes the band mean something.
+
+  **And the sixth gate blind to its own subject was caught here**, by
+  sabotage rather than by shipping. The first version of that net left
+  the Swiss cast's correct heliocentric Earth in `space[oEar]`, so
+  **deleting the Earth arm entirely still passed** — the state that arm
+  produces was already present. In a real Horizons cast the Earth is
+  skipped outright (JPL refuses it as degenerate; `earth-1990` in the
+  corpus is that refusal), so the test poisons `space[oEar]` first. With
+  the poison in place, dropping the Earth arm gives 3242′ and dropping
+  the re-centring gives 3109′.
+
+- **Superseded (2026-09-20, earlier): the accuracy work is at a clean
+  stop and every open item but one is closed.**
 
   **Read `### PHASE 6h` below and work-log item 22, in that order.** Item
   22 is the specification and its `calc.cpp` line references were
-  re-verified on 2026-09-19. Nothing else in this plan is queued.
+  re-verified on 2026-09-19. Steps 1 and 2 of it are now done; step 3's
+  text there still stands.
 
   **Before touching anything: take a baseline binary.** `git worktree add`
   at HEAD, build `./astrolog-base`, and require all four matrices
@@ -400,7 +447,7 @@ version 3, and this section is the design authority behind it.
   | 6e the required-server dialog, its ladder and exit 86 deleted | landed `05a0c21` |
   | 6f the console transport (`eph_wsclient.cpp`'s framing, reusable) | **DECLINED 2026-09-18 by the maintainer.** Not an omission: Qt is the shipped interface on every platform, and the console build is the CLI and the matrices' oracle, where nobody has asked to reach a remote ephemeris. The extraction cost is real -- the framing is in a PROGRAM, not a library, and ten gate scripts drive that program |
   | 6g the WinHTTP transport (Win32) | **DECLINED 2026-09-18 by the maintainer**, same reasoning, and it additionally needs a Windows runner to test, which is the slowest loop in this project |
-  | 6h the `horizons` plugin | **DEFERRED by the maintainer 2026-09-19 -- not declined, and not started.** The seam, the recorded corpus and the offline replay harness are landed (work-log item 22), and the rewrite is specified there in three steps, with a pickup checklist for a fresh session. It buys the chain, the fallback and provenance rather than function: `GetJPLHorizons()` already casts charts, with the one-minute error fixed. Its real content is a refactor of `ComputeEphem()`'s core, so it wants a baseline binary and the four matrices, not the end of a long session. Four defects were found getting here, one a one-minute error in every position Horizons has ever returned |
+  | 6h the `horizons` plugin | **STEPS 1-2 LANDED 2026-09-20 (`df8a565`); step 3 is what remains.** The capability (`EPHCAPS fGeoUncorrected`) and the host-owned re-centring (`EphEmulateGeoRows()`) are in, with an offline net over the recorded corpus and both arms sabotage-proven; the four matrices cannot see any of it, which is recorded in the Status block above. What is left is the plugin itself: one request per body, three instants each, `ephErrOutsideCover` per object from the recorded boundaries, Earth never asked for. Previously: **DEFERRED by the maintainer 2026-09-19 -- not declined, and not started.** The seam, the recorded corpus and the offline replay harness are landed (work-log item 22), and the rewrite is specified there in three steps, with a pickup checklist for a fresh session. It buys the chain, the fallback and provenance rather than function: `GetJPLHorizons()` already casts charts, with the one-minute error fixed. Its real content is a refactor of `ComputeEphem()`'s core, so it wants a baseline binary and the four matrices, not the end of a long session. Four defects were found getting here, one a one-minute error in every position Horizons has ever returned |
 
   Phase 8's three reviews are done and their thirteen findings fixed
   (work-log items 19-21). **Nothing else on this branch is implementable
