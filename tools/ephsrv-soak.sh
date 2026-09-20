@@ -220,6 +220,25 @@ for ast in range(n):
     f = os.path.join(d, "se%05d.se1" % ast)
     os.symlink(real, f)
 EOF
+# THE FARM'S SIZE IS ASSERTED, not just printed. This script named
+# FARM_N three times -- building it, reporting startup, and in the PASS
+# line -- and never once counted what landed. "Startup is O(1) with
+# 100000 files" is a claim about 100000 files only if they exist; against
+# a farm that half-built it is a green measuring nothing, and every leg
+# below inherits that.
+#
+# The Prometheia project found the same shape in a script they wrote to
+# check for this very thing: it reported "seven of eight cases, no
+# duplicates". The answer was right, and a scan that MISSES a case prints
+# exactly what a clean table prints. A number a check reports is a number
+# the check should assert.
+#
+# The harness walking the farm is not the server doing it: leg (b) traces
+# the server alone, so this costs that assertion nothing.
+FARM_BUILT=$(find "$FARM" -name 'se[0-9]*.se1' | wc -l)
+[ "$FARM_BUILT" = "$FARM_N" ] \
+  || { echo "SOAK FAIL: the farm holds $FARM_BUILT asteroid files, not $FARM_N -- every claim below would be about a farm that was not built"; exit 1; }
+
 # The main files, so the farm is an ephemeris directory in its own right.
 # The server's --ephe is the whole search path since 2026-09-16; before
 # that a farm without them borrowed ./ephem's through the fallback, which
