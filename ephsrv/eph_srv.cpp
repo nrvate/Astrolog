@@ -47,6 +47,12 @@ extern "C" {
 #define EPHSID_FORK
 #include "ephsidplane.h"
 #include "ephstarorb.h"
+// A mean node or apsis's rates: registry 1.5. The stencil was written out
+// here first and duplicated into Astrolog's calc.cpp eighteen hours later --
+// except it was not duplicated, it was simply missing there, which is how the
+// server and the application came to answer different numbers for the same
+// node. The arithmetic lives in one place now.
+#include "ephnodrate.h"
 
 #include <openssl/err.h>
 #include <openssl/pem.h>
@@ -1205,6 +1211,40 @@ static SidPlaneReq PrepareSidPlane(swe_ctx *ctx, const eph::swiss::SwissCall &c)
 // Called once per block of rows, so the per-object Swiss settings are applied
 // again on every entry: the context is the loop's, and another object -- or
 // another request's -- block ran on it in between.
+// What EphNodRateDiff() needs to re-ask this server for the same point at an
+// offset instant: registry 1.5. Everything here is the answered row's own --
+// same body, same point, same flags, same frame rotation, same UT-or-ET
+// choice -- or the difference would be of two different quantities.
+struct SrvNodRate {
+  swe_ctx *ctx;
+  double jdUt, jdEt;
+  int32_t ipl, iflagNode, iflagBody, nodMethod, point;
+  bool fUt, fFixedFrame;
+};
+
+// One stencil point. Returns 0 if Swiss will not answer there, which abandons
+// the differencing and leaves Swiss's own rates on the row -- see the header:
+// this happens at an ephemeris file's edge, not never.
+static int FSrvNodRatePoint(void *pv, double dj, double *xx) {
+  SrvNodRate *p = (SrvNodRate *)pv;
+  double yn[6], yd[6], yp[6], ya[6];
+  char serrD[AS_MAXCH];
+  const int32_t r = p->fUt
+    ? swe_nod_aps_ut_r(p->ctx, p->jdUt + dj, p->ipl, p->iflagNode,
+                       p->nodMethod, yn, yd, yp, ya, serrD)
+    : swe_nod_aps_r(p->ctx, p->jdEt + dj, p->ipl, p->iflagNode,
+                    p->nodMethod, yn, yd, yp, ya, serrD);
+  if (r < 0) return 0;
+  {
+    const double *py = p->point == 0 ? yn : p->point == 1 ? yd :
+                       p->point == 2 ? yp : ya;
+    memcpy(xx, py, 6 * sizeof(double));
+  }
+  if (p->fFixedFrame)
+    RotateNodeToFixedFrame(p->ctx, p->jdEt + dj, p->iflagBody, xx);
+  return 1;
+}
+
 static void ComputeObjectRows(swe_ctx *ctx, const eph::Request &req, uint32_t iObj,
                               eph::CacheEntry *e, ObjPrep *prep, uint32_t row0,
                               uint32_t rows) {
@@ -1354,45 +1394,15 @@ static void ComputeObjectRows(swe_ctx *ctx, const eph::Request &req, uint32_t iO
         // independent check is the cross-test against an engine that does not
         // difference.
         if (ret >= 0 && pf.speeds && c.nodMethod == SE_NODBIT_MEAN) {
-          const double h = 1.0 / 1024.0;
-          double v[4][6];
-          int k, kk;
-          bool fOk = true;
-          for (k = 0; k < 4 && fOk; k++) {
-            const double dj = (k < 2 ? -2.0 + (double)k : (double)k - 1.0) * h;
-            double yn[6], yd[6], yp[6], ya[6];
-            char serrD[AS_MAXCH];
-            const int32_t r = c.fUT && !fDtGiven
-              ? swe_nod_aps_ut_r(ctx, jd + dj, c.ipl, iflagNode, c.nodMethod,
-                                 yn, yd, yp, ya, serrD)
-              : swe_nod_aps_r(ctx, jdEt() + dj, c.ipl, iflagNode, c.nodMethod,
-                              yn, yd, yp, ya, serrD);
-            if (r < 0) { fOk = false; break; }
-            const double *py = c.point == 0 ? yn : c.point == 1 ? yd :
-                               c.point == 2 ? yp : ya;
-            memcpy(v[k], py, sizeof(v[k]));
-            if (fFixedFrame)
-              RotateNodeToFixedFrame(ctx, jdEt() + dj, iflagBody, v[k]);
-          }
-          // A stencil point that will not compute -- at an ephemeris edge --
-          // leaves Swiss's rates alone rather than inventing one from fewer
-          // points. The row is still answered.
-          if (fOk) {
-            const double half = (iflagBody & SEFLG_RADIANS) ? PI : 180.0;
-            for (kk = 0; kk < 3; kk++) {
-              double a = v[0][kk], b = v[1][kk], d = v[2][kk], e = v[3][kk];
-              if (kk == 0 && !(iflagBody & SEFLG_XYZ)) {
-                // The wrap, on the ONE column that has one.
-                while (b - a >  half) b -= 2.0 * half;
-                while (b - a < -half) b += 2.0 * half;
-                while (d - b >  half) d -= 2.0 * half;
-                while (d - b < -half) d += 2.0 * half;
-                while (e - d >  half) e -= 2.0 * half;
-                while (e - d < -half) e += 2.0 * half;
-              }
-              xx[kk + 3] = (a - 8.0 * b + 8.0 * d - e) / (12.0 * h);
-            }
-          }
+          SrvNodRate snr;
+          snr.ctx = ctx;
+          snr.jdUt = jd; snr.jdEt = jdEt();
+          snr.ipl = c.ipl; snr.iflagNode = iflagNode; snr.iflagBody = iflagBody;
+          snr.nodMethod = c.nodMethod; snr.point = c.point;
+          snr.fUt = c.fUT && !fDtGiven;
+          snr.fFixedFrame = fFixedFrame;
+          EphNodRateDiff(&FSrvNodRatePoint, &snr, xx,
+            (iflagBody & SEFLG_RADIANS) != 0, (iflagBody & SEFLG_XYZ) != 0);
         }
         break;
       }
