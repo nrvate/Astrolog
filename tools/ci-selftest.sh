@@ -210,6 +210,11 @@ if [ -x tools/ephsrv-cache.sh ]; then
 else
   skip "ephsrv-cache: not present"
 fi
+if [ -x tools/ephsrv-rates.sh ]; then
+  expect 0 "ephsrv-rates: the three rate legs' own decisions" tools/ephsrv-rates.sh --selftest
+else
+  skip "ephsrv-rates: not present"
+fi
 # ephsrv-soak.sh --selftest is NOT here on purpose: it starts a real server
 # and takes a minute, and trebling the pre-commit command is how a check
 # stops being run (CLAUDE.md). It is a by-hand gate like the other nine.

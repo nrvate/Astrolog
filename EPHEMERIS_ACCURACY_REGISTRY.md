@@ -982,6 +982,54 @@ worst 7.93e-2. Our own sweep's worst, the topocentric osculating node at
 list. **A bound is only as wide as the object list that measured it**, which
 this project had said and was still getting wrong.
 
+### 2.10 A fixed star's distance rate is unstable within days of an ephemeris file's start — 7.9e-3 AU/day
+
+**Not a divergence and not ours: it is a MEASUREMENT trap**, recorded here
+because it is the one that made a gate's bound five times too wide, and the
+next sweep either side runs will step in it the same way.
+
+At **JD 2378500.5** — about five days inside `sepl_18`'s start — Swiss's
+reported distance rate for **Polaris** is `7.32288e-05` AU/day, while a
+five-point central difference of the distances Swiss answers over
+±2/1024 day is `-0.0072` AU/day. The miss is **7.9e-3 AU/day**, twice the
+4e-3 the server advertises on A.3 0x0013 and 130× its next-worst object.
+
+**What says it is the measurement and not the server:**
+
+- `swe_fixstar2_r` called directly, outside `astrolog-ephd`, against the
+  same fork and the same files, returns `7.32288e-05` **bit for bit**. The
+  server relays Swiss faithfully; there is nothing here to fix in it.
+- The three observers **disagree with each other**: `7.3e-05` geocentric,
+  `-0.0151` at Zurich, `-0.0070` at Quito. A topocentric correction to a
+  star at 2.7e7 AU cannot be more than a whisper, so these cannot all be
+  answers to the question asked.
+- The **differenced** values agree across all three observers to three
+  figures (`-0.00722`, `-0.00721`, `-0.00720`), which is what should
+  happen. So it is the reported rate that is unstable, not the positions.
+- It is **not a boundary ramp**. 2378497.5 gives `-0.00804` and 2378505.5
+  gives `-0.00679`, both ordinary; the anomaly is isolated instants
+  (2378500.50, 2378502.25, 2378503.50, 2378512.50 in a 20-day sweep).
+
+`BuildWelcome()`'s own bound comment already names the mechanism for
+bodies — near a file's edge "Swiss falls back to Moshier for some points
+and not others, still returning success" — and required every point of a
+stencil to come from one ephemeris. **Fixed stars need an observer
+position too**, so they inherit that hazard and nothing was excluding them.
+
+*Consequence:* `tools/ephsrv-rates.sh` samples 1800 at **2378600.5**, about
+100 days in, not at the first instant that answers. At 2378600.5 the grid
+grades 330 of 330 object-series and its worst is 1.7e-3 °/day and
+1.5e-3 AU/day, inside the advertisement. Choosing 2378500.5 instead would
+have forced the AU/day bound from 4e-3 to something above 7.9e-3 — widening
+a promise to a client on the strength of an artifact.
+
+*Found by:* fixing the same gate's dead 1800 epoch (it had been asking for
+2378496.5, outside coverage, and grading 64 of 330 series at nothing). The
+first epoch that answered was the trap; the second question — *is this
+number believable?* — is what caught it. See [§2.7](#27) and
+[§2.8](#28), which are the same "the rate is not the derivative of what was
+answered" family, and §2.4's fourth prerequisite on grading a magnitude.
+
 ## 3. Divergences deliberately DECLINED
 
 ### 3.1 The Gaussian constant's truncation

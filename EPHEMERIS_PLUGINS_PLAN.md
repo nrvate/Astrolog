@@ -76,10 +76,16 @@ version 3, and this section is the design authority behind it.
   finding came from: `ephsrv-soak.sh --selftest`, written the day
   before, was run by nothing at all.
 
-  **Seven gates still have no runnable injection**: `-bench`, `-image`,
-  `-limits`, `-ops`, `-rates`, `-robust`, `-tls`. `-rates` is the one to
-  take next -- it grades an agreement, which is the family that passes
-  hardest when neither side arrived.
+  Then `ephsrv-rates.sh --selftest` (item 29), and it was the one that
+  paid: the gate had been asking for an 1800 epoch **outside `sepl_18`'s
+  coverage** and grading 266 of 330 object-series without saying so,
+  while two of its three legs passed outright on an all-error answer.
+  `make check` runs this one too.
+
+  **Six gates still have no runnable injection**: `-bench`, `-image`,
+  `-limits`, `-ops`, `-robust`, `-tls`. `-robust` is the one to take
+  next -- it is the largest, and a gate whose whole subject is hostile
+  input is the one most able to refuse everything and call it a pass.
 
 - **Superseded (2026-09-20). Phase 6h steps 1, 2 and most of 3 landed;
   the routing was still inline at this point.**
@@ -329,14 +335,14 @@ version 3, and this section is the design authority behind it.
   on 2026-09-20 -- six here, four there -- was caught by someone deciding
   to distrust a green, not by anything structural. `--selftest` narrows
   it for one leg of one gate. The other nine `ephsrv-*.sh` gates still
-  carry their falsification as prose -- **seven** of them as of
-  2026-09-20, when `ephsrv-golden.sh` gained an assertion on its own
-  comparison count (item 27, the cheap axis: a number the gate reported
-  and never checked) and `ephsrv-cache.sh` gained a full `--selftest`
-  (item 28, the expensive one). Item 28 also found that soak's own
-  selftest was wired into no runner, so "narrows it for one leg of one
-  gate" had been overstating even that. `tools/ci-selftest.sh` runs the
-  cache selftest now.
+  carry their falsification as prose -- **six** of them as of
+  2026-09-20, after `ephsrv-golden.sh` gained an assertion on its own
+  comparison count (item 27, the cheap axis) and `ephsrv-cache.sh` and
+  `ephsrv-rates.sh` gained full `--selftest` modes (items 28 and 29).
+  Item 28 also found that soak's own selftest was wired into no runner,
+  so "narrows it for one leg of one gate" had been overstating even
+  that. `tools/ci-selftest.sh` runs both new selftests now, so they are
+  checks rather than memories.
 
   **`ephsrv-soak.sh` has a memory leg now (e), because nothing here
   watched memory at all** -- the fd bound was the only resource this
@@ -3276,6 +3282,57 @@ instructions for a human to copy is the thing this direction exists to stop.
      bug into their own `corrapplied.py` and caught it by fault
      injection rather than by trusting the green. The symptom to grep
      for in any existing leg is a column of suspiciously exact zeros.
+
+29. **The rates gate asked for 1800 and graded 266 of 330 without
+   saying so (2026-09-20).** Second gate on the expensive axis, and the
+   one that paid best. Three findings, each a count nobody asserted.
+
+   **The 1800 epoch answered almost nothing.** 2378496.5 sits before
+   `sepl_18`'s start -- `ephsrv-golden.sh` documents the same edge at
+   2378490.5 -- so the server refused it per object: the geocentric file
+   graded **2 series of 22** and both topocentric files graded **zero**.
+   64 of the grid's 330 object-series, every one of them at the epoch
+   the gate's own comment calls "the worst case, not at J2000", and the
+   advertised bound was being taken over the 266 that survived.
+
+   **And the fix was not "the first instant that answers".** 2378500.5
+   grades 22 of 22 and is still the wrong epoch: it is days inside the
+   file, where `BuildWelcome()`'s own bound sweep already documents that
+   Swiss falls back to Moshier for some stencil points and not others
+   while returning success. Measured there, Polaris reports
+   `7.32288e-05` AU/day against `-0.0072` differenced from its own
+   distances, and the three observers disagree with **each other** where
+   a topocentric correction to a star at 2.7e7 AU cannot be more than a
+   whisper -- while the differenced values agree across all three to
+   three figures. `swe_fixstar2_r` outside this server reproduces
+   `7.32288e-05` bit for bit: Swiss's number, faithfully relayed, at an
+   instant no bound should be set from. Taking it at face value would
+   have widened the AU/day advertisement from 4e-3 to over 7.9e-3 on the
+   strength of an artifact. Registry §2.10. 2378600.5 grades 330 of 330,
+   worst 1.7e-3 °/day and 1.5e-3 AU/day, inside what is advertised.
+
+   **Two of the three legs passed on nothing.** Both filter rows on
+   `err == 0`, so an all-error answer left the dictionaries empty, the
+   loops ran zero times and the legs exited 0 -- `leg_zodiac` printing
+   its table header with nothing under it, `leg_bound` reporting
+   "measured 0 deg/day ... the advertisement covers it", a perfect score
+   for no data. Both measured that way before being fixed. They assert
+   8 and 330 now.
+
+   **`--selftest`: 3 controls + 8 injections**, over synthetic rows
+   self-consistent to the last bit, no server, about a second. The three
+   legs are one copy each, called by the run and by the selftest.
+
+   **The control earned its place on the first run**, which is the
+   argument for rule 2 in one line: it failed, and it was right. The
+   "no worst case named" assertion I had just added fired on a *perfect*
+   grid, because `whoA`/`whoR` are empty both when nothing was measured
+   and when nothing was missed. Removed -- `nSeries` is the denominator
+   and is the one that tells those apart.
+
+   Also split the verdict line: "the server misses by more than it
+   advertises" was being printed for an incomplete measurement, which
+   sends a reader to the wrong question entirely.
 
 28. **The cache gate grades itself now, and it found two holes in the
    first run (2026-09-20).** The expensive axis, on the first gate: a
