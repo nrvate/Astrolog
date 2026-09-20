@@ -13,13 +13,18 @@
 #      the farm (FD_TOL slack);
 #   d. an asteroid whose file is absent comes back as a clean per-object
 #      failure -- no rows, an A.17 code and its text -- without killing the
-#      connection.
+#      connection;
+#   e. RSS is bounded by --cache-mb AND the cache is really filling -- two
+#      assertions, because a bound alone is green on a server that caches
+#      nothing.
 #
 # Knobs (env):
 #   FARM_N      asteroid count to synthesize      (default 100000)
 #   STARTUP_MAX startup wall-time bound, seconds  (default 2)
 #   FD_TOL      allowed fd growth over the barrage(default 20)
 #   BARRAGE     requests in the fd barrage         (default 200)
+#   MEM_CAP     cache cap for the memory leg, MB   (default 8)
+#   MEM_N       distinct windows it asks for       (default 300)
 #   KEEP_FARM   set to keep the farm directory
 #
 # Exit 0 with "SOAK PASS"; nonzero with the failed assertion. Re-runnable;
@@ -181,4 +186,62 @@ MISSROWS=$(awk '{print $4}' "$SCRATCH/miss.txt")
   || { echo "SOAK FAIL: missing asteroid returned error $MISSERR with $MISSROWS rows, wanted error 4 and none"; exit 1; }
 echo "missing asteroid: clean per-object failure (error 4, no rows), connection lived"
 
-echo "SOAK PASS: farm of $FARM_N files, startup ${STARTUP_S}s, zero scans, fds stable"
+# e. Memory is bounded by --cache-mb, and the cache is really filling.
+#
+# This leg exists because the Prometheia project's load run watched our RSS
+# climb 29.4 -> 89.4 MB over 30 seconds and could not say whether that was a
+# cache filling or unbounded growth -- it never plateaued inside the run. It
+# was the cache (measured: growth tracks --cache-mb exactly, 8MB cap grows
+# 8MB and flattens by 100 windows, 64MB cap grows 64MB and flattens by 350).
+# But nothing here could have ANSWERED that, because the fd bound above was
+# the only resource this gate watched. A leaking result cache would have
+# passed every gate in this project.
+#
+# TWO assertions, and the pairing is the point. The bound alone is green on
+# a server whose cache stores nothing at all -- the same way an "these two
+# agree" row is green when neither answer arrived. So the growth is required
+# to be REAL as well as bounded.
+#
+# Its own daemon: this needs an unthrottled budget (one 3000-cell window a
+# request would otherwise drain the default 100000-cell bucket in 33
+# requests and then trickle) and a small cap, so it fills in seconds rather
+# than the 56 minutes the shipped defaults would take.
+MEM_CAP=${MEM_CAP:-8}
+MEM_N=${MEM_N:-300}
+MEM_PORT=$((PORT + 1))
+"$ROOT/astrolog-ephd" --bind 127.0.0.1 --port "$MEM_PORT" --threads 1 \
+  --cache-mb "$MEM_CAP" --cells-per-sec 0 --ephe "$ROOT/ephem;$ROOT" \
+  > "$SCRATCH/ephd-mem.log" 2>&1 &
+MEM_PID=$!
+sleep 3
+kill -0 "$MEM_PID" 2>/dev/null \
+  || { echo "SOAK FAIL: the memory leg's daemon did not start"; exit 1; }
+memrss() { awk '/VmRSS/{print $2}' "/proc/$MEM_PID/status" 2>/dev/null; }
+MEM0=$(memrss)
+i=0
+while [ "$i" -lt "$MEM_N" ]; do
+  # DISTINCT windows: every one a miss, so every one is stored.
+  JD=$(awk -v i="$i" 'BEGIN{ printf "%.6f", 2451545.0 + i * 0.37 }')
+  "$ROOT/eph_wsclient" --port "$MEM_PORT" --quiet --jd "$JD" \
+    --step-ns 3600000000000 --count 500 \
+    --objs 10,301,199,299,499,5,6,7,8,9 --out /dev/null > /dev/null 2>&1 || true
+  i=$((i + 1))
+  [ "$i" = "$((MEM_N / 2))" ] && MEMHALF=$(memrss)
+done
+MEM1=$(memrss)
+kill "$MEM_PID" 2>/dev/null || true
+GREW=$(( (MEM1 - MEM0) / 1024 ))
+SETTLE=$(( (MEM1 - MEMHALF) / 1024 ))
+echo "memory: ${GREW}MB growth over $MEM_N distinct windows, cap ${MEM_CAP}MB;" \
+     "${SETTLE}MB more in the second half"
+# Bounded: the cap plus slack for the farm's own working set.
+[ "$GREW" -le "$((MEM_CAP + 12))" ] \
+  || { echo "SOAK FAIL: RSS grew ${GREW}MB against a ${MEM_CAP}MB cache cap -- the result cache is not bounded by it"; exit 1; }
+# Real: a cache that stored nothing would also be "bounded".
+[ "$GREW" -ge "$((MEM_CAP / 2))" ] \
+  || { echo "SOAK FAIL: RSS grew only ${GREW}MB against a ${MEM_CAP}MB cap -- the cache is not filling, so the bound above proves nothing"; exit 1; }
+# Plateaued: the second half must add far less than the first.
+[ "$SETTLE" -le 2 ] \
+  || { echo "SOAK FAIL: RSS rose ${SETTLE}MB in the second half of the run -- it has not plateaued, so this cannot tell a filling cache from a leak"; exit 1; }
+
+echo "SOAK PASS: farm of $FARM_N files, startup ${STARTUP_S}s, zero scans, fds stable, memory bounded by the cache cap"

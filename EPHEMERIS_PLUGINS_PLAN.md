@@ -162,7 +162,44 @@ version 3, and this section is the design authority behind it.
   record's subject. As of 2026-09-20 the spare is
   sha256 `1734d363…`, `mtime` 06:40:45Z, 1,735,488 bytes, pid 3448837.
 
-  **The Prometheia project's load tool (`prometheia-load`) has consent to
+  **The load run happened 2026-09-20 06:41:59Z-06:42:30Z and the server
+  held.** 39,997 answered at 1,333/s, p50 1.26 ms, p99 3.41 ms, zero
+  failures, zero refused upgrades, and **2,463 canary answers graded
+  against our own pre-load answers with none differing** -- the first
+  statement anyone has that our answers do not change under contention.
+  It is a CONSISTENCY check: the baseline is our own idle answer, so a
+  server wrong the same way twice passes it.
+
+  **The limiter matched theirs to one request in twenty thousand.** Our
+  first ten seconds answered 19,999 ten-cell requests -- the
+  100,000-cell bucket's 10,000 plus 10,000 cells a second refilling --
+  then 1,000 and 999 a second. Their own recorded limits run says
+  "exactly 20,000 ten-cell requests ... then 1,000 a second". Two
+  independent implementations of A.3's budget, neither written against
+  the other's numbers, and **no leg covers the limiter** -- every leg is
+  single-client and short-session by construction. It fell out of a run
+  set up to measure something else.
+
+  **RSS 29.4 -> 89.4 MB over those 30 s was the result cache filling, and
+  is now a gate rather than an open question.** They reported it as "not
+  a finding" because a 30-second run cannot tell a filling cache from
+  unbounded growth -- it had not plateaued. Measured here: growth tracks
+  `--cache-mb` exactly. An 8 MB cap grows 8 MB and is flat by 100
+  windows; a 64 MB cap grows 64 MB and is flat by 350, through 900. At
+  the shipped 256 MB default the plateau is ~285 MB.
+
+  **`ephsrv-soak.sh` has a memory leg now (e), because nothing here
+  watched memory at all** -- the fd bound was the only resource this
+  project gated, so a leaking result cache would have passed everything.
+  It asserts TWO things and the pairing is the point: RSS growth is
+  bounded by the cap, **and the cache is really filling**. Sabotage-proven
+  both ways, and the second sabotage is the argument for the first: with
+  `--cache-mb 0` the bound assertion stays GREEN at 0 MB and only the
+  "is it real" assertion catches it. A bound alone passes a server that
+  caches nothing, the same way an agreement row passes two observers that
+  never arrived.
+
+  **The Prometheia project's load tool (`prometheia-load`) had consent to
   run against 47392** -- 16 connections, 30 s, modest, granted 2026-09-20.
   The reasoning, in case it is needed again: 12 cores at load ~1.6, and
   our daemon runs `--threads 2`, so the SERVER side is bounded at two
