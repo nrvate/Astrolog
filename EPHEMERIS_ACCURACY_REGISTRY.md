@@ -1164,13 +1164,30 @@ was true and the title was not: every one of those epochs had been asked at
 | site | ΔT 0 | ΔT 30 | ΔT 69.2 | ΔT 140 |
 |---|---|---|---|---|
 | Quito (−78.47, −0.18, 2850) | **8.244e-03** | 2.965e-04 | 6.700e-04 | 1.537e-04 |
-| Zurich (8.55, 47.37, 500) | 2.345e-04 | 3.578e-05 | 4.634e-04 | **7.587e-03** |
+| Zurich (8.55, 47.37, **500**) | 2.345e-04 | 3.578e-05 | 4.634e-04 | **7.587e-03** |
+| Zurich (8.55, 47.37, **400**) | 1.695e-04 | 3.083e-04 | 7.352e-05 | **7.597e-03** |
 
 So 2026 is over the bound too — and **the two sites go over at different
 ΔT**, one at 0 and one at 140, with 69.2 (the value the earlier sweep used)
 clean at both. The region has more than one instant, it is reachable at
 ΔT 0 which any client may send, and it depends on the site. "A narrow
 region at 1900.0" was an artifact of the axis that sweep held fixed.
+
+**The site is a third scattered axis, not a label on the other two.** The
+two Zurich rows differ only in **100 metres of altitude**, and at ΔT 30
+that moves the miss by a factor of 8.6 — 3.083e-04 against 3.578e-05. Both
+altitudes go over at ΔT 140 and at no other ΔT tried, so the finding itself
+is unmoved; what the pair adds is that a cell's *distance from the bound*
+is sensitive to the site at a scale no observer-geometry argument would
+predict.
+
+Those two rows exist because of a discrepancy that was worth reporting
+though it looked immaterial: this side read 2.345e-04 where the other
+project read 1.695e-04 at ΔT 0, far enough from the bound to change
+nothing. It was **their altitude** — a sweep configured at 500 m and a
+hand check quoted at 400 — and neither side could have seen it alone,
+because from each end the number looked like the other's. Both rows are
+kept rather than the superseded one deleted.
 
 **A tidy explanation was tested and failed, which is why none is offered.**
 The obvious one — that the region is TT in `[epoch, epoch + ΔT/86400]`,
@@ -1215,8 +1232,17 @@ that was exact when written, a count that was the width of a list, a bound
 measured on five bodies and stated about every object — and this one, which
 was *a conclusion* rather than a count, and therefore the most dangerous of
 the four. A count invites the question "how many?". A conclusion does not
-invite anything. The grep is any sentence with "all", "every" or "only" in
-it, read against the axes that were actually swept.
+invite anything.
+
+**And the obvious grep does not catch it, which is the second half.** The
+first version of this paragraph said to search for sentences containing
+"all", "every" or "only". *"The region is at the 1900.0 epoch"* contains
+none of the three and was the worst instance of the four. The quantifier is
+a symptom; the disease is a claim whose scope is wider than the axes it was
+measured on. So the question to ask of a sentence is **not** "does it
+generalise?" but **"which axes were varied to produce this, and which were
+held?"** — and a conclusion that names no axis at all is the one to
+distrust first.
 
 ### 2.12 A fixed star's DISTANCE rate is not the derivative of its own distance — 0.6% to 3.4%, geocentric, every star
 
