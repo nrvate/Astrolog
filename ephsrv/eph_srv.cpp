@@ -3633,8 +3633,41 @@ static void BuildWelcome(const EphDiscovery &disc, const char *szSwe) {
   // every topocentric row, four extra ephemeris calls apiece, which an
   // animation pays on every frame. Recorded and advertised instead.
   c.fRatesBound = true;
+  // HEADROOM, NOT A MEASUREMENT. This number has been wrong twice, both
+  // times because it was set at the edge of whatever sweep happened to
+  // exist: 3e-6 when the sweep was geocentric-only, then 5e-3 when it had
+  // bodies and the Moon's points but no planetary apsides. A bound is a
+  // promise about inputs nobody has tried, so it carries a factor over the
+  // widest thing measured rather than sitting on it. Two sweeps agreeing is
+  // still not a bound -- the other project's sweep found 1.39e-3 at a SITE
+  // and EPOCH ours did not sample, and widening ours to match then measured
+  // 1.73e-3, wider than either had seen.
+  //
+  // Held at 5e-3 deliberately, which is 2.9x the 1.7256e-3 that
+  // tools/ephsrv-rates.sh now measures (the topocentric Moon at Quito in
+  // 2100). Tightening to 3e-3 was proposed and declined: it would have left
+  // 1.7x, and the argument for the 2-3x band is the same argument that says
+  // a third site would probably widen the measurement again.
   c.ratesDegPerDay = 5e-3f;
-  c.ratesAuPerDay = 1e-4f;
+  // RAISED from 1e-4 on 2026-09-19, which is the uncomfortable direction and
+  // is why it is spelt out. The measurement is 7.3345e-5 AU/day (Pluto,
+  // geocentric, 1900), so 1e-4 was 1.4x -- thin for a figure with this
+  // record, and the other project measures a whole cluster of rows pressed
+  // against their equivalent limit. 2e-4 is 2.7x, matching the angle bound's
+  // headroom.
+  //
+  // This is NOT the move of advertising around a defect, which this project
+  // was corrected for on the mean apsides. There is no defect here: the
+  // 7.3e-5 is the light-time term Swiss omits from a distance rate, which is
+  // definitional and is registry 2.7. The bound describes a known,
+  // documented difference; it does not hide an unknown one.
+  //
+  // UNITS ARE ABSOLUTE AU/day, per 3.5a's own "1e-6 AU/day (distance)" and
+  // its worked example of 3e-5 for Uranus. The other project normalises
+  // theirs per AU when comparing, which is a different quantity -- a
+  // distinction worth keeping in view, since the two are a factor of the
+  // body's distance apart and Pluto is 30 of them.
+  c.ratesAuPerDay = 2e-4f;
   for (int i = 0; i < eph::kHypotheticalTokenCount; i++)
     c.hypotheticals.push_back(eph::kHypotheticalTokens[i]);
   eph::Welcome w;

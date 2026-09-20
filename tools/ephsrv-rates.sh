@@ -143,22 +143,44 @@ echo
 echo "== the advertised rates bound covers what the server actually does"
 ./eph_wsclient --host 127.0.0.1 --port "$PORT" --objs 10 --count 1 \
   --out /dev/null > "$SCRATCH/welcome.txt"
-for obs in geo topo; do
+# TWO SITES AND FIVE EPOCHS, and both widenings were paid for in findings.
+#
+# This grid had ONE site (Zurich) and three epochs, and its worst was
+# 8.216e-4 deg/day. The other project's sweep, which has two sites and five
+# epochs, measured 1.3939e-3 on the SAME object by the SAME method -- the
+# topocentric Moon -- at QUITO in 2100. Their four worst rows are all the
+# Moon; three of them are at a site or an epoch this grid did not sample.
+#
+# So the object list had converged and the SAMPLING had not, which is a
+# different axis from the previous time this bound was wrong (that was the
+# object list: bodies and the Moon's points, no planetary apsides). Quito is
+# on the equator at 2,850 m, where the diurnal parallax is largest; 2100 is
+# where delta-T's extrapolation is worst.
+#
+# The lesson is not "add these two" -- it is that a bound is a promise about
+# inputs nobody has tried, so the advertisement carries headroom over the
+# widest thing measured rather than sitting on it. See BuildWelcome().
+for obs in geo topo-zurich topo-quito; do
   # A site is only meaningful for the topocentric observer, and sending one
   # otherwise is ERROR 1 by 3.4 -- which is the server being right.
-  SITE=""
-  [ "$obs" = topo ] && SITE=",site=8.55:47.37:400"
+  case "$obs" in
+    topo-zurich) OBSKIND=topo; SITE=",site=8.55:47.37:400" ;;
+    topo-quito)  OBSKIND=topo; SITE=",site=-78.5:-0.22:2850" ;;
+    *)           OBSKIND=$obs; SITE="" ;;
+  esac
   run_obs() {
     ./eph_wsclient --host 127.0.0.1 --port "$PORT" --quiet \
       --jd "$(python3 -c "print(repr($2 - 2.0/1024.0))")" \
       --step-ns 84375000000 --count 5 \
-      --profile "obs=$1$SITE,plane=ecl,form=sph,speeds=1" \
+      --profile "obs=$OBSKIND$SITE,plane=ecl,form=sph,speeds=1" \
       --objs 10,301,199,299,499,5,6,7,8,9 \
-      --points 301:0:1,301:1:1,4:2:0,5:2:0,199:2:0,4:0:0,199:2:1 \
+      --points 301:0:1,301:1:1,301:3:1,4:2:0,5:2:0,199:2:0,4:0:0,199:2:1 \
       --out "$3" > /dev/null
   }
   # 1800 is in the grid on purpose: the worst case is there, not at J2000.
-  for jd in 2378496.5 2451545.0 2461300.5; do
+  # 1900 and 2100 joined it when the other project's wider sweep found both
+  # outside this one.
+  for jd in 2378496.5 2415020.5 2451545.0 2461300.5 2488069.5; do
     run_obs "$obs" "$jd" "$SCRATCH/b-$obs-$jd.txt"
   done
 done
