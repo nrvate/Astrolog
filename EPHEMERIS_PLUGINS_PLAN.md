@@ -191,12 +191,31 @@ version 3, and this section is the design authority behind it.
      What remains genuinely open is the **local** path: this refereed
      `astrolog-ephd`, not `./astrolog`, and the two read the same
      corrected `sefstars.txt` but reach it by different code.
-  3. **The topocentric lunar node misses by 4.05e-3 deg/day**, which is
-     what the advertised bound is now made of. It is Swiss's topocentric
-     velocity model (registry 2.6) -- the same node geocentrically is
-     9.4e-8. Fixing it means differencing every topocentric row, four
-     extra ephemeris calls apiece, which an animation pays per frame.
-     That is a cost decision, not a permission one.
+  3. **CLOSED 2026-09-19, and the diagnosis was wrong.** This said the
+     topocentric lunar node's 4.05e-3 deg/day was Swiss's topocentric
+     velocity model (registry 2.6) and that fixing it meant differencing
+     every topocentric row -- four extra calls apiece, which an animation
+     pays per frame. A cost decision.
+
+     **It was neither.** It was registry 2.9: Swiss does not serve the
+     Moon's NAMED points topocentrically and does not say so, returning
+     the geocentric position beside a rate that had moved. Routing those
+     to `swe_nod_aps` took it to **3.2e-7 deg/day**, four orders of
+     magnitude, at no per-row cost at all.
+
+     **What made the wrong diagnosis plausible is worth keeping.** The
+     number really was the largest thing in the sweep, registry 2.6 really
+     does describe a topocentric velocity defect of Swiss's, and the two
+     fitted. Nothing in our own grid could separate "Swiss's topocentric
+     rates are poor" from "this point is not topocentric at all" --
+     because both produce a large rate miss, and a rate miss is all that
+     grid measures. The separating question is whether the POSITION moves
+     with the site, which nothing here asked until the other project
+     asked it.
+
+     The residual after the fix is the topocentric Moon *body* at
+     8.2e-4 (now 1.7e-3 at Quito in 2100), and THAT one is genuinely
+     registry 2.6.
   4. **CLOSED 2026-09-19.** `ratesApprox` was set on every object carrying
      speeds, where 3.5a says "the objects concerned" -- over-broad rather
      than wrong, and it cost the flag its meaning. Worse, it was being
