@@ -3826,8 +3826,26 @@ flag FSwissPlanetSpec(int ind, int indCent, SWISSSPEC *pss)
   else if (FBetween(ind, oCer, oVes))
     iobj = ind - oCer + SE_CERES;
   else if (ind == oNod) {
-    if (us.fTrueNode)
+    // The TRUE node through swe_nod_aps when the chart is TOPOCENTRIC, for
+    // the same reason the server does it (ephsrv/ephswiss.h): Swiss does
+    // not serve the Moon's named points topocentrically and does not say
+    // so. Asked with SEFLG_TOPOCTR they return the GEOCENTRIC position
+    // unchanged while the rate columns move, so the position and the speed
+    // beside it describe different observers. Measured on Lilith at two
+    // sites 10,000 km apart, both answered 24Sco57'04" -- identical to each
+    // other and to the geocentric place -- while the latitude rate differed
+    // from the geocentric one and not from each other.
+    //
+    // The error is the lunar parallax, up to about a degree, against the
+    // 0.06 arcsec by which swe_nod_aps's direction differs from the named
+    // body's. GEOCENTRIC CHARTS ARE UNTOUCHED and keep the named body,
+    // whose direction is the better of the two.
+    if (us.fTrueNode && !(us.fTopoPos && !fHelio))
       iobj = SE_TRUE_NODE;
+    else if (us.fTrueNode) {
+      iobj = SE_MOON;
+      nPnt = 1;      // nNodMethod is SE_NODBIT_OSCU from us.fTrueNode below.
+    }
     else {
       // The MEAN node through swe_nod_aps rather than the named
       // SE_MEAN_NODE body, for its DISTANCE. Swiss answers the same
@@ -3858,8 +3876,22 @@ flag FSwissPlanetSpec(int ind, int indCent, SWISSSPEC *pss)
   else if (ind == oSou)
     return fFalse;
   else if (ind == oLil) {
-    iobj = us.fNaturalNode ? SE_INTP_APOG :
-      (us.fTrueNode ? SE_OSCU_APOG : SE_MEAN_APOG);
+    // Lilith likewise, and the same topocentric caveat -- see the node
+    // above. The NATURAL (interpolated) apogee is the one case that cannot
+    // move: swe_nod_aps has SE_NODBIT_MEAN, _OSCU, _OSCU_BAR and _FOCAL and
+    // no interpolated method at all, so there is nowhere else to get it.
+    // A topocentric natural apogee therefore keeps Swiss's answer and stays
+    // wrong by the parallax; EPHEMERIS_ACCURACY_REGISTRY.md 2.9 records it
+    // with its size rather than leaving it to be rediscovered. The server
+    // refuses that combination instead, which it can afford to do because a
+    // protocol has an error code and a chart column does not.
+    if (us.fNaturalNode)
+      iobj = SE_INTP_APOG;
+    else if (us.fTopoPos && !fHelio) {
+      iobj = SE_MOON;
+      nPnt = 4;      // the aphelion/apogee; method from us.fTrueNode below
+    } else
+      iobj = us.fTrueNode ? SE_OSCU_APOG : SE_MEAN_APOG;
   } else if (FCust(ind)) {
     ObjDefGet(ind, &od);
     iobj = od.nObj;

@@ -782,6 +782,67 @@ the two engines differ on every rate column by construction, and §3.5's text
 does not say which is meant — see §2.7. One sentence closes all four columns
 at once, which is why it should be general and not about distance.
 
+### 2.9 The Moon's named points ignore a topocentric site — up to a degree, FIXED
+
+`SE_TRUE_NODE`, `SE_MEAN_APOG`, `SE_OSCU_APOG` and `SE_INTP_APOG` are
+geocentric definitions, and **Swiss does not serve them topocentrically and
+does not say so.** Asked with `SEFLG_TOPOCTR` they return the geocentric
+position *unchanged* while the rate columns move.
+
+Measured at J2000, the osculating apogee from Zurich and from Quito — sites
+10,000 km apart:
+
+| | longitude | dlon |
+|---|---|---|
+| geocentre | 252.99417262479935 | 1.637617849392534 |
+| Zurich | **252.99417262479935** | 1.6792064513889216 |
+| Quito | **252.99417262479935** | 1.6792064513889216 |
+
+The site reaches the rate and not the place — **and the rate it reaches is
+not a function of the site either**, both sites returning the same one. The
+six columns describe no single observer, which §3.5a forbids outright.
+
+The same in Astrolog: Lilith at Seattle and at Quito both answered
+`24Sco57'04"`, identical to the geocentric place, with only the latitude
+rate moving.
+
+**Fixed in both**, 2026-09-19, by falling through to `swe_nod_aps`, which
+honours the site — `ephsrv/ephswiss.h` for the server and `calc.cpp` for the
+application, in one commit. The cost is the **0.06″** by which
+`swe_nod_aps`'s direction differs from the named body's (§1.2), against a
+parallax error of up to about a degree; trading 0.06″ for 3,600″ is not a
+close call. **Geocentric charts are untouched** and keep the named body,
+whose direction an independent engine agrees with to 0.003″, so
+`ephsrv-golden.sh`'s 161 comparisons stay bit-exact.
+
+Topocentric rate misses afterwards, against a central difference of the
+server's own positions: osculating apogee **7.93e-2 → 2.5e-6 °/day**,
+osculating node **4.05e-3 → 3.2e-7**, mean apogee **→ 0.000e+00** (it now
+reaches the differenced path of §1.5). The server's advertised bound is no
+longer set by an orbit point at all: the worst is now the topocentric Moon
+itself at 8.2e-4 °/day, which is §2.6.
+
+**One case is NOT fixed and cannot be**: the **interpolated** apogee.
+`swe_nod_aps` has `SE_NODBIT_MEAN`, `_OSCU`, `_OSCU_BAR` and `_FOCAL` and no
+interpolated method, so there is nowhere correct to send it. The server
+**refuses** the combination; `calc.cpp` keeps Swiss's answer and is wrong by
+the parallax, because a protocol has an error code and a chart column does
+not. A user casting a topocentric chart with the *natural* apogee gets a
+geocentric one.
+
+**Net:** `tools/ephsrv-rates.sh`, `ephsrv/ephproto_test.cpp`'s round trip
+(which asserts the asymmetry rather than identity, both directions counted),
+and two `-YV` legs in `tools/chart-matrix.sh` — **at two places**, because a
+topocentric position is a function of the site and one place cannot
+distinguish "the site is applied" from "the site is ignored".
+
+*Found by:* the Ephemeris Prometheia rate sweep, asking for objects our own
+sweep's list did not contain — eight rows over our advertised 5e-3 °/day,
+worst 7.93e-2. Our own sweep's worst, the topocentric osculating node at
+1800, they reproduced to six digits: the same measurement, a wider object
+list. **A bound is only as wide as the object list that measured it**, which
+this project had said and was still getting wrong.
+
 ## 3. Divergences deliberately DECLINED
 
 ### 3.1 The Gaussian constant's truncation

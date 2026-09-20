@@ -72,6 +72,20 @@ run -b0 -U -s -Ys
 # a different route than it reaches FSwissStar() and the two disagreeing
 # about the origin is the defect that was fixed.
 run -b0 -v -s -Ys
+# TOPOCENTRIC, which nothing here covered either, and which is where the
+# Moon's named points were found answering a geocentric position beside a
+# rate that had moved (registry 2.9). -R1 unrestricts, because Lilith --
+# the lunar apogee, the body the defect was measured on -- is restricted by
+# default and a leg that cannot see it would have passed throughout.
+#
+# The SECOND place is not a duplicate: a topocentric position is a function
+# of the site, so one place cannot distinguish "the site is applied" from
+# "the site is ignored". Quito is 10,000 km from Seattle and near the
+# equator, where the parallax is largest.
+run -YV -R1 -b0 -v
+echo "== -YV -R1 -b0 -v (Quito)"
+env -u DISPLAY timeout 60 $B -n -qa 6 15 1990 12:00 0 78W30 0N13 \
+  -YV -R1 -b0 -v _X </dev/null 2>&1 | sed "s|$T|TMP|g"
 # Relationship charts, which need two chart files rather than two -q blocks.
 for sw in -r -rc -rm -r0 -rt; do
   run $sw "$A" "$C" -v

@@ -391,9 +391,42 @@ int main(int argc, char **argv) {
     Check(MapObject(o, 0, bary2, eph::kTimeTT, eph::CanonicalNaN(), SEFLG_SWIEPH, &c, &why)
               == eph::kOErrUnsupported,
           "the Moon's named point refuses a barycentric observer");
+    // TOPOCENTRIC DOES NOT USE THE NAMED BODIES AT ALL, since 2026-09-19.
+    // Swiss does not serve them topocentrically and does not say so: asked
+    // with SEFLG_TOPOCTR they return the GEOCENTRIC position unchanged while
+    // the rate columns move, so the six columns describe no single observer.
+    // Measured at J2000, the osculating apogee from two sites 10,000 km
+    // apart gave the same longitude as each other and as the geocentre,
+    // with a dlon that differed from geocentric and not between the sites.
+    //
+    // This check used to assert that topocentric "still serves the Moon's
+    // NAMED point", which pinned the defect. What it was protecting is that
+    // topocentric is not swept up in the helio/bary refusal above, so that
+    // is what it asserts now -- through swe_nod_aps, which honours the site.
     eph::Profile topo2; topo2.observer = eph::kObsTopo;
-    Check(MapObject(o, 0, topo2, eph::kTimeTT, eph::CanonicalNaN(), SEFLG_SWIEPH, &c, &why) == 0,
-          "topocentric still serves the Moon's named point");
+    o.point = eph::kPtAscNode; o.method = eph::kMethOsculating;
+    Check(MapObject(o, 0, topo2, eph::kTimeTT, eph::CanonicalNaN(), SEFLG_SWIEPH, &c, &why) == 0 &&
+              c.kind == kCallNodAps && c.ipl == SE_MOON &&
+              c.nodMethod == SE_NODBIT_OSCU && c.point == 0,
+          "topocentric serves the Moon's node through swe_nod_aps, not the named body");
+    o.point = eph::kPtApo; o.method = eph::kMethOsculating;
+    Check(MapObject(o, 0, topo2, eph::kTimeTT, eph::CanonicalNaN(), SEFLG_SWIEPH, &c, &why) == 0 &&
+              c.kind == kCallNodAps && c.ipl == SE_MOON && c.point == 3,
+          "and the apogee likewise");
+    // The INTERPOLATED apogee is the one that cannot move: swe_nod_aps has
+    // MEAN, OSCU, OSCU_BAR and FOCAL and no interpolated method, so there is
+    // nowhere correct to send it. Refused rather than answered wrongly --
+    // a protocol has an error code, which is the difference between this and
+    // calc.cpp, where the same combination keeps Swiss's answer and is
+    // recorded in EPHEMERIS_ACCURACY_REGISTRY.md 2.9 instead.
+    o.point = eph::kPtApo; o.method = eph::kMethInterpolated;
+    Check(MapObject(o, 0, topo2, eph::kTimeTT, eph::CanonicalNaN(), SEFLG_SWIEPH, &c, &why)
+              == eph::kOErrUnsupported,
+          "the interpolated apogee has no topocentric form and is refused");
+    o.point = eph::kPtApo; o.method = eph::kMethInterpolated;
+    Check(MapObject(o, 0, geo, eph::kTimeTT, eph::CanonicalNaN(), SEFLG_SWIEPH, &c, &why) == 0 &&
+              c.ipl == SE_INTP_APOG,
+          "and geocentrically it is still SE_INTP_APOG");
     o.point = eph::kPtAscNode; o.method = eph::kMethOsculating;
     Check(MapObject(o, 1, geo, eph::kTimeTT, eph::CanonicalNaN(), SEFLG_SWIEPH, &c, &why) == 0 &&
               c.kind == kCallNodAps && c.ipl == SE_MOON && c.nodMethod == SE_NODBIT_OSCU && c.point == 0,
@@ -513,6 +546,7 @@ int main(int argc, char **argv) {
     const int32_t rgsid[] = {SE_SIDM_FAGAN_BRADLEY, SE_SIDBIT_SSY_PLANE, SE_SIDM_LAHIRI | SE_SIDBIT_ECL_T0};
     const double topo[3] = {-122.3, 47.6, 12.0};
     int cBad = 0, cTried = 0, cExcept = 0, cLunarRefused = 0, cLunarLeak = 0;
+    int cLunarTopo = 0, cLunarTopoBad = 0;
     std::string firstBad;
     for (const auto &b : bodies)
       for (int32_t fl : rgflag)
@@ -544,6 +578,27 @@ int main(int argc, char **argv) {
               fSame = c.ipl == SE_JUPITER && (c.iflag & SEFLG_CENTER_BODY) &&
                       SwissEffectiveFlags(c.iflag & ~SEFLG_CENTER_BODY, ctr >= 0) ==
                         SwissEffectiveFlags(flag, ctr >= 0);
+            if (fLunarNamed(b.ipl) && (flag & SEFLG_TOPOCTR) &&
+                !(flag & (SEFLG_HELCTR | SEFLG_BARYCTR))) {
+              // NOT a round trip any more, on purpose. A topocentric lunar
+              // named point maps to swe_nod_aps on the Moon rather than back
+              // to its own ipl, because Swiss answers the named bodies
+              // geocentrically under SEFLG_TOPOCTR while still moving the
+              // rate columns -- the site reaches the speed and not the
+              // place. calc.cpp stopped generating this combination in the
+              // same commit, so the asymmetry is between the server and a
+              // Swiss call no client of ours now makes.
+              //
+              // The interpolated apogee has no swe_nod_aps method and is
+              // refused instead; both outcomes are asserted, so this arm
+              // cannot become a hole that swallows a real mapping failure.
+              const bool fIntp = b.ipl == SE_INTP_APOG || b.ipl == SE_INTP_PERG;
+              cLunarTopo += fIntp ? !fOk
+                : (fOk && c.kind == kCallNodAps && c.ipl == SE_MOON);
+              cLunarTopoBad += fIntp ? fOk
+                : !(fOk && c.kind == kCallNodAps && c.ipl == SE_MOON);
+              continue;
+            }
             if (fLunarNamed(b.ipl) && (flag & (SEFLG_HELCTR | SEFLG_BARYCTR))) {
               // The refused pair: the mapping must say error 2, and a
               // mapping that succeeds here is the zero-row bug back.
@@ -565,6 +620,13 @@ int main(int argc, char **argv) {
     Check(cExcept > 0, "the documented exceptions are answered, from the canonical body");
     Check(cLunarLeak == 0, "the Moon's named points refuse a heliocentric or barycentric flag (" +
           std::to_string(cLunarLeak) + " answered, " + std::to_string(cLunarRefused) + " refused)");
+    // Every topocentric lunar named point went to swe_nod_aps (or, for the
+    // interpolated apogee, was refused). Both counts are asserted: the first
+    // so the arm cannot quietly swallow a mapping failure, the second so it
+    // cannot pass by matching nothing at all.
+    Check(cLunarTopoBad == 0 && cLunarTopo > 0,
+          "a topocentric lunar named point goes to swe_nod_aps, never the named body (" +
+          std::to_string(cLunarTopo) + " correct, " + std::to_string(cLunarTopoBad) + " wrong)");
     eph::Profile pf;
     Check(!ProfileFromSwiss(SEFLG_SWIEPH | SEFLG_SIDEREAL, -1, SE_SIDM_FAGAN_BRADLEY | SE_SIDBIT_PREC_ORIG,
                             topo, &pf), "a sidereal bit version 4 has no field for is refused");

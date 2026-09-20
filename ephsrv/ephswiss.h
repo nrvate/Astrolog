@@ -227,8 +227,37 @@ inline uint16_t MapObject(const Object &o, int32_t nNative, const Profile &pf,
         return kOErrUnsupported;
       }
       // The Moon's named node and apogee bodies (what Astrolog's built-in
-      // objects have always used), unless the caller forces swe_nod_aps.
-      if (o.naif == 301 && nNative != 1) {
+      // objects have always used), unless the caller forces swe_nod_aps --
+      // OR THE OBSERVER IS TOPOCENTRIC, because Swiss does not serve these
+      // named points topocentrically and does not say so.
+      //
+      // Asked with SEFLG_TOPOCTR, the named bodies return a position
+      // BYTE-IDENTICAL to the geocentric one while the rate columns change.
+      // Measured at J2000, the osculating apogee from Zurich and from Quito
+      // -- sites 10,000 km apart -- gives longitude 252.99417262479935 for
+      // both and for the geocentre, with dlon 1.6376 geocentrically and
+      // 1.6792 at BOTH sites. So the site reaches the rate and not the
+      // place, and the rate it reaches is not a function of the site
+      // either. The six columns describe no single observer, which 3.5a
+      // forbids outright: a rate is the derivative of the coordinates
+      // answered beside it.
+      //
+      // The error is the lunar parallax, up to about a degree, against the
+      // 0.06 arcsec by which swe_nod_aps's own direction differs from the
+      // named body's (registry 1.2). Trading 0.06" of direction for a
+      // degree of parallax is not a close call.
+      //
+      // GEOCENTRIC ANSWERS ARE UNTOUCHED and still come from the named
+      // bodies, whose direction is the one an independent engine agrees
+      // with to 0.003 arcsec -- so ephsrv-golden's legs stay bit-exact and
+      // this costs nothing where Swiss was right.
+      //
+      // Found by the Ephemeris Prometheia rate sweep, which asked for
+      // objects our own sweep's list did not contain: eight rows over our
+      // advertised 5e-3 deg/day, worst 7.93e-2. Our own sweep's worst, the
+      // topocentric osculating node at 1800, reproduced on their side to
+      // six digits -- the same measurement, a wider object list.
+      if (o.naif == 301 && nNative != 1 && pf.observer != kObsTopo) {
         int32_t named = -1;
         if (o.point == kPtAscNode || o.point == kPtDescNode) {
           // NOT SE_MEAN_NODE for the mean node, though it is a named body.
