@@ -13,13 +13,57 @@ version 3, and this section is the design authority behind it.
 
 ## Status — how to pick this back up
 
-- **START HERE (2026-09-20, final). PHASE 6h IS COMPLETE AND THIS PLAN
-  HAS NO OPEN ITEMS. Nothing here is queued.**
+- **START HERE (2026-09-20, end of day). THE PLAN'S OWN PHASES ARE ALL
+  DONE. THREE THINGS ARE OPEN AND ALL THREE ARE THE MAINTAINER'S, not
+  work waiting to be picked up.**
 
   The source-plugin model is finished end to end: every ephemeris the
   cast path uses arrives through the registry, and `ComputeEphem()`
   reaches nothing by name. Phases 1-8 are done, open items 1-5b are
   closed, and 6f/6g remain declined rather than pending.
+
+  **What is open, in the order it will matter:**
+
+  1. **The advertised rate bound, A.3 0x0013 (`5e-3` °/day, `4e-3`
+     AU/day), does not cover what a client can ask for.** Registry
+     §2.11a: a topocentric star's distance rate reaches **8.2e-3
+     AU/day** in scattered (instant, ΔT, site) cells, including at
+     **ΔT 0**, which any client may send. The figure was measured over a
+     grid that sends **no `deltaTSec` at all**, so that whole input
+     class sat outside everything that produced it. Widening the number
+     or stating the exception are both decisions about what this server
+     PROMISES; the previous holder of this question was adjudicated
+     jointly with the Prometheia project as "no honest absolute number
+     exists for this column", and both sides agreed neither project
+     widens a number alone. **Not to be decided by a session.**
+  2. **`ephsrv/deploy/SWISSEPH_PIN` still names ts.14 (`47671e5`).**
+     Moving it to a release carrying the fork's G26 is what retires the
+     observer-cache workaround in `ComputeObjectRows()`. That removal is
+     **already measured**, not assumed: the block was disabled, the
+     server rebuilt against the fixed fork, and golden still passed 162
+     including leg 2b. Delete the block in the same change that moves
+     the pin.
+  3. **Blocked behind (1): `ephsrv-rates.sh` sends no `deltaTSec`**, which
+     is exactly why §2.11a was invisible to it. Adding that axis is the
+     direct fix for the hole, and it would immediately red against the
+     advertised bound — so it cannot land until (1) is settled.
+
+  **The Swiss fork fix is public.** `nrvate/swisseph` main is at
+  `bb78732`: a ΔT change now invalidates the topocentric observer, in
+  both setters and in the cross-thread adopt path, held by its own gate
+  G26 (`tests/dtobs.c`). Recorded there as UPSTREAM-BUGS entry 18. Both
+  repos now commit as `11264848+nrvate@users.noreply.github.com`; the
+  gmail address is refused by GitHub's email-privacy block.
+
+  **Daemon state at the end of 2026-09-20**, because it is not
+  reconstructable from the tree. Ours is up on `127.0.0.1:47392` from
+  `astrolog-ephd` at **1739128 bytes, mtime 13:37, sha256 `9635191d…`**
+  — the Prometheia cross-test identifies the binary by exactly that, so
+  **rebuilding it moves an identity someone else records**; tell them
+  first, as the rule says. **Their daemon on `:47190` is DOWN** for the
+  night by their own decision, so a cross-test from this side will find
+  nothing there until it is brought back. That is expected, not a
+  fault, and is the first thing to check before reporting one.
 
   **If you are picking this up cold, the three things worth knowing
   before you touch anything:**
@@ -3311,6 +3355,71 @@ instructions for a human to copy is the thing this direction exists to stop.
      bug into their own `corrapplied.py` and caught it by fault
      injection rather than by trusting the green. The symptom to grep
      for in any existing leg is a column of suspiciously exact zeros.
+
+34. **The bound question, and four corrections in one afternoon
+   (2026-09-20, end of day).** The Prometheia project re-measured the
+   Polaris cell against the fixed build and then **swept the axis the
+   cell held fixed**, which turned one curiosity into registry §2.11a:
+   a topocentric star's distance rate reaching 8.2e-3 AU/day — past the
+   4e-3 advertised — in scattered (instant, ΔT, site) cells, reachable
+   at **ΔT 0**. Reproduced here against `libswe.a` with no server, so
+   Swiss's and relayed exactly. **The advertisement decision is open and
+   is the maintainer's** (Status item 1).
+
+   **Four things I got wrong and they caught, worth keeping because the
+   ratio is the point.** A mechanism asserted without testing it; a
+   guess that their sweep did not grade fixed stars, which it did; a
+   **cleanroom breach** — I sent Swiss source internals when observable
+   behaviour was all they wanted, and all they could accept; and a
+   conclusion (`"a narrow region at the 1900.0 epoch"`) scoped by an
+   axis I had held fixed. Each was cheap to fix because they measured
+   rather than argued.
+
+   **The lesson that generalises, in its corrected form.** Four times in
+   a week a claim was bounded by an axis nobody varied: a floor exact
+   when written, a count the width of a list, a bound measured on five
+   bodies and stated about every object, and a conclusion. My first
+   formulation — grep for "all", "every", "only" — is **wrong**, and
+   they said so: *"the region is at the 1900.0 epoch"* contains none of
+   the three and was the worst instance. The quantifier is a symptom.
+   The question is **"which axes were varied to produce this, and which
+   were held?"**, and a conclusion that names no axis at all is the one
+   to distrust first.
+
+   One methodological win recorded in §4.4: **derive a disputed value
+   from geometry before looking it up.** A control star fixes the
+   observer-motion projection, and the prediction then either matches
+   the other side's catalogue or does not. It matched Vega's −20.6 km/s
+   to the digit — so neither side had to take the other's word for a
+   number in a tree it cannot read, and it is the cleanroom-safe way to
+   settle one.
+
+33. **The ΔT observer cache, fixed where it belonged (2026-09-20).**
+   Item 32's workaround is superseded by a proper fix in the Swiss fork,
+   authorised by the maintainer: `swi_invalidate_deltat()`, called from
+   both setters that move ΔT and from the cross-thread adopt path, which
+   had the same hole by the other door — a thread ADOPTING another
+   thread's ΔT kept the observer it had already built.
+
+   It needed **one cache more** than the fork's existing
+   `swi_invalidate_models()`: `swi_force_app_pos_etc()` clears
+   `pldat`/`nddat`/`savedat` and not `topd.teval`. Only on a real change
+   of value, mirroring `swe_set_topo_r()`'s early-out, or a caller
+   setting a ΔT per row would discard every planet cache twice a row.
+
+   **G26 (`tests/dtobs.c`) was written and run before the fix**, where it
+   failed at 6.9752 arcsec stale: two contexts, the same two questions in
+   different orders, the reused context required to agree with a fresh
+   one, with G18's vacuity guard. Moshier, so no ephemeris files. All 26
+   fork gates pass and **G1 is bit-identical** — the 13,000-row baseline
+   never asked one instant twice under two ΔT values.
+
+   The fork's own dependency table already had the edge and prescribed
+   an action one cache short, which is its own finding: **a dependency
+   table can be complete in its edges and wrong in its actions, and only
+   the second kind surfaces as a wrong number.** Present upstream, where
+   the setter invalidates nothing at all; recorded as UPSTREAM-BUGS
+   entry 18 with a reproduction.
 
 32. **A real server defect, found by asking whether one field arrives
    (2026-09-20).** The gate-hardening sweep stopped being about gates

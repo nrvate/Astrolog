@@ -75,10 +75,36 @@ Work happens on branch **`qt`**.
   (`tools/ephsrv-golden.sh`, `-soak.sh`, `-cache.sh`, `-bench.sh`,
   `-robust.sh`, `-tls.sh`, `-ops.sh`, `-limits.sh`, `-rates.sh`, and
   `-image.sh` where there is Docker) are
-  run by hand, like everything else here. `-rates.sh` is the newest
-  (2026-09-19) and asks the one question the others never did: whether a
+  run by hand, like everything else here. `-rates.sh` asks the one
+  question the others never did: whether a
   row's three RATE columns describe its own three positions. Its oracle
   is the server's own answers, so nothing outside is consulted.
+
+  **`tools/ephsrv-blindspots.sh` is a different KIND of check** and is
+  the newest (2026-09-20). Every gate above asks whether something can
+  go red; this asks **which option, if it never arrived, would the gate
+  still pass?** One baseline run collects the options a gate actually
+  sends — by execution, not by grepping the gate's text — then re-runs
+  it once per option with `EPH_DROP` naming one, and `eph_wsclient`
+  removes that option and whatever it consumes from its own argv by
+  re-exec, so the arity stays in the parse loop and is never written
+  twice. A gate that still passes is blind to it; `tools/ephsrv-blindspots.map`
+  says which blindnesses are correct. **golden: 18 options, 17 covered,
+  1 blind (`--quiet`).** It exists because golden had three `deltaTSec`
+  legs and all three were GEOCENTRIC, where Earth rotation cannot
+  matter — so the field could have stopped arriving entirely and all ten
+  gates would have stayed green. That hole hid a real defect. **It is a
+  floor and not a ceiling**: it finds an option nothing depends on, and
+  cannot see an option that is half-tested — the very case that prompted
+  it would pass it today, and the header says so.
+
+  **`-cache.sh --selftest` and `-rates.sh --selftest` grade the GATE's
+  own decisions** against crafted input, with no server, in about a
+  second each; `make check` runs both through `tools/ci-selftest.sh`.
+  Each found real holes on its first run. `-soak.sh --selftest` exists
+  too but needs a server and a minute, so it stays by-hand — and was
+  found on 2026-09-20 to have been **run by nothing at all** since it
+  was written, which is the rot one level up from a prose falsification.
 
 The port lives in `qtdriver.cpp` (window, canvas, menus) and
 `qtdialog.cpp` (dialogs), selected with `-DQT`, standing in for the
