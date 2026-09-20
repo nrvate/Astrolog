@@ -64,7 +64,20 @@ if [ "${1:-}" = "--selftest" ]; then
   # than kept by hand beside them, and a message no case claims stops
   # this before a daemon is started. Add an assertion, get told to add a
   # case.
-  SELF_CASES="bounded filling plateaued"
+  # ONE table: case name, the assertion it must red, and the environment
+  # that provokes it. There were three hand-kept lists here -- a token
+  # list, the loop's case names, and a case/message block -- which is two
+  # copies of the same guess, the thing this project spent the day
+  # learning about. The Prometheia project hit the same shape in their
+  # own selftest: their table and their cases were both in the harness,
+  # so an assertion in neither was invisible to both.
+  #
+  # The assertion tokens are NOT declared here. They come out of the leg
+  # at evaluation (memassert), and this table is checked against them.
+  SELF_TABLE="unbounded|bounded|MEM_N=200
+nocache|filling|MEM_N=200
+stillclimbing|plateaued|MEM_CAP=24 MEM_N=140"
+  SELF_CASES=$(printf '%s\n' "$SELF_TABLE" | cut -d'|' -f2)
   SELF_LOG=$(mktemp /tmp/ephsrv-soak-asserts.XXXXXX)
   # The CONTROL first, and it is not ceremony. The two sabotages below
   # only ever prove the gate can go red; a leg that failed unconditionally
@@ -101,16 +114,20 @@ if [ "${1:-}" = "--selftest" ]; then
   # before the cache plateaus. The bound and the cache-is-filling checks
   # both pass on it, so it reds the plateau assertion alone -- which had
   # no case until 2026-09-20 and could have been deleted unnoticed.
-  for sab in unbounded nocache stillclimbing; do
-    case $sab in
-      unbounded)    want="not bounded by it"; env="MEM_N=200" ;;
-      nocache)      want="not filling";       env="MEM_N=200" ;;
-      stillclimbing) want="has not plateaued"; env="MEM_CAP=24 MEM_N=140" ;;
-    esac
-    case $sab in
-      stillclimbing) out=$(env FARM_N=200 $env "$0" 2>&1) && rc=0 || rc=$? ;;
-      *) out=$(env FARM_N=200 $env MEM_SABOTAGE=$sab "$0" 2>&1) && rc=0 || rc=$? ;;
-    esac
+  # A here-doc, NOT a pipe: "printf ... | while" runs the loop in a
+  # subshell, where incrementing "fails" updates a copy that is discarded
+  # at the closing done -- every sabotage failure would have been printed
+  # and then counted as zero. Caught by writing it that way first.
+  while IFS='|' read -r sab tok senv; do
+    # The match is on the assertion's TOKEN, not on its wording. Matching
+    # message prose is one more pattern that rots toward green: reword a
+    # message and the case silently stops recognising its own assertion.
+    want="[$tok]"
+    if [ "$sab" = "stillclimbing" ]; then
+      out=$(env FARM_N=200 $senv "$0" 2>&1) && rc=0 || rc=$?
+    else
+      out=$(env FARM_N=200 $senv MEM_SABOTAGE=$sab "$0" 2>&1) && rc=0 || rc=$?
+    fi
     if [ "$rc" = "0" ]; then
       echo "SELFTEST FAIL: the $sab sabotage PASSED the gate"; fails=$((fails+1))
     elif ! printf '%s' "$out" | grep -q "$want"; then
@@ -119,9 +136,11 @@ if [ "${1:-}" = "--selftest" ]; then
       printf '%s\n' "$out" | grep -E "^SOAK FAIL" || true
       fails=$((fails+1))
     else
-      echo "selftest: the $sab sabotage reds \"$want\""
+      echo "selftest: the $sab sabotage reds $want"
     fi
-  done
+  done <<SELFEOF
+$SELF_TABLE
+SELFEOF
   [ "$fails" = "0" ] || { echo "SELFTEST FAIL: $fails of 4"; exit 1; }
   echo "SELFTEST PASS: the control passes and all three faults red their own assertion"
   exit 0
@@ -369,7 +388,7 @@ memassert() {
     printf '%s\n' "$1" >> "$MEM_ASSERT_LOG"
   fi
   [ "$2" = "0" ] && return 0
-  echo "SOAK FAIL: $3"
+  echo "SOAK FAIL [$1]: $3"
   exit 1
 }
 # Bounded: the cap plus slack for the farm's own working set.
