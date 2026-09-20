@@ -61,6 +61,38 @@
 # checking that a leg exists for each half. The three geocentric deltaTSec
 # legs would pass this tool today.
 #
+# THE BIT PASS, run by hand and answered for golden (2026-09-20). The
+# Prometheia project closed part of that gap for options whose value is a
+# MASK: clear each set bit in turn instead of dropping the option, and they
+# found a leg of theirs red when the whole mask went away and green when one
+# bit was cleared from it. eph_wsclient carries the affordance --
+# EPH_CLEARBIT=<bit>, with EPH_CLEARBIT_TALLY naming a file -- and golden
+# was asked all three:
+#
+#   bit 1 (light time) covered, 6 trials, from corr=1 and corr=5
+#   bit 2 (deflection) covered, 1 trial,  from corr=3
+#   bit 4 (aberration) covered, 2 trials, from corr=5
+#
+# Covered on all three, which follows from this gate's contract: the mask
+# becomes SEFLG bits written out by hand in the oracle, so any weakening
+# mismatches. A null, and worth the run.
+#
+# Two rules of theirs are in the affordance rather than here, because they
+# are about the injection and not the sweep. It clears only bits the
+# invocation ACTUALLY SET -- a bit already clear produces no trial, since
+# setting it would be a stronger request, not a weaker one, and "something
+# changed" is not "something was weakened". And the tally is labelled by the
+# value the bit was cleared FROM (corr=5~1), because a gate sending several
+# masks otherwise files two trials under one name.
+#
+# That the tally is derived by execution earned itself immediately here: a
+# grep of this gate's text finds corr=7, and no invocation sends it -- the
+# only occurrence is in a comment. A bit list built from the text would have
+# produced a trial for a mask no leg uses.
+#
+# The bit pass is NOT part of the sweep below; it is run by hand. Saying so
+# rather than leaving it to be assumed.
+#
 # Cost: one gate run per option. Golden is ~20 s and sends about twenty, so
 # about seven minutes. By hand, like every other ephsrv gate.
 

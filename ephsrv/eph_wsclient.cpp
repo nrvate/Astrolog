@@ -388,6 +388,33 @@ static Profile parseProfile(const char *spec) {
                  v == "j2000" ? (uint8_t)kFrameJ2000 : v == "icrf" ? (uint8_t)kFrameIcrf : (uint8_t)atoi(v.c_str());
     } else if (k == "corr") {
       pf.corrections = (uint8_t)atoi(v.c_str());
+      // EPH_CLEARBIT: the bit pass, for an option whose value is a MASK.
+      // Dropping --profile whole is too coarse to ask whether a gate can
+      // see ONE correction stop being applied, and the Prometheia project
+      // found a leg of theirs blind to exactly that -- red when the mask
+      // went away, green when a bit was cleared from it.
+      //
+      // Derived from what this invocation actually sent, and that is the
+      // whole rule: a bit already CLEAR produces no trial, because setting
+      // it would be a different request rather than a weaker one. Their
+      // first hand-run probe substituted a fixed mask into every leg and
+      // reported one blind to a correction it never sends -- it had added
+      // two bits, not removed one, and "something changed" is not the same
+      // as "something was weakened". The zero-occurrence rule does not
+      // catch that; only deriving from the leg's own value does.
+      if (const char *szBit = getenv("EPH_CLEARBIT")) {
+        const uint8_t bit = (uint8_t)atoi(szBit);
+        if (bit != 0 && (pf.corrections & bit) != 0) {
+          pf.corrections = (uint8_t)(pf.corrections & ~bit);
+          if (const char *szTally = getenv("EPH_CLEARBIT_TALLY")) {
+            FILE *ft = fopen(szTally, "a");
+            // Labelled by the value the bit was cleared FROM, not by the
+            // bit: a gate that sends several masks otherwise files two
+            // trials under one name and one result overwrites the other.
+            if (ft != nullptr) { fprintf(ft, "corr=%u~%u\n", (unsigned)(pf.corrections | bit), (unsigned)bit); fclose(ft); }
+          }
+        }
+      }
     } else if (k == "speeds") {
       pf.speeds = (uint8_t)atoi(v.c_str());
     } else if (k == "zodiac") {
