@@ -1361,9 +1361,20 @@ static void ComputeObjectRows(swe_ctx *ctx, const eph::Request &req, uint32_t iO
     // answers 100 twice, and the two correct values are 7.02 arcsec apart.
     //
     // Reproduced in twenty lines against libswe with no server in it, so
-    // this is the fork's cache and not this server's arithmetic. The proper
-    // fix belongs there -- swe_set_delta_t_userdef_r() should do what
-    // swe_set_topo_r() does -- and that repo is not patched from here.
+    // this is the fork's cache and not this server's arithmetic.
+    //
+    // FIXED IN THE FORK 2026-09-20 (nrvate/swisseph 70f25ce): a delta t
+    // change now invalidates the observer, in both setters and in the
+    // cross-thread adopt path, held by its G26. THIS BLOCK IS REDUNDANT
+    // AGAINST THAT FORK and was measured so -- disabled here, rebuilt, and
+    // ephsrv-golden.sh still passes 162 including leg 2b, which is the leg
+    // that catches exactly this. So the removal is pre-validated.
+    //
+    // It stays because ephsrv/deploy/SWISSEPH_PIN still names ts.14
+    // (47671e5), and tools/ephsrv-fork.sh and the container image fetch
+    // exactly that commit -- a deployment built from the pin has the defect
+    // and this is what keeps it correct. Delete this block in the same
+    // change that moves the pin to a release carrying G26, not before.
     //
     // This is the forcing the fork skips: a site that differs makes
     // swe_set_topo_r() take its full path and zero topd.teval, then the
