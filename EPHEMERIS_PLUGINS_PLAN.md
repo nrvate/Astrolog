@@ -170,9 +170,30 @@ version 3, and this section is the design authority behind it.
      9.4e-8. Fixing it means differencing every topocentric row, four
      extra ephemeris calls apiece, which an animation pays per frame.
      That is a cost decision, not a permission one.
-  4. **`ratesApprox` is set on every object carrying speeds**, where 3.5a
-     says "the objects concerned". Over-broad rather than wrong, and it
-     costs the flag its meaning. Registry 2.8 records it.
+  4. **CLOSED 2026-09-19.** `ratesApprox` was set on every object carrying
+     speeds, where 3.5a says "the objects concerned" -- over-broad rather
+     than wrong, and it cost the flag its meaning. Worse, it was being
+     claimed about the one class of rate this server computes as a true
+     derivative of the positions it answers: a **mean** node or apsis,
+     differenced in `ephnodrate.h`. Measured over three observers at 1800,
+     J2000 and 2026, every mean point misses by **0.000e+00** in all three
+     columns while the bodies around them miss by 1e-6 to 5e-5 AU/day and a
+     topocentric Moon by 8.2e-4 deg/day.
+
+     The flag is now cleared for a mean point and put back per row by
+     `ComputeObjectRows()` if the differencing bailed at an ephemeris edge,
+     so it is true per object rather than per class. **Fixed stars keep it,
+     and the measurement is why**: their angles are inside at 5.7e-6 deg/day
+     but their DISTANCE rates miss by up to 1.5e-3 AU/day, a star's distance
+     being parsecs and its rate a radial velocity.
+
+     `tools/ephsrv-rates.sh` gained the gate, with two assertions that fail
+     in opposite directions: **soundness** (nothing over the tolerance may be
+     unflagged -- a wrong clear is a lie a client acts on) and
+     **informativeness** (every mean point must be unflagged AND measure
+     zero, or the flag rots back to always-on, which is sound and useless).
+     Both were sabotage-proven; the second exists because always-on passes
+     the first.
   5. **SENT 2026-09-19. Nothing is now owed to Ephemeris Prometheia.**
      Our leg inventory went back in two messages, split by what each
      leg's reference actually is, since that is the axis that decides

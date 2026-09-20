@@ -203,11 +203,104 @@ print("    %s" % ("BAD: the server misses by more than it advertises"
 sys.exit(1 if bad else 0)
 PY
 
+# -- META's ratesApprox says which objects, not merely that some exist --
+#
+# 3.5a puts the flag on "the objects concerned". It used to go on EVERY object
+# carrying speeds, which is not wrong so much as empty: a client could not use
+# it to tell anything from anything. Worse, it was being claimed about the one
+# class of rate this server computes as a true derivative of the positions it
+# answers -- a MEAN node or apsis, differenced in ephnodrate.h -- so the flag
+# said "may be approximate" about the only rates here that provably are not.
+#
+# TWO ASSERTIONS, and they fail in opposite directions on purpose.
+#
+#   SOUNDNESS, which is the one that matters to a client: no object whose
+#   measured miss exceeds 3.5a's tolerance may have the flag CLEAR. A wrong
+#   clear is a lie a client acts on; a wrong set is only noise.
+#
+#   INFORMATIVENESS: every mean point must have the flag SET CLEAR and must
+#   measure 0.000e+00. Without this the flag can rot back to "always on" and
+#   the soundness test above would go on passing, because always-on is sound.
+#   That is the shape of check this project keeps getting wrong -- a test that
+#   passes for the degenerate answer -- so it is spelt out rather than implied.
+#
+# It reads the SAME files the bound leg above generated, so the grid is the
+# one already argued for there (three observers' worth of bodies and points at
+# 1800, J2000 and 2026) rather than a second one that could drift from it.
+echo
+echo "== META ratesApprox names the objects concerned, not all of them"
+python3 - "$SCRATCH"/b-*.txt <<'PY' || fail=1
+import sys, collections
+h = 1.0 / 1024.0
+kRatesApprox = 64
+worst = {}    # (file,label) -> [ang, dist, flags]
+for path in sys.argv[1:]:
+    rows, flags = collections.defaultdict(list), {}
+    for line in open(path):
+        f = line.split()
+        if len(f) < 11 or int(f[2]) != 0:
+            continue
+        rows[f[1]].append([float.fromhex(x) for x in f[5:11]])
+        flags[f[1]] = int(f[4])
+    for label, seq in rows.items():
+        if len(seq) != 5:
+            continue
+        a = r = 0.0
+        for col in (0, 1, 2):
+            v = [x[col] for x in seq]
+            if col == 0:
+                for i in range(1, 5):
+                    while v[i] - v[i-1] >  180.0: v[i] -= 360.0
+                    while v[i] - v[i-1] < -180.0: v[i] += 360.0
+            d = (v[0] - 8*v[1] + 8*v[3] - v[4]) / (12.0 * h)
+            m = abs(seq[2][col+3] - d)
+            if col == 2: r = max(r, m)
+            else:        a = max(a, m)
+        worst[(path, label)] = [a, r, flags[label]]
+
+# A mean point is "o:<naif>/<point>/0" -- method 0 is mean (A.5).
+def fMean(label):
+    return label.startswith("o:") and label.rsplit("/", 1)[-1] == "0"
+
+bad = 0
+unsound = [(k, v) for k, v in worst.items()
+           if (v[0] > 1e-5 or v[1] > 1e-6) and not (v[2] & kRatesApprox)]
+for (path, label), v in sorted(unsound):
+    print("    UNSOUND %-12s %9.3e deg/day %9.3e AU/day, flag CLEAR  %s"
+          % (label, v[0], v[1], path.split("/")[-1]))
+    bad += 1
+
+means = {k: v for k, v in worst.items() if fMean(k[1])}
+if not means:
+    print("    NO MEAN POINTS IN THE GRID -- this leg would assert nothing")
+    bad += 1
+for (path, label), v in sorted(means.items()):
+    if v[2] & kRatesApprox:
+        print("    STILL FLAGGED %-12s %s -- differenced rates are not approximate"
+              % (label, path.split("/")[-1]))
+        bad += 1
+    elif v[0] != 0.0 or v[1] != 0.0:
+        print("    NOT EXACT %-12s %9.3e / %9.3e -- flag is cleared on trust"
+              % (label, v[0], v[1]))
+        bad += 1
+
+nFlag = sum(1 for v in worst.values() if v[2] & kRatesApprox)
+print("    %d objects measured, %d flagged, %d mean points exact and unflagged"
+      % (len(worst), nFlag, len(means)))
+if nFlag == len(worst):
+    print("    BAD: every object is flagged, so the flag says nothing")
+    bad += 1
+print("    %s" % ("BAD" if bad else
+      "no object over the tolerance is unflagged, and every mean point is exact"))
+sys.exit(1 if bad else 0)
+PY
+
 if [ "$fail" -eq 0 ]; then
   echo
   echo "RATES PASS: every row's longitude rate describes its own longitudes,"
-  echo "an instant-defined zodiac is no worse than an epoch-anchored one, and"
-  echo "the advertised rates bound covers the worst the server actually does."
+  echo "an instant-defined zodiac is no worse than an epoch-anchored one, the"
+  echo "advertised rates bound covers the worst the server actually does, and"
+  echo "ratesApprox names the objects concerned rather than all of them."
   exit 0
 fi
 echo

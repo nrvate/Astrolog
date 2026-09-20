@@ -1056,9 +1056,26 @@ static void PrepareObject(swe_ctx *ctx, const eph::Request &req, uint32_t iObj,
   if (!pf.speeds) m.flags |= eph::kMetaNoSpeeds;
   // 3.5a: Swiss's rates are its own analytic derivatives and differ from
   // central differences of its positions by more than the tolerance (the
-  // rates-bound capability says by how much), so every object with speeds
-  // says so.
-  if (pf.speeds) m.flags |= eph::kMetaRatesApprox;
+  // rates-bound capability says by how much), so an object with speeds says
+  // so -- EXCEPT a MEAN node or apsis, whose rates this server computes as
+  // the derivative of the point it answers (registry 1.5, ephnodrate.h).
+  //
+  // 3.5a says the flag goes on "the objects concerned", and setting it on
+  // every object carrying speeds cost it its meaning: it was being claimed
+  // about the one class of rate here that is exactly a difference of the
+  // answered positions. Measured over geocentric, topocentric and
+  // heliocentric observers at 1800, J2000 and 2026, every mean point misses
+  // by 0.000e+00 in all three columns, while the bodies around them miss by
+  // 1e-6 to 5e-5 AU/day in distance and a topocentric Moon by 8.2e-4 deg/day.
+  //
+  // It is CLEARED OPTIMISTICALLY and put back by ComputeObjectRows() on any
+  // row where the differencing bailed -- a stencil point at an ephemeris
+  // file's edge leaves Swiss's own rates on that row, and those are
+  // approximate in exactly the way this flag exists to say. So the flag
+  // means what it claims per object rather than per class.
+  if (pf.speeds && !(prep->c.kind == eph::swiss::kCallNodAps &&
+                     prep->c.nodMethod == SE_NODBIT_MEAN))
+    m.flags |= eph::kMetaRatesApprox;
 }
 
 // ---- 3.5a's fixed sidereal planes, computed here rather than by Swiss ----
@@ -1401,8 +1418,13 @@ static void ComputeObjectRows(swe_ctx *ctx, const eph::Request &req, uint32_t iO
           snr.nodMethod = c.nodMethod; snr.point = c.point;
           snr.fUt = c.fUT && !fDtGiven;
           snr.fFixedFrame = fFixedFrame;
-          EphNodRateDiff(&FSrvNodRatePoint, &snr, xx,
-            (iflagBody & SEFLG_RADIANS) != 0, (iflagBody & SEFLG_XYZ) != 0);
+          if (!EphNodRateDiff(&FSrvNodRatePoint, &snr, xx,
+                (iflagBody & SEFLG_RADIANS) != 0, (iflagBody & SEFLG_XYZ) != 0))
+            // The differencing bailed on this row -- a stencil point at an
+            // ephemeris file's edge -- so Swiss's own rates stand here and
+            // ratesApprox goes back on, which PrepareObject() cleared for
+            // this object on the strength of the differencing working.
+            e->meta[iObj].flags |= eph::kMetaRatesApprox;
         }
         break;
       }
