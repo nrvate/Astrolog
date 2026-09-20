@@ -1041,10 +1041,86 @@ than differencing noise. Neither the frame (true-of-date 3.9949e-04 vs
 J2000 3.9946e-04) nor the server instance moves it. `|reported|` is
 8.2972e-03 and `|differenced|` is 7.8977e-03 at that cell, and the reported
 7.4824e-3 lies between them rather than near their difference, which
-suggests the two harnesses subtract different quantities. Unresolved and
-recorded as unresolved: their side holds it as an already-adjudicated
+suggests the two harnesses subtract different quantities. **Resolved
+2026-09-20 and no longer a mystery: see [§2.11](#211).** Neither harness
+was wrong -- their sweep sends `deltaTSec` and my probe did not, and on
+this server that field moved a topocentric answer by way of a cache the
+fork does not key on ΔT. What follows about the bound is unchanged: their side holds it as an already-adjudicated
 standing exception (the `1e-4 → 2e-4 → 4e-3` chase that does not converge),
 not as a new finding, and the advertisement stays 5e-3/4e-3.
+
+### 2.11 The topocentric observer cache is not keyed on ΔT — 7 arcsec, and the answer depends on what was asked before it
+
+**The first ΔT used on a Swiss context wins for every later call at the
+same instant.** This one is not an accuracy difference at all — it is a
+*stale answer*, and it made one request answer differently depending on
+what had been asked earlier on the same connection's loop.
+
+Twenty lines, no server, no protocol:
+
+```c
+swe_ctx *ctx = swe_ctx_new();
+swe_set_topo_r(ctx, 8.55, 47.37, 400);
+for (i = 0; i < 2; i++) {
+  swe_set_delta_t_userdef_r(ctx, dt[i] / 86400.0);
+  swe_calc_r(ctx, 2451545.0, SE_MOON,
+             SEFLG_SWIEPH|SEFLG_SPEED|SEFLG_TOPOCTR, xx, serr);
+  swe_set_delta_t_userdef_r(ctx, SE_DELTAT_AUTOMATIC);
+}
+```
+
+| `dt` | first row | second row |
+|---|---|---|
+| `{0, 100}` | 222.979175086 | **222.979175086** |
+| `{100, 0}` | 222.981112655 | **222.981112655** |
+
+Each value computed alone is correct, and the two are **7.02 arcsec**
+apart. The second call in each pair is the first call's answer.
+
+**Mechanism, read out of the fork rather than guessed.**
+`swi_get_observer()` is reached only when
+
+```
+ctx->topd.teval != pedp->teval || ctx->topd.teval == 0
+```
+
+— the **instant**. ΔT is not in the key. The only thing that sets
+`topd.teval = 0` is `swe_set_topo_r()`, and that **early-returns when the
+site is unchanged**, so re-setting the same site does not clear it
+(measured: it does not). A *site* change does invalidate, which is exactly
+why a Greenwich leg and a Sydney leg at one instant are both right, and
+why nothing had ever caught this.
+
+*Consequence for `astrolog-ephd`:* on a loop that has already answered at
+instant t, a later request at the same t with a different `deltaTSec`
+silently got the earlier request's Earth rotation — **deterministic at
+`--threads 1`, and above that dependent on which loop the kernel handed
+the connection**, so the same request could answer differently between
+runs. That non-determinism is what makes it worse than an ordinary
+accuracy entry.
+
+*What this fork does:* `ComputeObjectRows()` forces the invalidation the
+fork skips — one `swe_set_topo_r()` at a site that differs, then the real
+one — and only when a ΔT is in play **and has changed** on that context,
+so an ordinary window pays nothing. The proper fix is in the fork, where
+`swe_set_delta_t_userdef_r()` should do what `swe_set_topo_r()` does;
+`/shares/swisseph` is not patched from this repo, so that is surfaced to
+the maintainer rather than done here.
+
+*The net:* `ephsrv-golden.sh` leg 2b — a topocentric Moon at one instant,
+`deltaTSec` 0 against 100, required to move (1..60 arcsec, measured 7.02).
+It was **red against the unfixed server and green after**, with no
+sabotage needed. Its three sibling ΔT legs are all geocentric, where Earth
+rotation does not enter, which is why ten gates had nothing to say about
+this: delete the `swe_set_delta_t_userdef_r()` call entirely and every one
+of them stayed green.
+
+*Found by:* the Ephemeris Prometheia project measuring a topocentric star
+rate that moved 21× with `deltaTSec` while the positions stayed
+bit-identical, and their `blindspots.py` — which strips one argument at a
+time and asks whether any leg notices — reporting `--deltat` blind in all
+fifteen of their legs. See [§2.10](#210): the 1900 Polaris row recorded
+there as unresolved is now attributable to this.
 
 ## 3. Divergences deliberately DECLINED
 

@@ -286,6 +286,55 @@ if [ "$(cut -d' ' -f6-11 "$SCRATCH/ut.txt")" = "$("$SCRATCH/oracle" 2415020.5 1 
 fi
 TRIED=$((TRIED + 1))
 
+# 2b. A TOPOCENTRIC request's delta T -- 3.5a's "UT1<->TT AND EARTH
+#     ROTATION", second half.
+#
+#     THE THREE DELTA T LEGS ABOVE ARE ALL GEOCENTRIC, where the second
+#     half does not apply, so until 2026-09-20 nothing in any gate here
+#     asked the question the swe_set_delta_t_userdef_r() call in
+#     eph_srv.cpp exists to answer. Delete that call and golden, limits,
+#     robust, cache and rates all stay green -- the fix for a defect the
+#     Prometheia cross-test reported ("the delta T a request sends is
+#     ignored") shipped with no net of its own, and the comment beside it
+#     in eph_srv.cpp is the only thing that records it.
+#
+#     A TT request carries no instant conversion, so deltaTSec's ONLY
+#     remaining effect is where Swiss puts the observer: UT = TT minus the
+#     delta T it is told to use. 0 against 100 seconds is 100 s of Earth
+#     rotation seen from Zurich, measured 7.02 arcsec on the Moon. The
+#     floor is 1 arcsec, well under that and far above anything rounding
+#     could produce, and the ceiling catches the value arriving scaled.
+#
+#     Distinctness, not bit-exactness, deliberately: this asks whether the
+#     field ARRIVES, which is the question a "these agree" row cannot ask.
+for dtv in 0 100; do
+  # --profile BEFORE --objs, and that is not style: eph_wsclient binds each
+  # object to the last profile defined so far, and a --profile arriving after
+  # an object pushes one that NOTHING REFERENCES. Written the other way round
+  # this leg asked for a geocentric Moon, got 0.000000 arcsec between
+  # deltaTSec 0 and 100 -- which is correct for a geocentric Moon -- and read
+  # as the server ignoring the field.
+  "$ROOT/eph_wsclient" "${CLI[@]}" --port "$PORT" --jd 2451545.0 --count 1 \
+    --deltat "$dtv" --profile "obs=topo,site=8.55:47.37:400" --objs 301 \
+    --out "$SCRATCH/dtopo$dtv.txt" --quiet ||
+    { echo "GOLDEN FAIL: the topocentric delta T request (deltaTSec $dtv) failed"; exit 1; }
+done
+python3 - "$SCRATCH/dtopo0.txt" "$SCRATCH/dtopo100.txt" << 'PYTOPO' ||
+import math, sys
+a = open(sys.argv[1]).readline().split()
+b = open(sys.argv[2]).readline().split()
+la, ba = float.fromhex(a[5]), float.fromhex(a[6])
+lb, bb = float.fromhex(b[5]), float.fromhex(b[6])
+d = math.hypot((lb - la) * math.cos(math.radians(ba)), bb - ba) * 3600.0
+if not (1.0 < d < 60.0):
+    print("  a topocentric request moved %.4f arcsec between deltaTSec 0 and 100,"
+          "\n  outside 1..60 -- the request's delta T is not reaching Swiss's Earth"
+          "\n  rotation (swe_set_delta_t_userdef_r), or is arriving scaled" % d)
+    sys.exit(1)
+PYTOPO
+  { echo "GOLDEN FAIL: deltaTSec does not reach the observer's place"; exit 1; }
+TRIED=$((TRIED + 1))
+
 # 3. Zodiacs. Fagan-Bradley on the ecliptic of date (mode 0), on the
 #    invariable plane (SE_SIDBIT_SSY_PLANE, 512), Lahiri on the ecliptic of
 #    its epoch (1 + SE_SIDBIT_ECL_T0 = 257), each SEFLG_SIDEREAL (0x10000).
@@ -597,7 +646,7 @@ fi
 # the two cannot shrink together. A leg that stops running lowers $TRIED alone
 # and this fails loudly. Changing the legs means changing this line in the
 # same commit, which is the point -- a deliberate removal says so in the diff.
-GOLDEN_COMPARISONS=161
+GOLDEN_COMPARISONS=162
 [ "$TRIED" -eq "$GOLDEN_COMPARISONS" ] || {
   echo "GOLDEN FAIL: $TRIED comparisons ran, expected $GOLDEN_COMPARISONS."
   echo "  Every comparison that ran AGREED -- this is about the ones that did not run."

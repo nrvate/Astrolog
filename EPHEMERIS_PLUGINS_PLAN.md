@@ -3291,7 +3291,62 @@ instructions for a human to copy is the thing this direction exists to stop.
      injection rather than by trusting the green. The symptom to grep
      for in any existing leg is a column of suspiciously exact zeros.
 
-30. **A floor is a denominator that was exact once (2026-09-20).**
+32. **A real server defect, found by asking whether one field arrives
+   (2026-09-20).** The gate-hardening sweep stopped being about gates
+   here and produced a correctness bug.
+
+   **`deltaTSec` had no net anywhere for the half that matters.**
+   `ephsrv-golden.sh` had three ΔT legs and **all three are
+   geocentric**, where Earth rotation does not enter. So nothing in any
+   of the ten gates asked what the `swe_set_delta_t_userdef_r()` call in
+   `eph_srv.cpp` exists to answer -- and that call is itself the fix for
+   a defect the Prometheia cross-test reported. Delete it and all ten
+   gates stay green. A fix had shipped with no net of its own and the
+   comment beside it was the only record.
+
+   **What the new leg found.** Leg 2b asks a topocentric Moon at one
+   instant under `deltaTSec` 0 and 100 and requires it to MOVE. Against
+   `--threads 1` it answered **0.000000 arcsec**; against `--threads 2`,
+   7.023447. Same binary, same request.
+
+   **Root cause, read out of the fork rather than guessed.**
+   `swi_get_observer()` is reached only when
+   `ctx->topd.teval != pedp->teval || ctx->topd.teval == 0` -- the
+   INSTANT. ΔT is not in the key, and the only thing that zeroes
+   `topd.teval` is `swe_set_topo_r()`, which **early-returns when the
+   site is unchanged**. So the first ΔT used on a context wins for every
+   later call at the same instant. Reproduced in twenty lines against
+   `libswe` with no server in it. A *site* change does invalidate, which
+   is why Greenwich and Sydney at one instant are both right and why
+   this survived.
+
+   **Why it was worse than an accuracy entry**: at `--threads 1` it is
+   deterministic, and above that it depends on which loop the kernel
+   hands the connection -- so **one request could answer differently
+   between runs**.
+
+   **Fixed on this side**, not in `/shares/swisseph`, which this repo
+   does not patch: `ComputeObjectRows()` forces the invalidation the
+   fork skips, and only when a ΔT is in play and has changed on that
+   context, so an ordinary window pays nothing. Registry §2.11. The
+   proper fix belongs in the fork and is the maintainer's.
+
+   **The net is the cleanest this project has had**: leg 2b was red
+   against the unfixed server and green after, with no sabotage step at
+   all -- the bug wrote the falsification itself. GOLDEN PASS 162.
+
+   **Three wrong attributions on the way**, all mine, all the same
+   family: I blamed the ephemeris path, then `--cells-per-sec`, then
+   read a `speeds=1` difference as meaningful -- because my probe loop
+   reused its `--out` files between configurations, so a failed request
+   silently reread the previous configuration's answer and three
+   different servers "agreed". And the first version of leg 2b put
+   `--objs` before `--profile`: `eph_wsclient` binds each object to the
+   last profile defined so far, so it asked for a **geocentric** Moon,
+   measured 0.000000 correctly, and read as the server ignoring the
+   field. Four instrument faults against one real defect.
+
+31. **A floor is a denominator that was exact once (2026-09-20).**
    `ephsrv-robust.sh`'s conformance leg already counted what it sent --
    the author had applied the lesson -- but as `[ "$nfix" -ge 30 ]`. The
    corpus is **72** client fixtures now and nobody moved the floor, so
