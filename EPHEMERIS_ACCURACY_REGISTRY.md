@@ -303,6 +303,31 @@ and `corrApplied` reports light time and aberration for a planet-centred
 call. Advertised is promised, so a capability we cannot deliver correctly
 is not offered. The arithmetic remains Swiss's to fix. Commit `050a5a4`.
 
+**Their referee was run against this server on 2026-09-19 and could not
+grade it — by construction, which is the right outcome and worth
+recording so nobody runs it again expecting a number.** The deflection leg
+asks mask 3 against mask 1 from Jupiter's centre; this server answers
+ERROR 11 there, because after `050a5a4` it no longer lists deflection for
+a body-centred observer. All 72 rows came back with an empty
+`sep_theirs_anchor`. A refusal is not a pass, and the 0.544″ above is
+still *their* measurement of *our* pre-`050a5a4` server rather than
+anything a gate of ours re-derives.
+
+**So the gap this entry leaves is narrower than it was and has moved.**
+Deflection where we *do* claim it — the geocentric and topocentric
+observers — has never been refereed against USNO 179 by either side; their
+leg is planet-centred, and their `apparent` leg grades the two servers
+against each other, which cannot see a term both get wrong. That is the
+open question, and it is asked in the plan rather than here.
+
+**A second, smaller thing the run surfaced:** NAIF **599** is refused as an
+observer while **5** is served. `BodyFromNaif(599)` returns the
+`SEFLG_CENTER_BODY` extra, and the body-observer guard refuses on any
+extra. Defensible — Swiss's `swe_calc_pctr()` has no center-body form — and
+it is a per-object refusal with a reason, which A.17 provides for. But
+`observers=0x1f` advertises the observer *kind* and nothing says which NAIF
+ids may fill it, so a client learns this only by asking.
+
 ---
 
 ### 2.4 Astrometric binaries — up to 2.33″, and not a defect

@@ -157,13 +157,40 @@ version 3, and this section is the design authority behind it.
      and is why it is kept: `1ecb8b9` made the stars agree with the
      planets, so the planets were already right, and the leg now guards
      that they stay that way.
-  2. **`tools/swetest-oracle.sh` has no fixed-star legs.** The only check
-     that can say Astrolog's own star numbers are right from outside this
-     repository, and it cannot see a star -- the same gap
-     `ephsrv-golden.sh` had until 2026-09-19. Closing it needs an upstream
-     `swetest` and care over which `sefstars.txt` both ends read, since
-     ours is corrected (registry 1.4) and four stars deliberately differ
-     (registry 2.4).
+  2. **Substantially answered 2026-09-19, by a better reference than the
+     one this item asked for.** `tools/swetest-oracle.sh` still has no
+     fixed-star legs, and an upstream `swetest` would not have helped much
+     anyway: it is the same Swiss, so it could never see an error Swiss
+     shares.
+
+     Ephemeris Prometheia's `tools/check/stars_fk5.py` is the reference
+     that can. It drives their wire client against any v4 server and
+     compares against the **Basic FK5** (Fricke 1988, CDS I/149A) carried
+     into the Hipparcos frame by ERFA's `fk52h` + `pmsafe` -- ground-based
+     and pre-Hipparcos, so **genuinely not something Swiss produced**.
+
+     Run against `astrolog-ephd` at `b631333`, 29 stars at 1900, 2000 and
+     2100: **all within band, worst 0.559" (Antares)** against a 1.0"
+     band. The band is an ESTIMATE, not a measurement -- the FK5's stated
+     mean errors omit its system errors -- and that caveat is theirs and
+     is repeated here so the result is not read as tighter than it is.
+
+     Registry 2.4 shows up in it exactly as it should: Sirius, Procyon and
+     Rigil Kentaurus are annotated "barycentre compared (X's orbit
+     applied)", because we move the component and the FK5 lists the pair.
+     Polaris and Achernar are named as binaries with no orbit applied.
+
+     **CALLED, NOT PORTED**, per their maintainer's request, and it is not
+     in `make check`: it needs their client, their venv
+     (`pyerfa==2.0.1.5`) and their fetched FK5 tables. To re-run:
+
+         cd /shares/ephemeris-prometheia && .venv-oracle/bin/python \
+           tools/check/stars_fk5.py --client build/prometheia-wire-client \
+           --server astrolog=<port>
+
+     What remains genuinely open is the **local** path: this refereed
+     `astrolog-ephd`, not `./astrolog`, and the two read the same
+     corrected `sefstars.txt` but reach it by different code.
   3. **The topocentric lunar node misses by 4.05e-3 deg/day**, which is
      what the advertised bound is now made of. It is Swiss's topocentric
      velocity model (registry 2.6) -- the same node geocentrically is
