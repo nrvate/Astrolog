@@ -193,12 +193,53 @@ thing to fix. `ephsrv-golden.sh` pinned those columns bit-exact and its oracle
 now differences too (`nodapsd:P:M`), which is how the same 161 comparisons
 still pass. The bound is back to 5e-3 °/day.
 
+**IT WAS FIXED IN ONE OF THE TWO PLACES, AND THAT IS THE REST OF THIS ENTRY.**
+The fix landed 2026-09-19 as `d1f1287` and touched **only** `ephsrv/eph_srv.cpp`.
+Astrolog's own Swiss path in `calc.cpp` went on returning Swiss's raw columns,
+so for eighteen hours the server answered a differenced rate and the
+application beside it did not. The suite's *"server cast bit-identical to the
+local one"* leg caught it — **20 failures, every one a North Node speed with
+the position beside it identical to the last bit** — and it was found only
+because `make check` was run again the next day, not by the commit that caused
+it.
+
+That is the **same shape as §2.4's plane-2 defect the day before**, where the
+stars took Swiss's origin while the planets took ours, and the same shape as
+the D2 finding in `EPHEMERIS_PLUGINS_PLAN.md`'s phase 8 — *a fix applied to
+what the server computes without following it into the consumer.* Three times
+in one week is a pattern about where this project's defects live, not three
+coincidences.
+
+**Closed by making the arithmetic shared rather than duplicated**:
+`ephsrv/ephnodrate.h`, alongside `ephsidplane.h` and `ephstarorb.h`, called by
+both Swiss copies through a per-caller callback that re-asks for the same
+point at the stencil's offsets. Two copies that must agree to the last digit
+cannot be kept in step by discipline; a header cannot drift.
+
+**What the application's numbers do when it is applied**, measured against a
+baseline built at `e6c10d6`:
+
+- The lunar mean node's **latitude rate** goes from `-0.0000019` — Swiss
+  handing back the latitude itself — to `+0.0000000`, which is right: a mean
+  node's latitude is identically zero, so its derivative is too.
+- In a **sidereal** chart the node's longitude rate moves `-0.0529701` →
+  `-0.0530084`, a shift of **3.830e-5 °/day** against an ayanamsa rate of
+  50.29″/yr = **3.825e-5 °/day**. The sidereal longitude rate had been missing
+  the zodiac's own motion exactly, which is §3.5a's "including … the
+  ayanamsa" in the application rather than on the wire.
+- Nothing else moves: the switch, influence and graphics matrices are
+  byte-identical, and in the chart matrix every changed line outside the star
+  legs is a node row.
+
 **Net:** `tools/ephsrv-rates.sh` (the planetary mean apsides are in its grid
-because leaving them out is how the bound was wrong twice) and
-`ephsrv-golden.sh`'s eight mean-point legs.
+because leaving them out is how the bound was wrong twice),
+`ephsrv-golden.sh`'s eight mean-point legs, and — for the half that was
+missed — the suite's server-versus-local group, which failed 20 assertions
+without the shared header and passes 6150/0 with it.
 
 *Found by:* the Ephemeris Prometheia cross-test's rates leg, reporting 16 rows
-and "worst 4.7 °/day in latitude".
+and "worst 4.7 °/day in latitude". *The half-fix was found by:* `make check`,
+one day later.
 
 ---
 

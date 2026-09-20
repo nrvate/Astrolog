@@ -49,6 +49,29 @@ for sw in -v -w -g -j -L -7 -I; do
   run $sw -s
   run $sw -c Campanus -c3
 done
+# FIXED STARS, which nothing in this harness could see until 2026-09-19.
+# The four matrices were all byte-identical across the change that moved
+# every -Ys star by 31.5" and put the four astrometric binaries on their
+# orbits -- not because nothing regressed, but because no leg in any of
+# them listed a star or cast -Ys. An inert surface diffs to zero exactly
+# like a clean one.
+#
+# -b0 is not decoration here and is the whole reason the tropical leg
+# earns its place: the binary-star offsets are sub-arcsecond to ~2", so at
+# the arcminute resolution every other leg prints, Sirius and Procyon are
+# byte-identical before and after their orbits were applied. At seconds
+# they move by 1" and Vega, which has no orbit, does not.
+#
+# The three legs are three different code paths, not one with options:
+# tropical is the orbit arithmetic alone, -s adds the ayanamsa, and -Ys
+# adds ApplySidPlaneLocal() -- the plane-2 rotation that was the 31.5".
+run -b0 -U
+run -b0 -U -s
+run -b0 -U -s -Ys
+# The same plane through the PLANETS, since -Ys reaches FSwissPlanet() by
+# a different route than it reaches FSwissStar() and the two disagreeing
+# about the origin is the defect that was fixed.
+run -b0 -v -s -Ys
 # Relationship charts, which need two chart files rather than two -q blocks.
 for sw in -r -rc -rm -r0 -rt; do
   run $sw "$A" "$C" -v

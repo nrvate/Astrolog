@@ -2826,6 +2826,11 @@ void CreateElemTable(ET *pet)
 // The four astrometric binaries, shared with astrolog-ephd for the same
 // reason: EPHEMERIS_ACCURACY_REGISTRY.md 2.4.
 #include "ephsrv/ephstarorb.h"
+// A mean node or apsis's rates, which Swiss does not return: registry 1.5.
+// Shared for the sharpest version of the same reason -- this arithmetic WAS
+// duplicated, for eighteen hours, and the copy that did not get it is what
+// the suite's server-versus-local leg failed on.
+#include "ephsrv/ephnodrate.h"
 #define ret cp0.dir
 
 // The ephemeris search path, as the list of directories it actually is.
@@ -3984,6 +3989,44 @@ static void ApplySidPlaneLocal(double *xx)
   ApplySidPlane(&sp, fFalse, xx);
 }
 
+// What EphNodRateDiff() needs to re-ask for the same point at an offset
+// instant: registry 1.5. Everything here is the answered row's own -- the
+// same body, the same point, the same flags, the same frame rotation -- or
+// the difference would be of two different quantities.
+typedef struct {
+  double jde;
+  CONST SWISSSPEC *pss;
+  int32 iflagNode, iflagCall;
+  flag fRotNode;
+} NODRATECTX;
+
+// One stencil point. Returns fFalse if Swiss will not answer there, which
+// abandons the differencing and leaves the row's own rates alone -- see the
+// header, and note this happens at an ephemeris file's edge rather than
+// never.
+static int FNodRatePointLocal(void *pv, double dj, double *xx)
+{
+  NODRATECTX *p = (NODRATECTX *)pv;
+  double xnasc[6], xndsc[6], xperi[6], xaphe[6], *px;
+  char serr[AS_MAXCH];
+  int ix;
+
+  if (swe_nod_aps(p->jde + dj, p->pss->iobj, p->iflagNode,
+    p->pss->nNodMethod, xnasc, xndsc, xperi, xaphe, serr) < 0)
+    return fFalse;
+  switch (p->pss->nPnt) {
+  case 1:  px = xnasc; break;  // North node
+  case 2:  px = xndsc; break;  // South node
+  case 3:  px = xperi; break;  // Perihelion point
+  default: px = xaphe; break;  // Aphelion point
+  }
+  for (ix = 0; ix < 6; ix++)
+    xx[ix] = px[ix];
+  if (p->fRotNode)
+    RotateNodeToFixedFrame(p->jde + dj, p->iflagCall, xx);
+  return fTrue;
+}
+
 flag FSwissPlanet(int ind, real jd, int indCent,
   real *obj, real *objalt, real *dir, real *dist, real *diralt, real *dirlen)
 {
@@ -4057,6 +4100,21 @@ flag FSwissPlanet(int ind, real jd, int indCent,
       xx[ix] = px[ix];
     if (nRet >= 0 && fRotNode)
       RotateNodeToFixedFrame(jde, iflagCall, xx);
+    // A MEAN point's rates are differenced from the point we report, because
+    // the ones Swiss hands back are not rates: the latitude-rate slot holds
+    // the latitude, and the longitude rate is missing the geocentric
+    // re-centring's own rate. ephsrv/ephnodrate.h has the measurements and
+    // the stencil; astrolog-ephd calls the same routine with the same
+    // constants, which is the point of it being a header.
+    if (nRet >= 0 && (ss.iflag & SEFLG_SPEED) &&
+      ss.nNodMethod == SE_NODBIT_MEAN) {
+      NODRATECTX nrc;
+      nrc.jde = jde; nrc.pss = &ss;
+      nrc.iflagNode = iflagNode; nrc.iflagCall = iflagCall;
+      nrc.fRotNode = fRotNode;
+      EphNodRateDiff(&FNodRatePointLocal, &nrc, xx,
+        (iflagCall & SEFLG_RADIANS) != 0, (iflagCall & SEFLG_XYZ) != 0);
+    }
   }
 
   // Clean up and return position.

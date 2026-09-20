@@ -122,14 +122,41 @@ version 3, and this section is the design authority behind it.
 
   ### OPEN ITEMS, so a fresh session does not have to find them again
 
-  1. **The four differential matrices have not been run since the cast
-     changed.** `calc.cpp`'s `FSwissStar()` gained the plane-2 fix and the
-     star orbits, and `make check` does **not** include
-     `chart-matrix.sh`, `switch-matrix.sh`, `influence-matrix.sh` or
-     `graphics-matrix.sh` -- those need a baseline binary
-     (`git worktree add`, build `./astrolog-base`). The star change moves
-     `-Ys` charts by 31.5" BY DESIGN; what is unverified is that nothing
-     else moved. **This is the one open item with real regression risk.**
+  1. **CLOSED 2026-09-19, and it closed into a finding rather than a
+     clean bill.** All four differential matrices were run against a
+     baseline built at `e6c10d6` -- the commit before `calc.cpp`'s cast
+     changed -- and all four came back **byte-identical**: chart 7,072
+     lines, switch 119,691, influence 762, graphics 579.
+
+     **That clean diff covered less than it looked like.** The change
+     moves every `-Ys` star by 31.5" BY DESIGN, so a byte-identical
+     result was the wrong answer to be happy about. It was byte-identical
+     because **no leg of any of the four matrices listed a fixed star or
+     cast `-Ys`** -- `grep -c ' -U'` and `Ys` over all four scripts
+     returns zero outside two `-XU` graphics renders that are tropical.
+     This is CLAUDE.md's own rule about an inert entry diffing to zero,
+     and it is the third time in two days the same shape has turned up:
+     `ephsrv-golden.sh` had no stars, `swetest-oracle.sh` still has none
+     (item 2), and now the differentials had none either.
+
+     **Closed by giving the chart matrix four legs it lacked**
+     (`-b0 -U`, `-b0 -U -s`, `-b0 -U -s -Ys`, `-b0 -v -s -Ys`), and the
+     legs are proven live by moving between the two binaries in exactly
+     the designed quantity: 50 of 62 stars shift 31.00"-32.00" in the
+     `-Ys` leg, and **no star moves in longitude tropically** -- the
+     tropical change is the binary orbits in LATITUDE, 1" on Sirius and
+     Procyon, with Vega and the other 59 untouched.
+
+     **`-b0` is load-bearing on those legs, not decoration.** The
+     binary-star offsets are sub-arcsecond to ~2", so at the arcminute
+     resolution every other leg in the harness prints, Sirius and Procyon
+     are byte-identical before and after their orbits were applied. The
+     leg that catches registry 2.4 only catches it at seconds.
+
+     The `-b0 -v -s -Ys` planet leg does **not** move, which is correct
+     and is why it is kept: `1ecb8b9` made the stars agree with the
+     planets, so the planets were already right, and the leg now guards
+     that they stay that way.
   2. **`tools/swetest-oracle.sh` has no fixed-star legs.** The only check
      that can say Astrolog's own star numbers are right from outside this
      repository, and it cannot see a star -- the same gap
@@ -146,14 +173,58 @@ version 3, and this section is the design authority behind it.
   4. **`ratesApprox` is set on every object carrying speeds**, where 3.5a
      says "the objects concerned". Over-broad rather than wrong, and it
      costs the flag its meaning. Registry 2.8 records it.
-  5. **Owed to Ephemeris Prometheia**: our half of the log join -- the
-     request id in `astrolog-ephd`'s log, so a row in their cross-test can
-     be traced to a request in our log. They have asked once and it is the
-     only thing they are waiting on. They also sent an inventory of the
-     legs they run that we do not (Horizons, deflection against USNO 179,
-     FK5 and ERFA-generated star fixtures, JPL `testpo`, per-observer
-     orbit points, a sidereal token sweep, refusal combinatorics,
-     fuzzing); ours is owed back.
+  5. **SENT 2026-09-19. Nothing is now owed to Ephemeris Prometheia.**
+     Our leg inventory went back in two messages, split by what each
+     leg's reference actually is, since that is the axis that decides
+     whether a leg can catch a mistake both engines share:
+
+     - *Outside this repository (3):* `swetest-oracle.sh` (upstream
+       `swetest` at our own vendored version), `star-orbit-check.py`
+       (ORB6's published ephemeris and `sefstars.txt`'s own α Cen
+       separation), `crosstest-prom.sh` (them).
+     - *Anchored on the same Swiss we compute with, so structurally
+       blind to a Swiss-side error (2):* `ephsrv-golden.sh`, the
+       `oracle` group.
+     - *Self-consistent, no outside reference (1):* `ephsrv-rates.sh`.
+     - *Protocol rather than numbers:* the 111 conformance fixtures.
+
+     **And what we do NOT have, named rather than left as implied
+     parity**: no Horizons leg; **no deflection leg at all**, though
+     registry §2.3 measures it at up to 0.544"; no FK5 or
+     ERFA-generated star fixtures; no JPL `testpo`; no per-observer
+     orbit-point sweep, sidereal token sweep, refusal combinatorics or
+     fuzzing.
+
+     **The gap has one shape and it is worth stating plainly: almost
+     every check we have is anchored on Swiss, so it grades our
+     integration and not our physics.** Their engine is the only
+     reference we hold that Swiss did not produce, which is why their
+     cross-test found most of what was fixed this week. By the same
+     argument the **deflection leg is the most valuable single thing
+     either side could add** -- the largest measured error in the
+     registry with nothing behind it.
+
+     **The log join was NOT owed -- this entry was wrong when it was
+     written.** `astrolog-ephd` has logged the request id since `943b74e`,
+     at the default level, one line per request answered, and `evt=error`,
+     `evt=cancel`, `evt=stall` and the LOOKUP line all carry `req=` too.
+     Verified 2026-09-19 by running the daemon and reading the line back:
+
+         ts=... level=info evt=req conn=1 loop=0 addr=127.0.0.1 req=1
+         objs=2 rows=2 cells=4 profiles=1 ... cache=miss compute_ms=0.226
+
+     `conn=` is there as well, which the join needs: a request id is the
+     client's and is only unique within a connection.
+
+     **Their side carries four more items as "waiting on Astrolog" that
+     are all stale as of 2026-09-19** -- the binary-star offsets
+     (`13d3e5e`), the 16 mean-perihelion `rates` rows (`d1f1287`), the 64
+     `sidsweep` rows and the plane-2 offset (`1ecb8b9`, registry §4.1
+     fixed 2026-09-18), and the 5 deg/day advertised speed error (now
+     5e-3 deg/day and 1e-4 AU/day). Their note that the rates fix "is
+     their maintainer's call because a golden test pins those columns" is
+     the exact reasoning this project rejected: a gate asserting the
+     wrong thing is a second thing to fix.
   6. **Closed, recorded so it is not re-checked**: their dataset id's
      digest changed on 2026-09-19 (file hashing in 8 MiB pieces). Nothing
      of ours pins it -- `ephsrv/conformance/welcome_prometheia.hex` is a
