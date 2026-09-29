@@ -2437,6 +2437,11 @@ elements, identically on every server, sends it as kind 4 with those elements.
 - The elements refer to the mean ecliptic and equinox named by `equinox`.
 - Light time, deflection and aberration apply as to a body (light time through
   the same two-body motion); rates are as for any body.
+- Under light time, the instant evaluated is the emission instant, for the
+  elements and for an equinox of date alike. (Agreed with the Prometheia
+  project 2026-09-29. Swiss takes an equinox of date at the observation
+  instant instead, which differs by the precession over the light time:
+  63.7" on seorbel.txt's set 26 at 80,000 AU, 0.06" on Proserpina.)
 
 **Error text** (META errText, ERROR text) is covered by §3.8: it never quotes
 instants, places or request contents. Servers rewrite engine messages that
