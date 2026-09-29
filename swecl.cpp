@@ -5104,6 +5104,14 @@ int32 CALL_CONV swe_nod_aps(double tjd_et, int32 ipl, int32 iflag,
   AS_BOOL ellipse_is_bary = FALSE;
   int32 iflg0;
   iflag &= ~(SEFLG_JPLHOR | SEFLG_JPLHOR_APPROX);
+  /* A sidereal position is the mean ecliptic of date less the ayanamsa:
+   * swe_calc() sets SEFLG_NONUT for it (plaus_iflag(): "if sidereal bit is
+   * set, set also no_nutation bit") and this function did not, so a sidereal
+   * node or apsis carried the nutation in longitude that the sidereal
+   * planets beside it do not: +12.8" for the mean node on 1990-06-16, the
+   * whole of delta-psi (the fork's G30). */
+  if (iflag & SEFLG_SIDEREAL)
+    iflag |= SEFLG_NONUT;
   /* function calls for Pluto with asteroid number 134340
    * are treated as calls for Pluto as main body SE_PLUTO */
   if (ipl == SE_AST_OFFSET + 134340)

@@ -13206,6 +13206,45 @@ static void TestNumericOracleQt()
 
   Group("Numeric oracle");
   SetNoPopupQt(fTrue);
+  // A sidereal node or apsis from swe_nod_aps() is the mean ecliptic of
+  // date less the ayanamsa, like the sidereal planets beside it. The
+  // library added the nutation in longitude on top (+12.82" for the Moon's
+  // mean node on 1990-06-16), which Astrolog's own sidereal charts showed
+  // and which only a second engine could name (fork ts.18, G30). Moshier,
+  // so it needs no files; both methods, all four points, three instants.
+  {
+    static CONST real rgjdNod[] = {2415020.5, 2448058.0, 2461300.5};
+    real rWorst = 0.0;
+    int iJ, iMeth, k, cBad = 0;
+    char serrNod[AS_MAXCH];
+
+    for (iJ = 0; iJ < 3; iJ++)
+      for (iMeth = 0; iMeth < 2; iMeth++) {
+        double xt[4][6], xs[4][6], ay;
+        int meth = iMeth ? SE_NODBIT_OSCU : SE_NODBIT_MEAN;
+        int32 fl = SEFLG_MOSEPH | SEFLG_SPEED;
+
+        swe_set_sid_mode(SE_SIDM_FAGAN_BRADLEY, 0.0, 0.0);
+        if (swe_get_ayanamsa_ex(rgjdNod[iJ], fl | SEFLG_NONUT, &ay,
+            serrNod) < 0 ||
+          swe_nod_aps(rgjdNod[iJ], SE_MOON, fl | SEFLG_NONUT, meth, xt[0],
+            xt[1], xt[2], xt[3], serrNod) < 0 ||
+          swe_nod_aps(rgjdNod[iJ], SE_MOON, fl | SEFLG_SIDEREAL, meth, xs[0],
+            xs[1], xs[2], xs[3], serrNod) < 0) {
+          cBad++;
+          continue;
+        }
+        for (k = 0; k < 4; k++) {
+          real d = RAbs(swe_difdeg2n(xs[k][0], swe_degnorm(xt[k][0] - ay)));
+
+          if (d > rWorst)
+            rWorst = d;
+        }
+      }
+    Check(cBad == 0 && rWorst < 1e-9, "a sidereal node or apsis carries no "
+      "nutation: worst %.3e deg from mean-of-date less the ayanamsa over 24 "
+      "longitudes (%d calls failed)", rWorst, cBad);
+  }
   for (i = 0; i < objMax; i++) {
     rgfIgnoreSav[i] = ignore[i];
     rgfIgnore2Sav[i] = ignore2[i];
@@ -19405,6 +19444,83 @@ static int CDiffEphQt(CONST EPHSNAPSHOT *p1, CONST EPHSNAPSHOT *p2,
   return c;
 }
 
+// Angular separation between two directions, in arcseconds, by the
+// haversine form: acos-based SphDistance() returns exactly 0 below about
+// 0.003", so it cannot grade a comparison whose answer is milliarcseconds
+// (CLIENT_SERVER_REVIEW.md T1).
+static real RSepArcsecQt(real lon1, real lat1, real lon2, real lat2)
+{
+  real d2r = rPi / 180.0, dLat = (lat2 - lat1) * d2r,
+    dLon = (lon2 - lon1) * d2r, a;
+
+  a = sin(dLat / 2) * sin(dLat / 2) + cos(lat1 * d2r) * cos(lat2 * d2r) *
+    sin(dLon / 2) * sin(dLon / 2);
+  return 2.0 * asin(Min(1.0, sqrt(a))) / d2r * 3600.0;
+}
+
+// The worst position difference between two snapshots over every object
+// that either side cast, as a SEPARATION, and the worst longitude-speed
+// difference in degrees a day. A foreign engine is compared this way and
+// never on the bytes: two ephemerides differ, and a longitude difference is
+// a projection of the separation (feedback: compare separations).
+// The cross-engine bounds, in arcseconds and degrees a day. The scale is
+// only for tools/ephsrv-prometheia.sh --selftest, which shrinks them to
+// require the gate to FAIL: a gate that cannot is not one.
+static real RXScaleEphQt()
+{
+  CONST char *sz = getenv("ASTROLOG_XENGINE_SCALE");
+
+  return sz != NULL && atof(sz) > 0.0 ? atof(sz) : 1.0;
+}
+static real RBoundMainEphQt()  { return 0.3 * RXScaleEphQt(); }
+static real RBoundSmallEphQt() { return 1.0 * RXScaleEphQt(); }
+static real RBoundRateEphQt()  { return 3e-4 * RXScaleEphQt(); }
+
+// A body whose position is a solved ephemeris (the planets, the Moon, the
+// nodes and apsides, the Uranians), as against a small body whose position
+// is one of several fitted orbit solutions (Chiron, the asteroids, the outer
+// bodies): two engines agree to a fraction of an arcsecond on the first and
+// to about an arcsecond on the second, and neither is wrong.
+static flag FMainBodyEphQt(int i)
+{
+  return i <= oPlu || FNodal(i) || FBetween(i, uranLo, uranHi);
+}
+
+static real RMaxSepEphQt(CONST EPHSNAPSHOT *p1, CONST EPHSNAPSHOT *p2,
+  flag fMain, int *piObj, real *prSpeed, int *piSpeedObj)
+{
+  int i;
+  real r, rMax = 0.0, rSp, dLon;
+
+  *piObj = *piSpeedObj = -1;
+  *prSpeed = 0.0;
+  for (i = 0; i < objMax; i++) {
+    if (FMainBodyEphQt(i) != fMain)
+      continue;
+    if (p1->rgobj[i] == 0.0 && p1->rgalt[i] == 0.0 &&
+      p2->rgobj[i] == 0.0 && p2->rgalt[i] == 0.0)
+      continue;
+    r = RSepArcsecQt(p1->rgobj[i], p1->rgalt[i], p2->rgobj[i], p2->rgalt[i]);
+    if (r > rMax) {
+      rMax = r;
+      *piObj = i;
+    }
+    // A node's or apsis's ret[] is a multiple of its mean motion, not
+    // degrees a day (72.27 for a topocentric node whose rate is -3.83
+    // deg/d), so it is graded by position here and by the wire-level rate
+    // check, which reads the column in degrees a day.
+    if (FNodal(i))
+      continue;
+    dLon = p1->rgdir[i] - p2->rgdir[i];
+    rSp = RAbs(dLon);
+    if (rSp > *prSpeed) {
+      *prSpeed = rSp;
+      *piSpeedObj = i;
+    }
+  }
+  return rMax;
+}
+
 // The largest difference between two snapshots over every object and all
 // eight values, and where it is: animation frames are held to a tolerance,
 // and a tolerance is only worth what the number it was chosen from says.
@@ -21205,10 +21321,32 @@ static void TestEphSrvLiveQt()
   cWarn = NCastWarnSrvTestQt();
   CastChart(0);
   SnapshotEphQt(&snSrv);
+  if (!strUrlEnv.isEmpty()) {
+    // A different engine: the cast must wait and land, agreeing to the
+    // cross-engine bounds of the scenarios below rather than on the bytes.
+    int iW, iWS, iSp, iSpS;
+    real rSp, rSpS, rMain = RMaxSepEphQt(&snLocal, &snSrv, fTrue, &iW, &rSp,
+      &iSp), rSepSmall = RMaxSepEphQt(&snLocal, &snSrv, fFalse, &iWS, &rSpS,
+      &iSpS);
+
+    // The one warning a foreign server is allowed: prometheiad has no
+    // "vulcan" token (the stock seorbel.txt's set 2), so Vulcan is refused
+    // and the chain's next source answers it. Named, so that it cannot
+    // excuse another.
+    Check((NCastWarnSrvTestQt() == cWarn ||
+      (NCastWarnSrvTestQt() == cWarn + 1 &&
+      strstr(SzWarnSrvTestQt(), "Vulcan") != NULL)) &&
+      rMain <= RBoundMainEphQt() && rSepSmall <= RBoundSmallEphQt(),
+      "a cast made while connecting waits for the connection and lands "
+      "within the cross-engine bounds (%d warnings: %.100s; planets %.4f\", "
+      "small bodies %.4f\")", NCastWarnSrvTestQt() - cWarn,
+      SzWarnSrvTestQt(), rMain, rSepSmall);
+  } else {
   cDiff = CDiffEphQt(&snLocal, &snSrv, 0.0, S(szDiff));
   Check(NCastWarnSrvTestQt() == cWarn && cDiff == 0, "a cast made while "
     "connecting waits for the connection and lands bit-identical (%d "
     "warnings, %d differ: %s)", NCastWarnSrvTestQt() - cWarn, cDiff, szDiff);
+  }
   if (!FWaitEstQt(2, 10000)) {
     FErrEphSrvTestQt(S(sz));
     Check(fFalse, "the backend welcomes against the real server (state %d, "
@@ -21320,10 +21458,60 @@ static void TestEphSrvLiveQt()
     // bit-identity is the right assertion again. If this ever fails on
     // scenario 8 again, the two paths have diverged, and the shared header
     // is where to look first.
+    if (!strUrlEnv.isEmpty()) {
+      // A server that is not ours: a different engine, so the bytes are
+      // the wrong question and the separation is the right one. Reported
+      // per scenario with the body that is worst, because a bound with no
+      // name beside it cannot be argued with either way.
+      int iWorst, iWorstSp, iWorstS, iWorstSpS;
+      real rSp, rSpS, rSep = RMaxSepEphQt(&snLocal, &snSrv, fTrue, &iWorst,
+        &rSp, &iWorstSp), rSepS = RMaxSepEphQt(&snLocal, &snSrv, fFalse,
+        &iWorstS, &rSpS, &iWorstSpS);
+
+      printf("  %-52.52s main %7.4f\" (%s) %.1e deg/d, small %7.4f\" (%s) "
+        "%.1e deg/d\n", szScen, rSep,
+        iWorst >= 0 ? szObjName[iWorst] : "-", rSp, rSepS,
+        iWorstS >= 0 ? szObjName[iWorstS] : "-", rSpS);
+      // The bounds are the measured worst over these eleven scenarios
+      // against prometheiad (DE440, the EPM1 catalog) with about a third
+      // again on top: planets and points 0.22" (Neptune, 1900), small
+      // bodies 0.85" (Orcus), rates 1.8e-4 deg/d (Orcus, 1900). See
+      // CLIENT_SERVER_REVIEW.md C1a. What each side does with Nessus (10")
+      // is the registry's 4.5 and is not cast here.
+      Check(rSep <= RBoundMainEphQt(), "%s: planets and points agree with the "
+        "foreign server to %.2f\" (worst %.4f\", %s)", szScen,
+        RBoundMainEphQt(), rSep,
+        iWorst >= 0 ? szObjName[iWorst] : "-");
+      Check(rSepS <= RBoundSmallEphQt(), "%s: small bodies agree with the "
+        "foreign server to %.2f\" (worst %.4f\", %s)", szScen,
+        RBoundSmallEphQt(), rSepS,
+        iWorstS >= 0 ? szObjName[iWorstS] : "-");
+      Check(rSp <= RBoundRateEphQt() && rSpS <= RBoundRateEphQt(), "%s: "
+        "longitude rates agree to %.1e deg/d (%.2e %s, %.2e %s)", szScen,
+        RBoundRateEphQt(), rSp,
+        iWorstSp >= 0 ? szObjName[iWorstSp] : "-", rSpS,
+        iWorstSpS >= 0 ? szObjName[iWorstSpS] : "-");
+      for (int iAll = 0; iAll < objMax && getenv("ASTROLOG_QT_SEPALL"); iAll++)
+        if (RSepArcsecQt(snLocal.rgobj[iAll], snLocal.rgalt[iAll],
+          snSrv.rgobj[iAll], snSrv.rgalt[iAll]) > 0.05)
+          printf("        %-14s %9.4f\"\n", szObjName[iAll],
+            RSepArcsecQt(snLocal.rgobj[iAll], snLocal.rgalt[iAll],
+            snSrv.rgobj[iAll], snSrv.rgalt[iAll]));
+      if (getenv("ASTROLOG_QT_SEPALL"))
+        printf("        [node] local %.6f server %.6f, jd %.5f, speed "
+          "%.6f / %.6f, dt %.4f s\n", snLocal.rgobj[oNod], snSrv.rgobj[oNod],
+          JulianDayFromTime(is.T), snLocal.rgdir[oNod], snSrv.rgdir[oNod],
+          is.rDeltaT * 86400.0);
+      if (iWorst >= 0)
+        printf("      %s: local %.6f %.6f, server %.6f %.6f\n",
+          szObjName[iWorst], snLocal.rgobj[iWorst], snLocal.rgalt[iWorst],
+          snSrv.rgobj[iWorst], snSrv.rgalt[iWorst]);
+    } else {
     cDiff = CDiffEphQt(&snLocal, &snSrv, rTol, S(szDiff));
     Check(cDiff == 0, "%s: server cast %s the local one "
       "(%d objects differ; first: %s)", szScen,
       rTol == 0.0 ? "bit-identical to" : "agrees with", cDiff, szDiff);
+    }
     Check(planet[oSun] != 0.0 || planet[oMoo] != 0.0,
       "%s: the cast computed something at all", szScen);
     if (iScen == 6) {
@@ -21410,6 +21598,20 @@ static void TestEphSrvLiveQt()
     }
     us.fSidereal = fFalse;
     CastChart(0);
+  }
+
+  // Everything below asks a question that only has an answer when both
+  // sides are the same engine: bit-identity of a recast, of an animation
+  // frame, of a window served from the cache, and request counts that hold
+  // only when the server answers every object of the cast (a foreign one
+  // has no Vulcan). Against a foreign server the scenarios above are the
+  // cross-engine gate; 22 of these failed on their first run against
+  // prometheiad and all were that (CLIENT_SERVER_REVIEW.md C1a).
+  if (!strUrlEnv.isEmpty()) {
+    printf("  (the bit-identity, animation and cache legs are skipped: "
+      "ASTROLOG_EPHSRV_URL names a server that is not this project's engine)"
+      "\n");
+    goto LRestore;
   }
 
   // A cast made inside another cast's wait -- a timer, a paint -- leaves

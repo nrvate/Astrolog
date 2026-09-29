@@ -98,6 +98,17 @@ Work happens on branch **`qt`**.
   cannot see an option that is half-tested — the very case that prompted
   it would pass it today, and the header says so.
 
+  **`tools/ephsrv-prometheia.sh` is the one gate against a DIFFERENT
+  engine** (2026-09-29): Astrolog's `server` source against Ephemeris
+  Prometheia's daemon, which it starts on a port of its own and stops by PID.
+  Everything above compares `astrolog-ephd` with the Swiss it links, so a
+  fault both halves share is invisible to it; this holds a chart's worth of
+  answers to bounds on angular separation (planets and points 0.3", small
+  bodies 1", rates 3e-4 deg/d, measured worst 0.22", 0.85", 1.8e-4). Its
+  first run found the sidereal node carrying nutation in both halves
+  (C1e, fork ts.18). `--selftest` requires the same run at 0.01 x the
+  bounds to fail. By hand; it skips without the other project's build.
+
   **`-cache.sh --selftest` and `-rates.sh --selftest` grade the GATE's
   own decisions** against crafted input, with no server, in about a
   second each; `make check` runs both through `tools/ci-selftest.sh`.

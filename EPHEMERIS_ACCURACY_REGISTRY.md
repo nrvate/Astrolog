@@ -1419,6 +1419,31 @@ Prometheia's kind 4, which satisfies B(t − τ) − E(t) to under 3e-9″:
   the Gaussian mean motion, where Swiss holds it fixed. A 56,000 km distance
   difference (4.7e-9 relative) on the same body is noted and unexplained.
 
+### 2.14 A sidereal node or apsis carries the nutation in longitude — +12.8″ on 1990-06-16, up to 17.4″
+
+**FIXED 2026-09-29, in the fork (ts.18, G30) and in the copy vendored here.**
+Found by the first run of `tools/ephsrv-prometheia.sh`, Astrolog's server
+source against Ephemeris Prometheia's daemon: every body agreed to 0.02″
+except the sidereal North and South Node, 12.84″ apart. Their answer matched
+the fork's `swe_calc` (285.087414 against 285.087379); Astrolog's local answer
+did not (285.090941).
+
+`swe_calc()` sets `SEFLG_NONUT` whenever `SEFLG_SIDEREAL` is set
+(`plaus_iflag()`), so a sidereal position is the tropical mean of date less
+the ayanamsa. `swe_nod_aps()` has no such line, so its sidereal node or apsis
+was the tropical TRUE of date less the mean ayanamsa: the whole of Δψ on top.
+Measured on the fork's library, mean and osculating, all four points of the
+Moon, Mars and Jupiter: +12.823″ on 1990-06-16, +17.433″ on 1900-01-01, 0.000″
+from `swe_calc(SE_MEAN_NODE)` after the fix. Not a definition difference: the
+sidereal planets beside the node, and `swe_calc`'s own node, carry no Δψ, and
+nothing in a zodiac fixed to the stars moves with the equinox's nutation.
+Upstream behaves the same way (fork UPSTREAM-BUGS.md 21). Both halves
+called `swe_nod_aps()` and both carried it: `astrolog-ephd` answered a
+true-of-date sidereal perigee at 54.415779 on the wire where Prometheia said
+54.412179 (before the fix); with ts.18 it says 54.412217, and 285.087414 for
+the mean node against their 285.087410. It was invisible to every
+same-engine gate because the two halves were wrong together.
+
 ## 3. Divergences deliberately DECLINED
 
 ### 3.1 The Gaussian constant's truncation
