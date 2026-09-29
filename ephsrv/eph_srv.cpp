@@ -1341,60 +1341,11 @@ static void ComputeObjectRows(swe_ctx *ctx, const eph::Request &req, uint32_t iO
     // request's delta T would leak into the next on this loop's engine.
     if (fDtGiven)
       swe_set_delta_t_userdef_r(ctx, dtRow / 86400.0);
-    // ...AND THE OBSERVER CACHE IS NOT KEYED ON DELTA T, so setting it is
-    // not enough. swi_get_observer() is reached only when
-    //
-    //   ctx->topd.teval != pedp->teval || ctx->topd.teval == 0
-    //
-    // -- the INSTANT. The only thing that sets topd.teval = 0 is
-    // swe_set_topo_r(), and that EARLY-RETURNS when the site is unchanged,
-    // so re-setting the same site does not clear it. A site change does
-    // invalidate, which is why a Greenwich leg and a Sydney leg at one
-    // instant are both right and why this went unseen.
-    //
-    // The consequence: on a loop that has already answered at instant t, a
-    // later request at the same t with a DIFFERENT deltaTSec silently gets
-    // the earlier request's Earth rotation. Deterministic at --threads 1;
-    // above that it depends which loop the kernel hands the connection, so
-    // one request answers differently between runs. Measured on the Moon at
-    // J2000 from Zurich: deltaTSec 0 then 100 answers 0 twice, 100 then 0
-    // answers 100 twice, and the two correct values are 7.02 arcsec apart.
-    //
-    // Reproduced in twenty lines against libswe with no server in it, so
-    // this is the fork's cache and not this server's arithmetic.
-    //
-    // FIXED IN THE FORK 2026-09-20 (nrvate/swisseph 70f25ce): a delta t
-    // change now invalidates the observer, in both setters and in the
-    // cross-thread adopt path, held by its G26. THIS BLOCK IS REDUNDANT
-    // AGAINST THAT FORK and was measured so -- disabled here, rebuilt, and
-    // ephsrv-golden.sh still passes 162 including leg 2b, which is the leg
-    // that catches exactly this. So the removal is pre-validated.
-    //
-    // It stays because ephsrv/deploy/SWISSEPH_PIN still names ts.14
-    // (47671e5), and tools/ephsrv-fork.sh and the container image fetch
-    // exactly that commit -- a deployment built from the pin has the defect
-    // and this is what keeps it correct. Delete this block in the same
-    // change that moves the pin to a release carrying G26, not before.
-    //
-    // This is the forcing the fork skips: a site that differs makes
-    // swe_set_topo_r() take its full path and zero topd.teval, then the
-    // real site restores it. Only when a delta T is actually in play and
-    // only when it CHANGED, so an ordinary window pays nothing: the cache
-    // holds one observer, and rows within a request already move the
-    // instant. Keyed on the context as well as the thread, because "one
-    // context per loop" is an arrangement rather than a language rule.
-    if (c.fTopo) {
-      static thread_local swe_ctx *ctxDtLast = nullptr;
-      static thread_local double dtLast = 0.0;
-      static thread_local bool fDtLast = false;
-      const bool fSame = ctxDtLast == ctx && fDtLast == fDtGiven &&
-                         (!fDtGiven || dtLast == dtRow);
-      if (!fSame) {
-        swe_set_topo_r(ctx, c.topo[0], c.topo[1], c.topo[2] + 1.0);
-        swe_set_topo_r(ctx, c.topo[0], c.topo[1], c.topo[2]);
-        ctxDtLast = ctx; dtLast = dtRow; fDtLast = fDtGiven;
-      }
-    }
+    // The topocentric observer cache used to ignore a delta T change, so a
+    // later request at the same instant with a different deltaTSec got the
+    // earlier request's Earth rotation (7.02 arcsec on the Moon). The fork
+    // invalidates it on a delta T change since ts.15 (G26), and this server
+    // forced a site change here until SWISSEPH_PIN moved to that release.
     double xx[6];
     int32_t ret = -1;
     serr[0] = '\0';
