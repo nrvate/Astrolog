@@ -4138,11 +4138,15 @@ static int FCalcRatePointLocal(void *pv, double dj, double *xx)
   char serr[AS_MAXCH];
   int32 nRet;
 
+  // Positions only, as astrolog-ephd's FSrvCalcRatePoint() asks: the
+  // stencil never reads a point's rates, and the two must stay
+  // bit-identical.
   if (p->pss->iobjCent < 0)
-    nRet = swe_calc(p->jde + dj, p->pss->iobj, p->iflagCall, xx, serr);
+    nRet = swe_calc(p->jde + dj, p->pss->iobj, p->iflagCall & ~SEFLG_SPEED,
+      xx, serr);
   else
     nRet = swe_calc_pctr(p->jde + dj, p->pss->iobj, p->pss->iobjCent,
-      p->iflagCall, xx, serr);
+      p->iflagCall & ~SEFLG_SPEED, xx, serr);
   return nRet >= 0;
 }
 

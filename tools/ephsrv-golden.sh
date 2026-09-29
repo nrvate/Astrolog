@@ -168,9 +168,11 @@ int main(int argc, char **argv) {
     for (k = 0; k < 4 && ret >= 0 && (iflag & SEFLG_SPEED); k++) {
       double dj = (k < 2 ? -2.0 + (double)k : (double)k - 1.0) * h;
       char serrD[256];
-      if ((fPctr ? swe_calc_pctr_r(ctx, jd + dj, ipl, atoi(mode + 5), iflag, v[k], serrD)
-           : fUt ? swe_calc_ut_r(ctx, jd + dj, ipl, iflag, v[k], serrD)
-                 : swe_calc_r(ctx, jd + dj, ipl, iflag, v[k], serrD)) < 0)
+      /* positions only, as the server's stencil asks */
+      int32 iflagD = iflag & ~SEFLG_SPEED;
+      if ((fPctr ? swe_calc_pctr_r(ctx, jd + dj, ipl, atoi(mode + 5), iflagD, v[k], serrD)
+           : fUt ? swe_calc_ut_r(ctx, jd + dj, ipl, iflagD, v[k], serrD)
+                 : swe_calc_r(ctx, jd + dj, ipl, iflagD, v[k], serrD)) < 0)
         { bad = 1; break; }
     }
     if (!bad && ret >= 0 && (iflag & SEFLG_SPEED))

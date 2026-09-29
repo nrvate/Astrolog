@@ -305,7 +305,12 @@ step "P1"
 # interactive one arrives, so it goes in front of both -- a prefetch keeps its
 # place only once its first chunk is out. Before block-wise computing the
 # first prefetch was computed and streaming by then, and the order was 1,3,2.
-if ! $CLI --port "$PORT" --objs "$BODIES" --count 10000 --step 60 --jd 2451700.5 \
+# 3000 rows, not the 10000 this was written with: body rates have been
+# differenced since 2026-09-29, which makes each row about 3.5 times the
+# work (measured on this request: 5.7 s before, 19.8 s after), so 3000 keeps
+# each request near the 6 s the ordering was designed around rather than
+# widening the timeout the burst is graded against.
+if ! $CLI --port "$PORT" --objs "$BODIES" --count 3000 --step 60 --jd 2451700.5 \
     --burst 3 --burst-step 1 --priority 1,1,0 --sleep-ms 2000 --quiet \
     > "$SCRATCH/p1.out" 2> "$SCRATCH/p1.err"; then
   fail "P1: the three-request burst: $(head -1 "$SCRATCH/p1.err")"

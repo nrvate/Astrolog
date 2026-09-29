@@ -1251,10 +1251,18 @@ struct SrvCalcRate {
 static int FSrvCalcRatePoint(void *pv, double dj, double *xx) {
   SrvCalcRate *p = (SrvCalcRate *)pv;
   char serrD[AS_MAXCH];
+  // Positions only: a stencil point's rates are never read, and asking
+  // Swiss for them cost a third of a body row's time (a 640,000-cell
+  // request 29.6 s with them, 19.8 s without, 5.7 s before differencing).
+  // A position without SEFLG_SPEED can differ from one with it in the
+  // last bits (up to 6e-14 deg), which moves a rate by about 1e-12 deg/day.
+  // FCalcRatePointLocal() and golden's oracle drop it the same way, so all
+  // three stay bit-identical.
+  const int32 iflag = p->iflag & ~SEFLG_SPEED;
   const int32_t r = p->fPctr
-    ? swe_calc_pctr_r(p->ctx, p->jdEt + dj, p->ipl, p->iplCenter, p->iflag, xx, serrD)
-    : p->fUt ? swe_calc_ut_r(p->ctx, p->jdUt + dj, p->ipl, p->iflag, xx, serrD)
-             : swe_calc_r(p->ctx, p->jdEt + dj, p->ipl, p->iflag, xx, serrD);
+    ? swe_calc_pctr_r(p->ctx, p->jdEt + dj, p->ipl, p->iplCenter, iflag, xx, serrD)
+    : p->fUt ? swe_calc_ut_r(p->ctx, p->jdUt + dj, p->ipl, iflag, xx, serrD)
+             : swe_calc_r(p->ctx, p->jdEt + dj, p->ipl, iflag, xx, serrD);
   return r >= 0;
 }
 
@@ -3100,7 +3108,15 @@ static void EndAll(LoopCtx *lc, bool fHard) {
   std::vector<void *> socks(lc->socks.begin(), lc->socks.end());
   for (void *p : socks) {
     auto *ws = (WebSocket<SSL, true, Conn> *)p;
-    if (fHard && ws->getBufferedAmount() > 0)
+    // "Unsent" is FIdle()'s word, and it includes an answer still being
+    // COMPUTED, not only one buffered: end() on that connection waits for a
+    // close acknowledgement a reader that never reads never sends, so the
+    // deadline was not a deadline. It went unseen while every answer the
+    // ops gate asked for was computed before its 1 s deadline; with rates
+    // differenced (2026-09-29) the answer was still computing, and the
+    // loop outlived the deadline by 5.7 s.
+    if (fHard && (ws->getBufferedAmount() > 0 ||
+                  !((Conn *)ws->getUserData())->out.empty()))
       ws->close();
     else
       ws->end(1001, "server going away");
