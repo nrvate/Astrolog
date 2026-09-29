@@ -1384,12 +1384,26 @@ and are right. With `swiss`, and in `astrolog-ephd`, they follow Swiss.
 copy vendored into Astrolog and in the fork the server links. Vendored code
 is the maintainer's decision (asked 2026-09-29).
 
-**Not yet explained, and not part of this entry:** against the same
-reconstruction, Vulcan (set 16, heliocentric, τ = 0.0052 d) sits 0.103″ off,
-where precession explains 0.0007″, and the Earth-centred Selena (17) and
-Waldemath (19) sit 0.40″ and 3.6″ off. The reconstruction may not be the right
-definition for a geocentric orbit. Prometheia is refereeing all three with
-Swiss's full-precision values (`CLIENT_SERVER_REVIEW.md` C2e).
+**Refereed the same day** (`CLIENT_SERVER_REVIEW.md` C2e), against
+Prometheia's kind 4, which satisfies B(t − τ) − E(t) to under 3e-9″:
+
+- **Selena (17) and Waldemath (19), Earth-centred: no finding.** Swiss and
+  Prometheia agree to 0.001″. The 0.40″ and 3.6″ this entry first reported
+  were this project's reconstruction, which built a geocentric orbit wrongly;
+  retracted.
+- **Vulcan (16): Swiss depends on whether speeds are asked for.** Without
+  `SEFLG_SPEED`, Swiss's fictitious-body light time is a straight-line
+  extrapolation, x(t) − τ·v(t) (`app_pos_etc_plan_osc()` in `sweph.cpp`),
+  which misses the orbit's curvature over τ. That is 0.103″ from Prometheia
+  for a body that goes round in 18.5 days. With `SEFLG_SPEED`, Swiss
+  re-evaluates the orbit at t − τ and the gap falls to **0.024″**, mostly in
+  latitude. Astrolog always asks for speeds, so 0.024″ is what the Swiss path
+  shows; its cause is **not established**. Precession over τ explains
+  0.0007″.
+- **Set 26's full gap is 65.15″:** S6's 63.6″, plus 1.457″ from the agreed
+  kind-4 mean-anomaly rule, which advances an M written as "0.0 + 0.0·T" at
+  the Gaussian mean motion, where Swiss holds it fixed. A 56,000 km distance
+  difference (4.7e-9 relative) on the same body is noted and unexplained.
 
 ## 3. Divergences deliberately DECLINED
 
