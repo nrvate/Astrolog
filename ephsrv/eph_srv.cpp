@@ -3569,8 +3569,10 @@ static std::string DatasetIdOf(const EphDiscovery &disc, const char *szSwe) {
 // the middle of its block -- the Sun, the Moon or Ceres by family -- and its
 // span read back from swe_get_current_file_data_r(), which is the file's own
 // header rather than what its name suggests; a load that answers from any
-// other file is left out rather than guessed at. Spans are Swiss's ET, which
-// is TT; TDB differs by under 2 ms, far inside what coverage is for.
+// other file is left out rather than guessed at. A file's span is in the
+// argument of the JPL ephemeris it was fitted from, Teph, which is TDB (to
+// under 2 ms), so it is sent as it is: it is the input TT that Swiss takes
+// AS Teph, not the span that is TT (sweph.cpp, "Teph ~= TDB ~= TT").
 // Order: planets, then the Moon, then the main asteroids, each in time.
 static void BuildCoverage(const EphDiscovery &disc, eph::Capabilities *c) {
   static const struct { const char *szFam; int ipl, ifno; } rgFam[] = {
