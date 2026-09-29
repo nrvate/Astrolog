@@ -21187,6 +21187,47 @@ LStop:
   Check(NEphPromState(szStateAfter, (int)sizeof(szStateAfter)) == 1,
     "the engine stopped cleanly (%s)", szStateAfter);
 
+  // A catalog with NO perturber kernel serves a body only within 100 years
+  // of its element epoch (Ephemeris Prometheia 0.7.3): asked for Ceres in
+  // 1900, 126 years before the catalog's 2026 epoch, the engine refuses with
+  // its coverage status, ephprom.cpp maps that to error 3, and a chain that
+  // has Swiss behind it walks on and answers, with no warning. Held
+  // together because either half alone can change under the other: the
+  // refusal is theirs, the mapping and the fall-through are ours.
+  if (fCat) {
+    char szPertSav[cchSzMax], szWhyC[cchSzMax];
+    int rgisrcP[1], rgisrcPS[2];
+    EPHQUERY eqP, eqPS;
+
+    sprintf2(S(szPertSav), "%s", SzSet(SzEphPromParam(epPromPerturbers)));
+    EphPromSetParam(epPromPerturbers, "");
+    if (!FEphPromStart(S(szWhyC))) {
+      Check(fFalse, "the engine reopens with a catalog and no perturbers "
+        "(%s)", szWhyC);
+    } else {
+      rgisrcP[0] = rgisrcPS[0] = IEphSrcFromKey("prometheia");
+      rgisrcPS[1] = IEphSrcFromKey("swiss");
+      EphQueryInit(&eqP, 2415021.0);
+      FEphQueryAdd(&eqP, oCer, 0, 0, NULL);
+      FEphSubmitChain(&eqP, rgisrcP, 1);
+      Check(eqP.rgisrc[0] == ephSrcNone &&
+        eqP.rgrow[0].nErr == ephErrOutsideCover,
+        "Ceres in 1900 from a catalog with no perturbers is refused as "
+        "outside the coverage (source %d, error %d)", eqP.rgisrc[0],
+        (int)eqP.rgrow[0].nErr);
+      EphQueryInit(&eqPS, 2415021.0);
+      FEphQueryAdd(&eqPS, oCer, 0, 0, NULL);
+      FEphSubmitChain(&eqPS, rgisrcPS, 2);
+      Check(eqPS.rgisrc[0] == rgisrcPS[1] &&
+        eqPS.rgrow[0].nErr == ephErrNone &&
+        FEqSz(SzSet(eqPS.rgrow[0].szSrc), "swiss"),
+        "and the chain walks on to Swiss for it (answered by %s)",
+        SzSet(eqPS.rgrow[0].szSrc));
+      EphPromStop();
+    }
+    EphPromSetParam(epPromPerturbers, szPertSav);
+  }
+
   // The record of what the engine was opened from used to outlive the
   // close, so every cast through this source ended with "allocations
   // not freed: 3". Equal counts before and after an open and close are
