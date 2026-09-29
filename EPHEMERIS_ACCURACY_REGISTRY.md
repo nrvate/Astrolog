@@ -691,6 +691,15 @@ it and confirms its −0.1754″ is the ICRS transfer and nothing else.
 
 ### 2.6 A topocentric Moon's speed does not describe its own positions — 8e-4 °/day
 
+**Update 2026-09-29: this fork no longer follows Swiss here.** Body rates are
+now DIFFERENCED from the answered positions (`h` = 1/1024 day, five-point) in
+both `astrolog-ephd` and Astrolog's local path, so a topocentric Moon's rate
+describes its own positions. The worst miss found was 6.607e-3 °/day at JD
+2415020.5, ΔT 140 s, Quito (Prometheia's `ratesweep`). Over 1875
+object-series the rates gate's worst is 2.0e-5 °/day, on an osculating point;
+work log item 37 in `EPHEMERIS_PLUGINS_PLAN.md`. What follows is the finding as
+measured against Swiss.
+
 Swiss's reported longitude rate for a **topocentric Moon** disagrees with a
 five-point central difference of **Swiss's own topocentric longitudes** by
 7.9e-4 °/day. That is Swiss contradicting itself, not two engines differing,
@@ -775,6 +784,16 @@ quantity column 5 is. That last gap is the real finding, and it wants a
 sentence in §3 before either engine changes a number.
 
 ### 2.8 Every rate is the derivative of the UNTRANSFORMED quantity — and §2.7 is one case of it
+
+**Update 2026-09-29: this fork no longer follows Swiss here.** Body rates are
+now differenced from the answered positions in both halves (server and local
+path), because Swiss's speed is the rate of a less-corrected quantity than the
+apparent position it returns. Measured on the Uranians before the change: a
+distance rate off by up to 1.33e-4 AU/day. Now the worst over 1875
+object-series is 8.1e-6 relative (miss / max(1 AU, r)) and 2.0e-5 °/day, both
+on an osculating point, which carries `ratesApprox`; fixed stars keep
+`ratesApprox` too (parked). Sabotage, with server differencing off: golden
+failed 126 of 162. Work log item 37 in `EPHEMERIS_PLUGINS_PLAN.md`.
 
 §2.7 found the distance rate describing a different curve from the distance.
 It is not special. **Swiss's rate columns are the derivatives of the geometric,
