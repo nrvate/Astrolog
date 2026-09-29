@@ -2197,10 +2197,13 @@ by the ephemerides and models each server names in WELCOME (engine,
 datasetId, coverage, precession models, ΔT model) and per object (the source
 table).
 
-**Frames and planes** (default precession model IAU 2006; REQUEST TLV 0x0003
-may select another from A.20):
+**Frames and planes** (default precession model Vondrák, Capitaine & Wallace
+2011; REQUEST TLV 0x0003 may select `iau2006` from A.20. Agreed with the
+Prometheia project 2026-09-29: within 1550-2650 the two differ by at most
+0.01", and outside it IAU 2006 is degrees off by -10000, so one long-term
+model everywhere has no step at a span's ends):
 - **True of date (0).** Equator: the true equator and true equinox of date
-  (IAU 2006 precession, IAU 2000A nutation or the server's advertised
+  (Vondrák 2011 precession, IAU 2000A nutation, or the server's advertised
   equivalent). Ecliptic: the mean ecliptic of date, longitudes counted from the
   true equinox of date (nutation in longitude applied, latitude unchanged by it).
 - **Mean of date (1).** The mean equator, mean ecliptic and mean equinox of
@@ -3073,8 +3076,8 @@ T = (t_TT − epoch) / 36525 Julian centuries, as in `seorbel.txt`.
 **A.21 Element centres** (kind 4 `centre`): 0 Sun, 1 Earth.
 
 **A.20 Precession model tokens** (REQUEST TLV 0x0003, WELCOME TLV 0x000D):
-- `iau2006` — Capitaine et al. 2003, IAU 2006 (the default)
-- `vondrak2011` — Vondrák, Capitaine & Wallace 2011, long-term
+- `iau2006` — Capitaine et al. 2003, IAU 2006
+- `vondrak2011` — Vondrák, Capitaine & Wallace 2011, long-term (the default)
 
 ## 6B. Appendix B — mapping to the Swiss Ephemeris
 
