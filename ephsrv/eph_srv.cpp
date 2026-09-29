@@ -1073,8 +1073,16 @@ static void PrepareObject(swe_ctx *ctx, const eph::Request &req, uint32_t iObj,
   // file's edge leaves Swiss's own rates on that row, and those are
   // approximate in exactly the way this flag exists to say. So the flag
   // means what it claims per object rather than per class.
-  if (pf.speeds && !(prep->c.kind == eph::swiss::kCallNodAps &&
-                     prep->c.nodMethod == SE_NODBIT_MEAN))
+  //
+  // Bodies are differenced too since 2026-09-29 (CLIENT_SERVER_REVIEW.md
+  // C1b: a topocentric Moon's longitude rate missed its own positions by
+  // 6.6e-3 deg/day, a Uranian's distance rate by 1.3e-4 AU/day), so the flag
+  // stays only on what still carries Swiss's rates: fixed stars (parked,
+  // STARS_BACKLOG.md) and osculating points.
+  if (pf.speeds && prep->c.kind != eph::swiss::kCallCalc &&
+      prep->c.kind != eph::swiss::kCallPctr &&
+      !(prep->c.kind == eph::swiss::kCallNodAps &&
+        prep->c.nodMethod == SE_NODBIT_MEAN))
     m.flags |= eph::kMetaRatesApprox;
 }
 
@@ -1232,6 +1240,26 @@ static SidPlaneReq PrepareSidPlane(swe_ctx *ctx, const eph::swiss::SwissCall &c)
 // offset instant: registry 1.5. Everything here is the answered row's own --
 // same body, same point, same flags, same frame rotation, same UT-or-ET
 // choice -- or the difference would be of two different quantities.
+// A body's stencil point: the same call the row made, at an offset. Same
+// shape as a node's below; the local path's FCalcRatePointLocal() is its
+// twin, and the two must ask Swiss the same question at the same instants.
+struct SrvCalcRate {
+  swe_ctx *ctx;
+  double jdUt, jdEt;
+  int32_t ipl, iplCenter, iflag;
+  bool fUt, fPctr;
+};
+
+static int FSrvCalcRatePoint(void *pv, double dj, double *xx) {
+  SrvCalcRate *p = (SrvCalcRate *)pv;
+  char serrD[AS_MAXCH];
+  const int32_t r = p->fPctr
+    ? swe_calc_pctr_r(p->ctx, p->jdEt + dj, p->ipl, p->iplCenter, p->iflag, xx, serrD)
+    : p->fUt ? swe_calc_ut_r(p->ctx, p->jdUt + dj, p->ipl, p->iflag, xx, serrD)
+             : swe_calc_r(p->ctx, p->jdEt + dj, p->ipl, p->iflag, xx, serrD);
+  return r >= 0;
+}
+
 struct SrvNodRate {
   swe_ctx *ctx;
   double jdUt, jdEt;
@@ -1351,12 +1379,24 @@ static void ComputeObjectRows(swe_ctx *ctx, const eph::Request &req, uint32_t iO
     serr[0] = '\0';
     switch (c.kind) {
       case eph::swiss::kCallCalc:
-        ret = c.fUT && !fDtGiven ? swe_calc_ut_r(ctx, jd, c.ipl, iflagBody, xx, serr)
+      case eph::swiss::kCallPctr: {
+        const bool fPctr = c.kind == eph::swiss::kCallPctr;
+        ret = fPctr ? swe_calc_pctr_r(ctx, jdEt(), c.ipl, c.iplCenter, iflagBody, xx, serr)
+            : c.fUT && !fDtGiven ? swe_calc_ut_r(ctx, jd, c.ipl, iflagBody, xx, serr)
                                  : swe_calc_r(ctx, jdEt(), c.ipl, iflagBody, xx, serr);
+        // Rates differenced from the positions answered, as for a mean node
+        // below; see PrepareObject() for why and ephnodrate.h for the stencil.
+        if (ret >= 0 && pf.speeds && (iflagBody & SEFLG_SPEED)) {
+          SrvCalcRate scr;
+          scr.ctx = ctx; scr.jdUt = jd; scr.jdEt = jdEt();
+          scr.ipl = c.ipl; scr.iplCenter = c.iplCenter; scr.iflag = iflagBody;
+          scr.fUt = c.fUT && !fDtGiven; scr.fPctr = fPctr;
+          if (!EphNodRateDiff(&FSrvCalcRatePoint, &scr, xx,
+                (iflagBody & SEFLG_RADIANS) != 0, (iflagBody & SEFLG_XYZ) != 0))
+            e->meta[iObj].flags |= eph::kMetaRatesApprox;
+        }
         break;
-      case eph::swiss::kCallPctr:
-        ret = swe_calc_pctr_r(ctx, jdEt(), c.ipl, c.iplCenter, iflagBody, xx, serr);
-        break;
+      }
       case eph::swiss::kCallNodAps: {
         double xn[6], xd[6], xp[6], xa[6];
         // The point is the one on the mean ecliptic of date; the frame only
@@ -3653,7 +3693,7 @@ static void BuildWelcome(const EphDiscovery &disc, const char *szSwe) {
   // 2100). Tightening to 3e-3 was proposed and declined: it would have left
   // 1.7x, and the argument for the 2-3x band is the same argument that says
   // a third site would probably widen the measurement again.
-  c.ratesDegPerDay = 5e-3f;
+  c.ratesDegPerDay = 5e-5f;   // 2026-09-29: see ratesAuPerDay below
   // RAISED from 1e-4 on 2026-09-19, which is the uncomfortable direction and
   // is why it is spelt out. The measurement is 7.3345e-5 AU/day (Pluto,
   // geocentric, 1900), so 1e-4 was 1.4x -- thin for a figure with this
@@ -3699,7 +3739,15 @@ static void BuildWelcome(const EphDiscovery &disc, const char *szSwe) {
   // 9.0324e-5 (Saturn's osculating aphelion, topocentric Quito, 2026), and
   // 2e-4 would have been right and useful. A client that cares only about
   // solar-system distance rates should read 2.8, not this number.
-  c.ratesAuPerDay = 4e-3f;
+  // 2026-09-29, under 3.5a's agreed reading (auPerDay bounds the distance
+  // miss divided by max(1 AU, r)) and with body rates differenced: measured
+  // worst 2.0e-5 deg/day and 8.1e-6 by tools/ephsrv-rates.sh over 1875
+  // object-series -- three observers, five epochs, five delta T settings, 0
+  // included -- both on an osculating point, which keeps Swiss's rates and
+  // says so with ratesApprox. Advertised at twice that; every unflagged
+  // object meets 3.5a's defaults. The history above is how the old,
+  // absolute figures were reached.
+  c.ratesAuPerDay = 2e-5f;
   for (int i = 0; i < eph::kHypotheticalTokenCount; i++)
     c.hypotheticals.push_back(eph::kHypotheticalTokens[i]);
   eph::Welcome w;

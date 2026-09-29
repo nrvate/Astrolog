@@ -170,11 +170,15 @@ for path in sys.argv[2:]:
             d = (v[0] - 8*v[1] + 8*v[3] - v[4]) / (12.0 * h)
             m = abs(seq[2][col+3] - d)
             if col == 2:
+                # 3.5a as agreed 2026-09-29: the distance bound is on the
+                # miss divided by max(1 AU, r) -- absolute within 1 AU,
+                # relative beyond.
+                m /= max(1.0, abs(seq[2][2]))
                 if m > worstR: worstR, whoR = m, "%s %s" % (label, path.split("/")[-1])
             elif m > worstA:
                 worstA, whoA = m, "%s %s col%d" % (label, path.split("/")[-1], col)
-print("    advertised  %g deg/day   %g AU/day" % (advDeg, advAu))
-print("    measured    %g deg/day   %g AU/day" % (worstA, worstR))
+print("    advertised  %g deg/day   %g AU/day per max(1 AU, r)" % (advDeg, advAu))
+print("    measured    %g deg/day   %g AU/day per max(1 AU, r)" % (worstA, worstR))
 print("    worst angle    %s" % whoA)
 print("    worst distance %s" % whoR)
 overBound = worstA > advDeg or worstR > advAu
@@ -190,11 +194,12 @@ bad = overBound
 # nothing, which is the same shape as a duplicate scan printing what a clean
 # table prints.
 #
-# 22 objects per file: 10 bodies + 8 orbit points + 4 stars, as run_obs asks
-# for them. 15 files: 3 observers x 5 epochs. Both declared here rather than
+# 25 objects per file: 10 bodies + 8 orbit points + 4 stars + 3 hypotheticals,
+# as run_obs asks for them. 75 files: 3 observers x 5 epochs x 5 delta T
+# (the default and four explicit values). Both declared here rather than
 # counted off the request, so a request that shrinks fails this instead of
 # quietly agreeing with it.
-kSeries = 22 * 15
+kSeries = 25 * 75
 if nSeries != kSeries:
     print("    ONLY %d OF %d OBJECT-SERIES MEASURED -- a bound over the ones"
           " that happened to arrive is not the bound a client is promised"
@@ -248,7 +253,7 @@ for path in sys.argv[1:]:
                     while v[i] - v[i-1] < -180.0: v[i] += 360.0
             d = (v[0] - 8*v[1] + 8*v[3] - v[4]) / (12.0 * h)
             m = abs(seq[2][col+3] - d)
-            if col == 2: r = max(r, m)
+            if col == 2: r = max(r, m / max(1.0, abs(seq[2][2])))
             else:        a = max(a, m)
         worst[(path, label)] = [a, r, flags[label]]
 
@@ -257,10 +262,12 @@ def fMean(label):
     return label.startswith("o:") and label.rsplit("/", 1)[-1] == "0"
 
 bad = 0
+# 3.5a's defaults as agreed 2026-09-29: 1e-5 deg/day, and 1e-9 on the
+# distance miss divided by max(1 AU, r).
 unsound = [(k, v) for k, v in worst.items()
-           if (v[0] > 1e-5 or v[1] > 1e-6) and not (v[2] & kRatesApprox)]
+           if (v[0] > 1e-5 or v[1] > 1e-9) and not (v[2] & kRatesApprox)]
 for (path, label), v in sorted(unsound):
-    print("    UNSOUND %-12s %9.3e deg/day %9.3e AU/day, flag CLEAR  %s"
+    print("    UNSOUND %-12s %9.3e deg/day %9.3e /day rel, flag CLEAR  %s"
           % (label, v[0], v[1], path.split("/")[-1]))
     bad += 1
 
@@ -331,7 +338,8 @@ h = 1.0 / 1024.0
 BODIES = ["10","301","199","299","499","5","6","7","8","9"]
 POINTS = ["o:301/0/1","o:301/1/1","o:301/3/1","o:4/2/0","o:5/2/0","o:199/2/0","o:4/0/0","o:199/2/1"]
 STARS  = ["s:Sirius","s:Polaris","s:Aldebaran","s:Vega"]
-GRID   = BODIES + POINTS + STARS          # 22, as run_obs asks for them
+HYPO   = ["h:cupido","h:vulcanus","h:vulcan"]
+GRID   = BODIES + POINTS + STARS + HYPO   # 25, as run_obs asks for them
 ZOD    = ["10","301","199","499","5","9","s:Sirius","s:Aldebaran"]   # 8, as run() does
 
 def rows(labels, rate=1.0, err=0, flags=0, bump=None):
@@ -359,11 +367,11 @@ elif mode == "zod-worse":
 else:
     write("lahiri.txt", rows(ZOD)); write("citra.txt", rows(ZOD))
 
-# -- leg_bound / leg_flag's grid: 15 files x 22 labels = 330 series.
+# -- leg_bound / leg_flag's grid: 75 files x 25 labels = 1875 series.
 adv = "ratebound=0.005/0.004"
 if mode == "bound-noadv": adv = "engine=swiss"
 write("welcome.txt", "serverName=selftest %s\n" % adv)
-for k in range(15):
+for k in range(75):
     err, flags, labels, bump = 0, 0, GRID, None
     if mode == "grid-allerr":       err = 6
     elif mode == "bound-over":      bump = lambda l: 0.9 if l == "301" else 0.0
@@ -474,14 +482,16 @@ for obs in geo topo-zurich topo-quito; do
   # "misses" the bound by its own whole rate. The Sun's distance is
   # constant at f32 over this window too. Measured 2026-09-20, after the
   # other project's sweep reported an outlier that was this and not a rate.
-  run_obs() {
+  run_obs() {   # run_obs <obs> <jd> <out> [deltaTSec]
     ./eph_wsclient --host 127.0.0.1 --port "$PORT" --quiet --precision 64 \
+      ${4:+--deltat "$4"} \
       --jd "$(python3 -c "print(repr($2 - 2.0/1024.0))")" \
       --step-ns 84375000000 --count 5 \
       --profile "obs=$OBSKIND$SITE,plane=ecl,form=sph,speeds=1" \
       --objs 10,301,199,299,499,5,6,7,8,9 \
       --points 301:0:1,301:1:1,301:3:1,4:2:0,5:2:0,199:2:0,4:0:0,199:2:1 \
       --stars Sirius,Polaris,Aldebaran,Vega \
+      --hypo cupido,vulcanus,vulcan \
       --out "$3" > /dev/null
   }
   # 1800 is in the grid on purpose: the worst case is there, not at J2000.
@@ -511,8 +521,16 @@ for obs in geo topo-zurich topo-quito; do
   # this server -- Swiss's number, faithfully relayed, at an instant no
   # bound should be set from. 2378600.5 is ~100 days in, grades 330 of 330,
   # and its worst is 1.7e-3 deg/day and 1.5e-3 AU/day.
+  # THE DELTA T AXIS, which this grid held fixed until 2026-09-29: every
+  # epoch is asked again with deltaTSec sent explicitly, 0 included, which
+  # any client may send. Registry 2.11a's star cells and the Prometheia
+  # cross-test's topocentric Moon cell (6.6e-3 deg/day at 1900, deltaT 140)
+  # both sat on this axis, invisible to a grid that never varied it.
   for jd in 2378600.5 2415020.5 2451545.0 2461300.5 2488069.5; do
     run_obs "$obs" "$jd" "$SCRATCH/b-$obs-$jd.txt"
+    for dt in 0 30 69.2 140; do
+      run_obs "$obs" "$jd" "$SCRATCH/b-$obs-$jd-dt$dt.txt" "$dt"
+    done
   done
 done
 leg_bound "$SCRATCH/welcome.txt" "$SCRATCH"/b-*.txt || fail=1

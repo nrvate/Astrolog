@@ -4123,6 +4123,29 @@ static void ApplySidPlaneLocal(double *xx)
   ApplySidPlane(&sp, fFalse, xx);
 }
 
+// The same for a body: the same call, body, centre and flags at an offset
+// instant. A stencil point Swiss will not answer abandons the differencing
+// and leaves Swiss's own rates, as for a node.
+typedef struct {
+  double jde;
+  CONST SWISSSPEC *pss;
+  int32 iflagCall;
+} CALCRATECTX;
+
+static int FCalcRatePointLocal(void *pv, double dj, double *xx)
+{
+  CALCRATECTX *p = (CALCRATECTX *)pv;
+  char serr[AS_MAXCH];
+  int32 nRet;
+
+  if (p->pss->iobjCent < 0)
+    nRet = swe_calc(p->jde + dj, p->pss->iobj, p->iflagCall, xx, serr);
+  else
+    nRet = swe_calc_pctr(p->jde + dj, p->pss->iobj, p->pss->iobjCent,
+      p->iflagCall, xx, serr);
+  return nRet >= 0;
+}
+
 // What EphNodRateDiff() needs to re-ask for the same point at an offset
 // instant: registry 1.5. Everything here is the answered row's own -- the
 // same body, the same point, the same flags, the same frame rotation -- or
@@ -4210,6 +4233,20 @@ flag FSwissPlanet(int ind, real jd, int indCent,
     else
       // Alternate position orbiting an unusual central object.
       nRet = swe_calc_pctr(jde, ss.iobj, ss.iobjCent, iflagCall, xx, serr);
+    // A body's rates are differenced from the positions we report, like a
+    // mean point's below. Swiss's speed is the rate of a less-corrected
+    // quantity than the apparent position it returns: a topocentric Moon's
+    // longitude rate missed its own positions by 6.6e-3 deg/day, and a
+    // Uranian's distance rate by 1.3e-4 AU/day (registry 2.6-2.8;
+    // CLIENT_SERVER_REVIEW.md C1b). 3.5a defines a rate as the derivative
+    // of the answered coordinates, and astrolog-ephd does the same with
+    // the same header, so the two stay bit-identical.
+    if (nRet >= 0 && (ss.iflag & SEFLG_SPEED)) {
+      CALCRATECTX crc;
+      crc.jde = jde; crc.pss = &ss; crc.iflagCall = iflagCall;
+      EphNodRateDiff(&FCalcRatePointLocal, &crc, xx,
+        (iflagCall & SEFLG_RADIANS) != 0, (iflagCall & SEFLG_XYZ) != 0);
+    }
   } else {
     // Standard case to get node or apsis position. A node under "-Ys" is
     // asked OF DATE and rotated, never with SEFLG_J2000 -- Swiss handed a

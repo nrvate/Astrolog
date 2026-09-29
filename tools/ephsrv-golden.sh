@@ -150,12 +150,43 @@ int main(int argc, char **argv) {
     ret = swe_nod_aps_r(ctx, jd, ipl, iflag, meth, xn, xd, xp, xa, serr);
     px = pnt == 0 ? xn : pnt == 1 ? xd : pnt == 2 ? xp : xa;
     for (int i = 0; i < 6; i++) xx[i] = px[i];
-  } else if (strncmp(mode, "pctr:", 5) == 0) {
-    ret = swe_calc_pctr_r(ctx, jd, ipl, atoi(mode + 5), iflag, xx, serr);
-  } else if (strcmp(mode, "ut") == 0) {
-    ret = swe_calc_ut_r(ctx, jd, ipl, iflag, xx, serr);
   } else {
-    ret = swe_calc_r(ctx, jd, ipl, iflag, xx, serr);
+    /* tt, ut, pctr:C, opposite and aya: a BODY, whose three rate columns
+       the server has differenced from its own positions since 2026-09-29
+       (the same five points at h = 1/1024 day as a mean node), because
+       Swiss's speed is the rate of a less-corrected quantity than the
+       position it returns. So the oracle differences the base call too --
+       before the opposite point and the ayanamsa column, exactly where the
+       server does. Written out by hand, like every flag in this file. */
+    int k, kk, bad = 0;
+    double v[4][6];
+    const double h = 1.0 / 1024.0;
+    const int fPctr = strncmp(mode, "pctr:", 5) == 0, fUt = strcmp(mode, "ut") == 0;
+    ret = fPctr ? swe_calc_pctr_r(ctx, jd, ipl, atoi(mode + 5), iflag, xx, serr)
+        : fUt ? swe_calc_ut_r(ctx, jd, ipl, iflag, xx, serr)
+              : swe_calc_r(ctx, jd, ipl, iflag, xx, serr);
+    for (k = 0; k < 4 && ret >= 0 && (iflag & SEFLG_SPEED); k++) {
+      double dj = (k < 2 ? -2.0 + (double)k : (double)k - 1.0) * h;
+      char serrD[256];
+      if ((fPctr ? swe_calc_pctr_r(ctx, jd + dj, ipl, atoi(mode + 5), iflag, v[k], serrD)
+           : fUt ? swe_calc_ut_r(ctx, jd + dj, ipl, iflag, v[k], serrD)
+                 : swe_calc_r(ctx, jd + dj, ipl, iflag, v[k], serrD)) < 0)
+        { bad = 1; break; }
+    }
+    if (!bad && ret >= 0 && (iflag & SEFLG_SPEED))
+      for (kk = 0; kk < 3; kk++) {
+        double a = v[0][kk], b = v[1][kk], d = v[2][kk], e = v[3][kk];
+        if (kk == 0 && !(iflag & SEFLG_XYZ)) {
+          double half = (iflag & SEFLG_RADIANS) ? 3.14159265358979323846 : 180.0;
+          while (b - a >  half) b -= 2.0 * half;
+          while (b - a < -half) b += 2.0 * half;
+          while (d - b >  half) d -= 2.0 * half;
+          while (d - b < -half) d += 2.0 * half;
+          while (e - d >  half) e -= 2.0 * half;
+          while (e - d < -half) e += 2.0 * half;
+        }
+        xx[kk + 3] = (a - 8.0 * b + 8.0 * d - e) / (12.0 * h);
+      }
     if (ret >= 0 && strcmp(mode, "opposite") == 0) {
       xx[0] = swe_degnorm(xx[0] + 180.0);
       xx[1] = -xx[1];
