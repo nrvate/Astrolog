@@ -1880,6 +1880,17 @@ server places B from A (2.4), so it shares A's distance, which is the
 physically right structure; the value is `sefstars.txt`'s, the maintainer's
 call as for Vega.
 
+**Their answer, 2026-09-30:** every difference above equals the difference
+between the two catalogues' radial velocities, to the precision quoted. Theirs
+are SIMBAD, quality A-C, pinned 2026-09-17: Regulus +0.72 (ours +5.9),
+Spica −3.31 (ours +1), Procyon −4.51 (ours −3.2), Vega −13.5 (ours −20.6, the
+maintainer's recorded decision), Toliman −22.59 from its own HR 5460 line
+(ours −15.3, A's). So the projection agrees and only the catalogue values
+differ; **they keep theirs as a data choice**, and for alpha Cen they place B
+from A with a known limit of about 0.7" per century and a distance effect of at
+most 0.05", and do not change it. Which side's radial velocities are current
+is still not established here -- `sefstars.txt` is the maintainer's call.
+
 ### 4.5 Nessus — two orbit solutions 6.7″ apart, inside JPL's own 3σ
 
 **Measured 2026-09-29.** Geocentric apparent ecliptic of date, JD
