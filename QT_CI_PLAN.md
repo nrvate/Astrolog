@@ -4010,3 +4010,42 @@ generated, or be a new key that every existing subscriber would have to
 trust afresh. Nothing in this tree needed it: `make-repo.sh` was the
 only consumer and went on 2026-09-05.
 
+
+**2026-09-29 — qt.25, and what three dry runs found that a local `make
+check-full` did not.** The release is v8.00-qt.25 (a517991). Every dry run
+below was dispatched with `publish=false`, and each was the first CI run since
+2026-09-16, so each found a latent fault rather than one the last commit made.
+
+1. **A header found only because this machine has it.** `qtdriver.cpp` began
+   including `ephsrv/ephswiss.h` after qt.24, and that says
+   `#include "swephexp.h"`. The quote form looks in `ephsrv/`, then the `-I`
+   paths, then the system ones; the Qt makefiles had `-I ephsrv` and no
+   `-I .`, so the vendored `./swephexp.h` was never reached. This box has the
+   thread-safe fork installed at `/usr/local/include`, so every build here
+   compiled against THAT header, silently, while a clean clone (Linux and
+   macOS) failed. The fix is `-I .` in the four Qt makefiles and in
+   `tools/warning_audit.py`'s own flag table, which REPLACES the makefiles'
+   CPPFLAGS and needed it separately (the second dry run failed only there).
+   `tools/system-header-check.sh`, in `make check`, refuses a makefile that
+   adds `-I ephsrv` without `-I .` and resolves the include with a real `-M`
+   preprocess. It cannot read the answer out of the `.d` files: `-MM` and
+   `-MMD` leave system headers OUT, so the wrong header is exactly the one
+   that never appears. Its first draft did that and passed on the broken
+   flags; it was written, tested against a decoy, and rewritten in one
+   sitting. To reproduce the CI failure here, compile with `-nostdinc` and
+   every default system directory except `/usr/local/include`.
+2. **Two suite assertions the Windows job had never run.** Both came with the
+   server-client work after qt.24. `std::clock()` is WALL time on MSVC, so
+   "the process slept through it" (CPU well under wall) could not hold there;
+   `GetProcessTimes` is resolved through `QLibrary`, as the dark title bar's
+   call is, keeping `windows.h` out of the file. And the re-send leg, which
+   reconnects five times, used `localhost`; a refused connect to `::1` (tried
+   first for the name) is slow on Windows. It now uses `127.0.0.1`, has 20 s
+   rather than 8, and its message prints the elapsed time. The second is a
+   hypothesis that the third run confirmed by passing.
+3. **The order of the dispatch.** Wait until
+   `gh api repos/nrvate/Astrolog/branches/qt --jq .commit.sha` equals the
+   local tip, then check the run's `headSha`; all three runs were on the
+   intended commit. `gh run watch --exit-status` in the background reports
+   "completed" whatever the run's conclusion is, because the wrapper's own exit
+   is what is reported: read `gh run view --json conclusion,jobs` afterwards.

@@ -35,8 +35,12 @@ with Prometheia for every object and stays in flight.
      helper unchanged, and under the relative bound the floor, about 2e-13 per
      AU, doesn't matter.
 2. **Advertise the star part of 0x0013** once item 1 lands and the sentence is
-   approved on both sides. Until then our advertised 4e-3 AU/day does not
-   cover topocentric stars (§2.11a), which is the fact a client would need.
+   approved on both sides. The advertised bound is 3e-5 deg/day and 1e-9
+   AU/day since 2026-09-29 (it was 5e-3 and 4e-3 when this was written), and
+   the rates gate's worst are two fixed stars, 1.29e-5 deg/day and 4.3e-10.
+   **Re-measure before believing §2.11a's 8.2e-3 AU/day still holds:** it was
+   found on a grid with no ΔT axis and before the stencil and ΔT changes,
+   and the gate's grid has not been asked about those scattered cells since.
 3. **Registry §2.10**, a measurement trap: a star's distance rate is unstable
    within about five days of an ephemeris file's start. Nothing to fix; any
    future star sweep must avoid file edges.

@@ -23,6 +23,14 @@ version 3, and this section is the design authority behind it.
   as it stood on 2026-09-20 and describes the state that item 37 closed.
   Fixed-star work is parked in `STARS_BACKLOG.md`.
 
+- **UPDATE 2026-09-29 (evening): nothing is open on the plan or between the
+  two projects.** Work log item 38: the coverage TLV, the cross-engine gate
+  (`tools/ephsrv-prometheia.sh`), the sidereal-node defect it found (fork
+  ts.18), and v8.00-qt.25 published. Prometheia is deliberately NOT the
+  default source (the maintainer's decision); the next work, when asked for,
+  is `STARS_BACKLOG.md`. Both queues were reported empty by the other
+  project after its v0.7.3.
+
 - **START HERE (2026-09-20, end of day). THE PLAN'S OWN PHASES ARE ALL
   DONE. THREE THINGS WERE OPEN AND ALL THREE WERE THE MAINTAINER'S, not
   work waiting to be picked up -- all three closed 2026-09-29, see above.**
@@ -3398,6 +3406,53 @@ instructions for a human to copy is the thing this direction exists to stop.
      bug into their own `corrapplied.py` and caught it by fault
      injection rather than by trusting the green. The symptom to grep
      for in any existing leg is a column of suspiciously exact zeros.
+
+38. **Coverage on the wire, a cross-engine gate, the sidereal-node defect
+   it found, and v8.00-qt.25 (2026-09-29, later).**
+
+   *Coverage (A.3 0x000A).* `astrolog-ephd` declares one span per Swiss file
+   it serves from, read from each file's own header (3 over the bundled
+   `ephem/`, 150 over `/swe`; startup still 0.06 s). The spans are Teph,
+   which is TDB to 2 ms: the first draft's comment said TT, which was wrong
+   (the argument Swiss is handed is TT, taken as Teph). The codec gained the
+   decode and a malformed fixture (`welcome_coverage_short`, set
+   `1df64f69...`, 110 fixtures); Prometheia re-vendored it and declares its
+   own. Astrolog's `server` source sends nothing for a cast outside every
+   span, and a server-only chain says why. Commits 7957abb, 9778ca7.
+
+   *The cross-engine gate.* `tools/ephsrv-prometheia.sh` starts
+   `prometheiad` (DE440, the EPM1 catalog, the trimmed sb441 perturbers) on a
+   port of its own and runs the live group against it. With
+   `ASTROLOG_EPHSRV_URL` set the eleven scenarios are graded by angular
+   SEPARATION, per class, and the same-engine legs (bit-identity, animation,
+   cache, request counts) skip with a printed reason. Measured worst: planets
+   and points 0.2226" (Neptune, 1900), small bodies 0.85" (Orcus), rates
+   1.8e-4 deg/day; bounds 0.3", 1", 3e-4. `--selftest` requires the same run
+   at 0.01 x the bounds to fail. CLIENT_SERVER_REVIEW.md C1a, C1e-C1h.
+
+   *What its first run found.* A sidereal North and South Node 12.84" from
+   Prometheia's answer while every planet agreed to 0.02". `swe_nod_aps()`
+   lacked the rule `swe_calc()` has (`SEFLG_SIDEREAL` implies `SEFLG_NONUT`),
+   so a sidereal node or apsis carried the whole of delta-psi (+12.82" on
+   1990-06-16, +17.43" on 1900-01-01), in the server and the application
+   alike, which is why no same-engine gate could see it. Fixed in the fork
+   as ts.18 (`ba1b1ec`, G30: 144 longitudes, fails by delta-psi on the compat
+   build; notes/UPSTREAM-BUGS.md 21) and in the vendored `swecl.cpp`; the
+   pin moved to it. Registry 2.14. Their cross-test grew a sidereal
+   orbit-point leg (C1h).
+
+   *Also settled.* Prometheia serves no `vulcan` token by design (C1f). The
+   mean-node point's distance differs 7e-5 relative (28 km) between engines,
+   a definition difference visible only topocentrically (C1g). A catalog
+   with no perturber kernel serves a body only within 100 years of its
+   element epoch (their 3936cd9): the plugin maps status 7 to error 3 and the
+   chain falls through; a suite leg holds the pair (88adc58).
+
+   *The release.* v8.00-qt.25 was published from a517991 after THREE dry runs,
+   each of which found something the local `make check-full` had not (QT_CI_PLAN.md,
+   2026-09-29). The maintainer decided Prometheia is NOT made the default
+   source ("no ... i'll bring that up again if i ever want it"): the
+   default stays Swiss.
 
 37. **The three open items of the 2026-09-20 Status are closed, body rates
    are differenced, and Prometheia computes every fictitious body
