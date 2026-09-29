@@ -20390,10 +20390,10 @@ static void TestPrometheiaQt()
       rgobj[i].point = eph::kPtAscNode;
       rgobj[i].method = eph::kMethOsculating;
     }
-    // 4: a named hypothetical -- not served.
+    // 4: a named hypothetical, served by A.15 token since 2026-09-29.
     rgobj[4].kind = eph::kObjHypothetical;
     rgobj[4].profile = 0;
-    rgobj[4].name = "Vulcan";
+    rgobj[4].name = "cupido";
     // 5: elements -- its Kepler engine is not implemented.
     rgobj[5].kind = eph::kObjElements;
     rgobj[5].profile = 0;
@@ -20445,8 +20445,9 @@ static void TestPrometheiaQt()
     }
     Check(rga[0].corrApplied == eph::kCorrMask,
       "the orbit point reports all three terms live");
-    Check(rga[4].errCode == eph::kOErrUnsupported,
-      "a named hypothetical is error 2 here (%d)", rga[4].errCode);
+    Check(rga[4].errCode == eph::kOErrNone && rga[4].rowsOk > 0,
+      "a named hypothetical (cupido) is served (error %d, %d rows)",
+      rga[4].errCode, rga[4].rowsOk);
     Check(rga[5].errCode == eph::kOErrUnsupported,
       "elements are error 2 here (%d)", rga[5].errCode);
     Check(rga[6].errCode == eph::kOErrUnsupported,
@@ -20663,8 +20664,9 @@ static void TestPrometheiaQt()
         real rWorst = 0.0, rLim;
         char szWorst[cchSzDef] = "";
         for (iSel = 0; iSel < cObjSel; iSel++) {
-          if (rgObjSel[iSel].nTyp != 1 && rgObjSel[iSel].nTyp != 2)
-            continue;          // the Uranians are elements, not kind 0
+          // The Uranians, Vulcan included, are the stock seorbel.txt's
+          // elements compiled in (ephpromelem.h) and computed by the
+          // engine's two-body entry point.
           cNum++;
           rgTypSwiss[0] = rgObjSel[iSel].nTyp;
           rgObjSwiss[0] = rgObjSel[iSel].nObj;
@@ -20703,8 +20705,8 @@ static void TestPrometheiaQt()
         }
         printf("  oracle %-46s %9.4f\" (%s)\n",
           "Object Selections, worst but Nessus, vs Swiss", rWorst, szWorst);
-        Check(cNum == 69 && cProm == cNum && cNear == cNum,
-          "all 69 non-Uranian Object Selections bodies answered here and "
+        Check(cNum == 78 && cProm == cNum && cNear == cNum,
+          "all 78 Object Selections bodies answered here and "
           "within bounds (%d asked, %d answered, %d within)", cNum, cProm,
           cNear);
       } else

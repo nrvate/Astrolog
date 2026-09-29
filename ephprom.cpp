@@ -25,6 +25,7 @@
 #include "astrolog.h"
 #include "swephexp.h"
 #include "ephprom.h"
+#include "ephpromelem.h"
 #include <prometheia/prometheia.h>
 #include <math.h>
 #include <string.h>
@@ -685,14 +686,13 @@ flag FEphPromCompute(CONST EPHPROMQ *pq, EPHPROMANSWER rga[])
         continue;
       }
       break;
-    default:                             // kinds 3 and 4: not served
+    case eph::kObjHypothetical:          // kind 3, by A.15 token
+    case eph::kObjElements:              // kind 4, two-body elements
+      break;
+    default:
       pa->errCode = eph::kOErrUnsupported;
       pa->corrApplied = 0;
-      if (po->kind == eph::kObjHypothetical)
-        sprintf2(S(pa->szErr), "this engine serves no named hypotheticals");
-      else
-        sprintf2(S(pa->szErr), "this engine's Kepler elements are not "
-          "implemented");
+      sprintf2(S(pa->szErr), "object kind %d is not served", (int)po->kind);
       continue;
     }
 
@@ -726,7 +726,34 @@ flag FEphPromCompute(CONST EPHPROMQ *pq, EPHPROMANSWER rga[])
             jd, &opts, &r, &err) :
           prometheia_calc_orbit_point(pephProm, naif, po->point, nElem,
             jd, &opts, &r, &err);
-      } else
+      } else if (po->kind == eph::kObjElements) {
+        prometheia_elements el;
+        int ie, it, nT = po->nTerms > 5 ? 5 : po->nTerms;
+        memset(&el, 0, sizeof(el));
+        el.epoch_jd_tt = po->epoch.Sum();
+        el.equinox = po->equinox;
+        el.equinox_jd_tt = po->equinoxJd;
+        el.origin = po->centre;
+        el.n_terms = nT;
+        for (it = 0; it < nT; it++)
+          for (ie = 0; ie < 6; ie++) {
+            size_t ic = (size_t)ie * po->nTerms + it;
+            double v = ic < po->coef.size() ? po->coef[ic] : 0.0;
+            double *pd = ie == 0 ? el.mean_anomaly : ie == 1 ?
+              el.semi_major_axis : ie == 2 ? el.eccentricity : ie == 3 ?
+              el.arg_perihelion : ie == 4 ? el.ascending_node : el.inclination;
+            pd[it] = v;
+          }
+        s = pq->nTs == eph::kTimeUT1 ?
+          prometheia_calc_elements_ut(pephProm, &el, jd, &opts, &r, &err) :
+          prometheia_calc_elements(pephProm, &el, jd, &opts, &r, &err);
+      } else if (po->kind == eph::kObjHypothetical)
+        s = pq->nTs == eph::kTimeUT1 ?
+          prometheia_calc_hypothetical_ut(pephProm, po->name.c_str(), jd,
+            &opts, &r, &err) :
+          prometheia_calc_hypothetical(pephProm, po->name.c_str(), jd,
+            &opts, &r, &err);
+      else
         s = CalcBodyRow(pephProm, naif, fStar, pq->nTs, jd, &opts, &r,
           &err);
       if (s != PROMETHEIA_OK) {
@@ -966,6 +993,25 @@ static flag FSubmitProm(EPHQUERY *pq)
       rgobj[i].point = (uint8_t)(ss.nPnt - 1);
       rgobj[i].method = ss.nNodMethod == SE_NODBIT_OSCU ? eph::kMethOsculating :
         eph::kMethMean;
+    } else if (ss.iobj >= SE_FICT_OFFSET &&
+      ss.iobj - SE_FICT_OFFSET < cEphPromElem) {
+      // A fictitious body: its elements from the stock seorbel.txt, compiled
+      // in (ephpromelem.h), so it is the same body whatever file sits on a
+      // user's -Yi path, and every set is served -- Vulcan included, which
+      // the engine's shipped token set does not define.
+      CONST EPHPROMELEM *pe = &rgEphPromElem[ss.iobj - SE_FICT_OFFSET];
+      int ie, it;
+      rgobj[i].kind = eph::kObjElements;
+      rgobj[i].name = pe->szName;
+      rgobj[i].epoch.jd1 = pe->epoch;
+      rgobj[i].equinox = (uint8_t)pe->equinox;
+      rgobj[i].equinoxJd = pe->equinoxJd;
+      rgobj[i].centre = (uint8_t)pe->centre;
+      rgobj[i].nTerms = 5;
+      rgobj[i].coef.assign(30, 0.0);
+      for (ie = 0; ie < 6; ie++)
+        for (it = 0; it < 5; it++)
+          rgobj[i].coef[ie * 5 + it] = pe->el[ie][it];
     } else {
       rgobj[i].kind = eph::kObjBody;
       naif = NNaifFromSwiss(ss.iobj);

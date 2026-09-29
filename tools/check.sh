@@ -79,6 +79,7 @@ gen  "ephemeris parameters"      ephparam.h python3 tools/gen-eph-params.py --st
 # generated from the prose, and the codec test below requires ephproto.h's own
 # constants to agree with the file, so prose, file and code cannot drift.
 gen  "protocol v4 registries"    ephsrv/registries.json python3 tools/gen-registries.py --stdout
+gen  "stock seorbel elements"    ephpromelem.h python3 tools/seorbel2prom.py seorbel.txt
 # The protocol v4 conformance fixtures (EPHEMERIS_PLUGINS_PLAN.md 3.10) are a
 # directory, not one file, so the generator checks itself -- contents and the
 # set's own checksum.
