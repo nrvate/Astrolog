@@ -71,7 +71,7 @@ QT_CFLAGS = $(shell pkg-config --cflags $(QT_MODULES) 2>/dev/null)
 QT_LIBS = $(shell pkg-config --libs $(QT_MODULES) 2>/dev/null)
 LIBS = $(QT_LIBS) -lm -ldl -pthread -fsanitize=undefined
 CPPFLAGS = -MMD -MP -DQT -DQTTEST -fsanitize=undefined -g -O0 -fPIC -std=gnu++17 -Wno-write-strings -Wno-narrowing \
- -Wno-comment -I ephsrv $(QT_CFLAGS)
+ -Wno-comment -I ephsrv -I . $(QT_CFLAGS)
 RM = rm -f
 
 # The Prometheia plugin's optional dependency; see Makefile.srcs for the

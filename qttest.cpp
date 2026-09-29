@@ -96,6 +96,7 @@
 // resolved by the "-I ephsrv" the Qt makefiles carry.
 #include <QtWebSockets/QWebSocketServer>
 #include <ctime>
+#include <QLibrary>
 #include <QtWebSockets/QWebSocket>
 #include <QtNetwork/QHostAddress>
 #include <QtNetwork/QSslConfiguration>
@@ -212,6 +213,7 @@ extern void SetChunkRowsSrvTestQt(int);
 extern int CRecastSrvTestQt();
 extern void SetWelcMaxObjsSrvTestQt(uint32_t);
 extern int CCoverageSrvTestQt(void);
+static double RCpuSecTestQt(void);
 extern void SetCoverageSrvTestQt(double, double);
 extern void SetWelcMaxCellsSrvTestQt(uint32_t);
 extern void SzEphSrvStatusQt(char *, int);
@@ -19235,10 +19237,10 @@ static void TestEphSrvQt()
       SetWaitSrvTestQt(1500);
       {
         QElapsedTimer tim;
-        std::clock_t c0 = std::clock();
+        double c0 = RCpuSecTestQt();
         tim.start();
         SrvPrefetchQt(0.905, oEar, oPlu, NULL);
-        double sCpu = (double)(std::clock() - c0) / CLOCKS_PER_SEC,
+        double sCpu = RCpuSecTestQt() - c0,
           sWall = tim.elapsed() / 1000.0;
         Check(sWall >= 1.4 && sWall < 3.0, "the cast waited its bound "
           "(%.2f s)", sWall);
@@ -19292,7 +19294,11 @@ static void TestEphSrvQt()
             });
       });
     EphSrvFinalizeQt();
-    sprintf2(S(sz), "localhost:%d", (int)srvDrop.serverPort());
+    // 127.0.0.1 and not "localhost": this leg reconnects five times, and a
+    // refused connect to ::1 (tried first for the name) takes about 2 s on
+    // Windows where it is instant on Linux, which is four reconnects over
+    // the eight seconds it is given. The server listens on IPv4 only.
+    sprintf2(S(sz), "127.0.0.1:%d", (int)srvDrop.serverPort());
     FEphParamSet(epServerUrl, sz);
     EphSrvStartupQt();
     Check(FWaitEstQt(2, 5000), "welcomed by the dropping server");
@@ -19307,13 +19313,14 @@ static void TestEphSrvQt()
       Check(FSendEphSrvQt(&rqD), "a request goes to the dropping server");
       QElapsedTimer tim;
       tim.start();
-      while (DwReqEphSrvTestQt() != 0 && tim.elapsed() < 8000) {
+      while (DwReqEphSrvTestQt() != 0 && tim.elapsed() < 20000) {
         SetBackoffEphSrvTestQt(50);
         QApplication::processEvents(QEventLoop::AllEvents, 20);
       }
       Check(DwReqEphSrvTestQt() == 0 && cReqDrop == 4, "and is given up "
-        "after three re-sends (%d sends, %s)", cReqDrop,
-        DwReqEphSrvTestQt() == 0 ? "given up" : "still in flight");
+        "after three re-sends (%d sends, %s, %.1f s)", cReqDrop,
+        DwReqEphSrvTestQt() == 0 ? "given up" : "still in flight",
+        tim.elapsed() / 1000.0);
     }
     EphSrvFinalizeQt();
     for (QWebSocket *pc : rgpconnMute)
@@ -19463,6 +19470,37 @@ static real RSepArcsecQt(real lon1, real lat1, real lon2, real lat2)
 // difference in degrees a day. A foreign engine is compared this way and
 // never on the bytes: two ephemerides differ, and a longitude difference is
 // a projection of the separation (feedback: compare separations).
+// CPU seconds this process has used. std::clock() is that on POSIX and is
+// WALL time on MSVC, so "the process slept through the wait" (CPU well under
+// wall) could never hold there: the Windows suite of the qt.25 dry run was
+// the first to run it. GetProcessTimes is resolved through QLibrary, as the
+// dark title bar's call is, so no windows.h reaches this file.
+static double RCpuSecTestQt()
+{
+#ifdef _WIN32
+  struct FtQt { uint32_t lo, hi; };
+  typedef int (__stdcall *PFNTIMES)(void *, FtQt *, FtQt *, FtQt *, FtQt *);
+  typedef void *(__stdcall *PFNCUR)(void);
+  static PFNTIMES pfnTimes = NULL;
+  static PFNCUR pfnCur = NULL;
+  static flag fInit = fFalse;
+  FtQt ftC, ftE, ftK, ftU;
+
+  if (!fInit) {
+    QLibrary lib("kernel32");
+
+    pfnTimes = (PFNTIMES)lib.resolve("GetProcessTimes");
+    pfnCur = (PFNCUR)lib.resolve("GetCurrentProcess");
+    fInit = fTrue;
+  }
+  if (pfnTimes != NULL && pfnCur != NULL &&
+    pfnTimes(pfnCur(), &ftC, &ftE, &ftK, &ftU))
+    return ((double)(((uint64_t)ftK.hi << 32) | ftK.lo) +
+      (double)(((uint64_t)ftU.hi << 32) | ftU.lo)) * 1e-7;
+#endif
+  return (double)std::clock() / CLOCKS_PER_SEC;
+}
+
 // The cross-engine bounds, in arcseconds and degrees a day. The scale is
 // only for tools/ephsrv-prometheia.sh --selftest, which shrinks them to
 // require the gate to FAIL: a gate that cannot is not one.
