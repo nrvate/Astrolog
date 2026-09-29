@@ -2197,6 +2197,14 @@ by the ephemerides and models each server names in WELCOME (engine,
 datasetId, coverage, precession models, ΔT model) and per object (the source
 table).
 
+- **Coverage (A.3 0x000A) is for routing.** One entry per ephemeris, in the
+  order the server consults them; `id` names that ephemeris as the server
+  does, its file name when it is one file; min and max are its span in TDB.
+  Absent means the server states no coverage. A client may send an instant
+  outside every stated span elsewhere, but the per-object errCode remains the
+  authority, and a row answered outside every stated span sets
+  `approximated`. (Agreed with the Prometheia project 2026-09-29.)
+
 **Frames and planes** (default precession model Vondrák, Capitaine & Wallace
 2011; REQUEST TLV 0x0003 may select `iau2006` from A.20. Agreed with the
 Prometheia project 2026-09-29: within 1550-2650 the two differ by at most
@@ -2933,7 +2941,7 @@ older than the server it is talking to.
 | 0x0007 | zodiacs: u16 n, n × str8 (A.11 tokens) |
 | 0x0008 | sidereal planes u32 (A.8) |
 | 0x0009 | time scales u32 (A.9) |
-| 0x000A | coverage: u16 n, n × {str8 id, TIME min, TIME max} |
+| 0x000A | coverage: u16 n, n × {str8 id, TIME min, TIME max} — one entry per ephemeris, in the order the server consults them; id names that ephemeris as the server does, its file name when it is one file; min and max are its span in TDB. Absent means the server states no coverage. Routing only: the per-object errCode remains the authority (§3.5a) |
 | 0x000B | catalogs: u16 n, n × {str8 id, str8 snapshot} |
 | 0x000C | ΔT model: str8 |
 | 0x000D | precession models: u16 n, n × str8 |
