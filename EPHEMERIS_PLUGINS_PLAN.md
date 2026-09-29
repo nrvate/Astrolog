@@ -15,8 +15,9 @@ version 3, and this section is the design authority behind it.
 
 - **UPDATE 2026-09-29: all three items listed under START HERE below are
   RESOLVED.** The rate bound was settled jointly and written into 3.5a and
-  A.3 (`5f11726`; the server now differences body rates, so the advertised
-  0x0013 is 5e-5 deg/day and 2e-5); `SWISSEPH_PIN` moved to ts.15 and the
+  A.3 (`5f11726`; the server now differences every body and orbit point's
+  rates, so the advertised 0x0013 is 3e-5 deg/day and 1e-9, set by the parked
+  fixed stars alone, `418841e`); `SWISSEPH_PIN` moved to ts.15 and the
   observer-cache workaround is gone (`5af9968`); `ephsrv-rates.sh` has the
   `deltaTSec` axis. Work log item 37 has the numbers. The text below is kept
   as it stood on 2026-09-20 and describes the state that item 37 closed.
@@ -3407,6 +3408,17 @@ instructions for a human to copy is the thing this direction exists to stop.
    perihelion), which carries `ratesApprox`; every unflagged object meets the
    defaults. The advertised A.3 0x0013 becomes 5e-5 deg/day and 2e-5, twice
    the measured worst.
+
+   *The same afternoon, osculating points too* (`418841e`). The Prometheia
+   cross-test's ratesweep found 33 of 3,147 rows over that figure, every one a
+   Jupiter or Saturn osculating point seen topocentrically (worst 1.0105e-4
+   deg/day, Saturn's osculating aphelion from Quito), a class this grid had
+   never sampled from a site. Every node and apsis method is now differenced
+   in both halves, the grid gained those points at both sites (2175 series),
+   and the worst is 1.29e-5 deg/day and 4.3e-10, both on fixed stars, the
+   only objects still on Swiss's rates. Advertised: 3e-5 deg/day and 1e-9.
+   Golden's osculating legs use the differenced oracle and fail 5 of 162 with
+   the server's differencing put back.
 
    *The sentence.* 3.5a's rates-bound sentence (absent 0x0013 means 1e-5
    deg/day and 1e-9) was approved by both maintainers and written in `5f11726`
