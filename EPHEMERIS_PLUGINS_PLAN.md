@@ -3356,6 +3356,27 @@ instructions for a human to copy is the thing this direction exists to stop.
      injection rather than by trusting the green. The symptom to grep
      for in any existing leg is a column of suspiciously exact zeros.
 
+35. **Prometheia as the primary source: first cast, and a leak
+   (2026-09-29).** A console build with the plugin, `-bE
+   prometheia,swiss,moshier` over `linux_p1550p2650.440`: Sun to Pluto,
+   Moon and node agree with Swiss to the displayed arcsecond in 1990,
+   and 1400 and 2700 print exactly what `swiss` alone does, so the
+   coverage refusal falls through the chain. Prometheia has frozen the
+   message text our coverage classification matches on ("epoch outside
+   segment coverage") until their maintainer decides on a distinct
+   status.
+
+   Every cast through the source ended with "allocations not freed: 3":
+   the record of what the engine was opened from outlived the close,
+   and nothing stopped the source at exit. `EphPromStop()` releases it
+   now, and `FinalizeProgram()` stops the source. The net's first form
+   compared the count before an open and after a close, and **passed
+   with the bug put back**: `FCloneSz()` reuses a buffer large enough,
+   so a leaked record makes the reopen allocate nothing and the count
+   never moves either way. It now asserts the reopen allocates as well,
+   which only a record released at the last close has to do; seen
+   failing with the release removed. Group 166/0, `make check` 6181/0.
+
 34. **The bound question, and four corrections in one afternoon
    (2026-09-20, end of day).** The Prometheia project re-measured the
    Polaris cell against the fixed build and then **swept the axis the

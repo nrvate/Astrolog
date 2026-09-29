@@ -734,6 +734,12 @@ void FinalizeProgram(flag fSkip)
   DeallocatePIf(us.szEphemSource);
   for (i = 0; i < cEphParam; i++)
     DeallocatePIf(us.rgszEphParam[i]);
+#ifdef PROMETHEIA
+  // The one local source that holds an engine open between casts. Its
+  // record of what it opened is Astrolog's own allocation, so it has to
+  // be released before the count below, not left to the process exit.
+  ephsrcPrometheia.Stop();
+#endif
   DeallocatePIf(us.szADB);
   DeallocatePIf(us.szStarsColor);
   DeallocatePIf(us.szAstColor);

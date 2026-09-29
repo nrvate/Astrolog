@@ -74,6 +74,18 @@ static flag fEphPromOpen = fFalse;      // resolved and opened
 static char szEphPromState[512];        // the current state text
 static char szEphPromEphe[300], szEphPromCat[300], szEphPromPert[300];
 
+// What the open engine was opened FROM, so a parameter that has moved
+// since is noticed here rather than announced from elsewhere. A
+// notification can be missed by any path that writes the value another
+// way; comparing at the point of use cannot.
+// Not a fixed buffer: the values are us.rgszEphParam[] entries, which are
+// FCloneSz'd and unbounded, and a truncated COPY can never compare equal
+// to its original -- so a path of 256 characters or more, which an
+// absolute path easily is, would take the reopen branch on every single
+// call for the life of the process (phase 8 review, D6). Cloned, so the
+// comparison is against the whole value.
+static char *rgszEphPromOpenedFrom[cepPromParam] = {NULL, NULL, NULL};
+
 // The Delta T hook, bound to Astrolog's own: a finite per-cast value
 // when the question carries one, else the user's -Yz override, else the
 // chart's model -- swe_deltat(), iterated once so the answer is
@@ -98,9 +110,19 @@ static double FEnumDeltaTProm(void *puser, double jd)
 
 void EphPromStop(void)
 {
+  int iep;
+
   prometheia_engine_close(pephProm);
   pephProm = NULL;
   fEphPromOpen = fFalse;
+  // What the engine was opened from describes an OPEN engine, so it goes
+  // with it. Held past the close, these were three of Astrolog's own
+  // allocations that nothing ever released: every cast through this
+  // source ended in "Number of memory allocations not freed: 3".
+  for (iep = 0; iep < cepPromParam; iep++) {
+    DeallocatePIf(rgszEphPromOpenedFrom[iep]);
+    rgszEphPromOpenedFrom[iep] = NULL;
+  }
   sprintf2(S(szEphPromState), "unavailable");
 }
 
@@ -209,18 +231,6 @@ flag FEphPromAvailable(char *szWhy, int cch)
   }
   return fTrue;
 }
-
-// What the open engine was opened FROM, so a parameter that has moved
-// since is noticed here rather than announced from elsewhere. A
-// notification can be missed by any path that writes the value another
-// way; comparing at the point of use cannot.
-// Not a fixed buffer: the values are us.rgszEphParam[] entries, which are
-// FCloneSz'd and unbounded, and a truncated COPY can never compare equal
-// to its original -- so a path of 256 characters or more, which an
-// absolute path easily is, would take the reopen branch on every single
-// call for the life of the process (phase 8 review, D6). Cloned, so the
-// comparison is against the whole value.
-static char *rgszEphPromOpenedFrom[cepPromParam] = {NULL, NULL, NULL};
 
 flag FEphPromStart(char *szWhy, int cch)
 {

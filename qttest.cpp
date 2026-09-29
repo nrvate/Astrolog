@@ -20900,6 +20900,29 @@ LStop:
   EphPromStop();
   Check(NEphPromState(szStateAfter, (int)sizeof(szStateAfter)) == 1,
     "the engine stopped cleanly (%s)", szStateAfter);
+
+  // The record of what the engine was opened from used to outlive the
+  // close, so every cast through this source ended with "allocations
+  // not freed: 3". Equal counts before and after an open and close are
+  // NOT enough to see that: a record left over from the last open is
+  // reused in place, so the count never moves either way. What shows
+  // it is the open ALLOCATING -- only a record released at the last
+  // close has to be made again -- and the close giving it all back. A
+  // Start that fails clones nothing, so it has to succeed to count.
+  {
+    int cAlloc0 = is.cAlloc, cAlloc1;
+    if (FEphPromStart(szWhy, sizeof(szWhy))) {
+      cAlloc1 = is.cAlloc;
+      EphPromStop();
+      Check(cAlloc1 > cAlloc0, "the close before this open released what "
+        "the engine was opened from (%d, then %d on reopening)", cAlloc0,
+        cAlloc1);
+      Check(is.cAlloc == cAlloc0, "and this close released it again (%d "
+        "before the open, %d after the close)", cAlloc0, is.cAlloc);
+    } else
+      printf("  skipped: the reopen for the allocation check failed (%s)\n",
+        szWhy);
+  }
 #endif
 }
 
