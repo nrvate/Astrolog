@@ -458,7 +458,7 @@ leg "no speeds Moon" 2451545.0 1 0 0 tt -- --profile speeds=0 --objs 301
 #    stopped using SE_MEAN_NODE for its distance.
 for p in 0 1 2 3; do
   leg "nod_aps Jupiter mean point $p" 2415020.5 5 100 0 "nodapsd:$p:1" -- --points "5:$p:0" --jd 2415020.5
-  leg "nod_aps Jupiter osculating point $p" 2415020.5 5 100 0 "nodaps:$p:2" -- --points "5:$p:1" --jd 2415020.5
+  leg "nod_aps Jupiter osculating point $p" 2415020.5 5 100 0 "nodapsd:$p:2" -- --points "5:$p:1" --jd 2415020.5
 done
 # swe_nod_aps reads the correction bits itself, before the normalisation
 # above, so a heliocentric orbit point answers differently under the full
@@ -597,7 +597,7 @@ compare "instant list row 2" 2451545.0 4 100 0 tt "$SCRATCH/list.txt" 3
 
 # 8d. The focal point (orbit method 4): the empty focus in place of the
 #     aphelion, SE_NODBIT_OSCU | SE_NODBIT_FOPOINT = 258.
-leg "focal point of Jupiter" 2451545.0 5 100 0 "nodaps:3:258" -- --points 5:3:4
+leg "focal point of Jupiter" 2451545.0 5 100 0 "nodapsd:3:258" -- --points 5:3:4
 
 # 8e. Every hypothetical token Swiss carries elements for, against
 #     SE_FICT_OFFSET + its index (A.15's order is seorbel.txt's). The last

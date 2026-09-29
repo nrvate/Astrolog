@@ -1078,11 +1078,9 @@ static void PrepareObject(swe_ctx *ctx, const eph::Request &req, uint32_t iObj,
   // C1b: a topocentric Moon's longitude rate missed its own positions by
   // 6.6e-3 deg/day, a Uranian's distance rate by 1.3e-4 AU/day), so the flag
   // stays only on what still carries Swiss's rates: fixed stars (parked,
-  // STARS_BACKLOG.md) and osculating points.
-  if (pf.speeds && prep->c.kind != eph::swiss::kCallCalc &&
-      prep->c.kind != eph::swiss::kCallPctr &&
-      !(prep->c.kind == eph::swiss::kCallNodAps &&
-        prep->c.nodMethod == SE_NODBIT_MEAN))
+  // STARS_BACKLOG.md). Osculating points joined the differenced set the same
+  // day, after the cross-test found them topocentrically out by 1.01e-4.
+  if (pf.speeds && prep->c.kind == eph::swiss::kCallFixstar)
     m.flags |= eph::kMetaRatesApprox;
 }
 
@@ -1455,7 +1453,12 @@ static void ComputeObjectRows(swe_ctx *ctx, const eph::Request &req, uint32_t iO
         // that is inherent in 3.5a rather than a weakness here: the
         // independent check is the cross-test against an engine that does not
         // difference.
-        if (ret >= 0 && pf.speeds && c.nodMethod == SE_NODBIT_MEAN) {
+        // Every method, not only the mean one, since 2026-09-29: Swiss's
+        // rates for an OSCULATING point seen topocentrically missed their own
+        // positions by up to 1.01e-4 deg/day (Saturn's osculating aphelion
+        // from Quito, the Prometheia cross-test's ratesweep), twice the bound
+        // this server then advertised.
+        if (ret >= 0 && pf.speeds) {
           SrvNodRate snr;
           snr.ctx = ctx;
           snr.jdUt = jd; snr.jdEt = jdEt();
@@ -3693,7 +3696,7 @@ static void BuildWelcome(const EphDiscovery &disc, const char *szSwe) {
   // 2100). Tightening to 3e-3 was proposed and declined: it would have left
   // 1.7x, and the argument for the 2-3x band is the same argument that says
   // a third site would probably widen the measurement again.
-  c.ratesDegPerDay = 5e-5f;   // 2026-09-29: see ratesAuPerDay below
+  c.ratesDegPerDay = 3e-5f;   // 2026-09-29: see ratesAuPerDay below
   // RAISED from 1e-4 on 2026-09-19, which is the uncomfortable direction and
   // is why it is spelt out. The measurement is 7.3345e-5 AU/day (Pluto,
   // geocentric, 1900), so 1e-4 was 1.4x -- thin for a figure with this
@@ -3743,11 +3746,15 @@ static void BuildWelcome(const EphDiscovery &disc, const char *szSwe) {
   // miss divided by max(1 AU, r)) and with body rates differenced: measured
   // worst 2.0e-5 deg/day and 8.1e-6 by tools/ephsrv-rates.sh over 1875
   // object-series -- three observers, five epochs, five delta T settings, 0
-  // included -- both on an osculating point, which keeps Swiss's rates and
-  // says so with ratesApprox. Advertised at twice that; every unflagged
-  // object meets 3.5a's defaults. The history above is how the old,
+  // included. Osculating points were then differenced too (the Prometheia
+  // cross-test found them topocentrically out by 1.01e-4 deg/day), and over
+  // 2175 series with Jupiter's and Saturn's osculating points at both sites
+  // the worst is 1.29e-5 deg/day and 4.3e-10, both on FIXED STARS -- the one
+  // class left on Swiss's rates, flagged ratesApprox and parked
+  // (STARS_BACKLOG.md). Every solar-system object is differenced and exact.
+  // Advertised at about twice that. The history above is how the old,
   // absolute figures were reached.
-  c.ratesAuPerDay = 2e-5f;
+  c.ratesAuPerDay = 1e-9f;
   for (int i = 0; i < eph::kHypotheticalTokenCount; i++)
     c.hypotheticals.push_back(eph::kHypotheticalTokens[i]);
   eph::Welcome w;

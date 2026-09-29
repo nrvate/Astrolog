@@ -4277,8 +4277,9 @@ flag FSwissPlanet(int ind, real jd, int indCent,
     // re-centring's own rate. ephsrv/ephnodrate.h has the measurements and
     // the stencil; astrolog-ephd calls the same routine with the same
     // constants, which is the point of it being a header.
-    if (nRet >= 0 && (ss.iflag & SEFLG_SPEED) &&
-      ss.nNodMethod == SE_NODBIT_MEAN) {
+    // Every method since 2026-09-29, as the server does: an osculating
+    // point's own rates missed topocentrically by up to 1.01e-4 deg/day.
+    if (nRet >= 0 && (ss.iflag & SEFLG_SPEED)) {
       NODRATECTX nrc;
       nrc.jde = jde; nrc.pss = &ss;
       nrc.iflagNode = iflagNode; nrc.iflagCall = iflagCall;

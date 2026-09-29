@@ -194,12 +194,12 @@ bad = overBound
 # nothing, which is the same shape as a duplicate scan printing what a clean
 # table prints.
 #
-# 25 objects per file: 10 bodies + 8 orbit points + 4 stars + 3 hypotheticals,
+# 29 objects per file: 10 bodies + 12 orbit points + 4 stars + 3 hypotheticals,
 # as run_obs asks for them. 75 files: 3 observers x 5 epochs x 5 delta T
 # (the default and four explicit values). Both declared here rather than
 # counted off the request, so a request that shrinks fails this instead of
 # quietly agreeing with it.
-kSeries = 25 * 75
+kSeries = 29 * 75
 if nSeries != kSeries:
     print("    ONLY %d OF %d OBJECT-SERIES MEASURED -- a bound over the ones"
           " that happened to arrive is not the bound a client is promised"
@@ -336,10 +336,11 @@ import os, sys
 mode, d = sys.argv[1], sys.argv[2]
 h = 1.0 / 1024.0
 BODIES = ["10","301","199","299","499","5","6","7","8","9"]
-POINTS = ["o:301/0/1","o:301/1/1","o:301/3/1","o:4/2/0","o:5/2/0","o:199/2/0","o:4/0/0","o:199/2/1"]
+POINTS = ["o:301/0/1","o:301/1/1","o:301/3/1","o:4/2/0","o:5/2/0","o:199/2/0","o:4/0/0","o:199/2/1",
+          "o:5/2/1","o:5/3/1","o:6/2/1","o:6/3/1"]
 STARS  = ["s:Sirius","s:Polaris","s:Aldebaran","s:Vega"]
 HYPO   = ["h:cupido","h:vulcanus","h:vulcan"]
-GRID   = BODIES + POINTS + STARS + HYPO   # 25, as run_obs asks for them
+GRID   = BODIES + POINTS + STARS + HYPO   # 29, as run_obs asks for them
 ZOD    = ["10","301","199","499","5","9","s:Sirius","s:Aldebaran"]   # 8, as run() does
 
 def rows(labels, rate=1.0, err=0, flags=0, bump=None):
@@ -367,7 +368,7 @@ elif mode == "zod-worse":
 else:
     write("lahiri.txt", rows(ZOD)); write("citra.txt", rows(ZOD))
 
-# -- leg_bound / leg_flag's grid: 75 files x 25 labels = 1875 series.
+# -- leg_bound / leg_flag's grid: 75 files x 29 labels = 2175 series.
 adv = "ratebound=0.005/0.004"
 if mode == "bound-noadv": adv = "engine=swiss"
 write("welcome.txt", "serverName=selftest %s\n" % adv)
@@ -489,7 +490,7 @@ for obs in geo topo-zurich topo-quito; do
       --step-ns 84375000000 --count 5 \
       --profile "obs=$OBSKIND$SITE,plane=ecl,form=sph,speeds=1" \
       --objs 10,301,199,299,499,5,6,7,8,9 \
-      --points 301:0:1,301:1:1,301:3:1,4:2:0,5:2:0,199:2:0,4:0:0,199:2:1 \
+      --points 301:0:1,301:1:1,301:3:1,4:2:0,5:2:0,199:2:0,4:0:0,199:2:1,5:2:1,5:3:1,6:2:1,6:3:1 \
       --stars Sirius,Polaris,Aldebaran,Vega \
       --hypo cupido,vulcanus,vulcan \
       --out "$3" > /dev/null
