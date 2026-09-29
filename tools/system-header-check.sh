@@ -58,7 +58,10 @@ if [ "${1:-}" = "--selftest" ]; then
 fi
 
 rc=0
-check_flags Makefile.qt Makefile.qt.test Makefile.qt.asan Makefile.qt.ubsan || rc=1
+# warning_audit.py REPLACES the makefiles' CPPFLAGS with a table of its own,
+# so it carries the same -I and needs the same check.
+check_flags Makefile.qt Makefile.qt.test Makefile.qt.asan Makefile.qt.ubsan \
+  tools/warning_audit.py || rc=1
 
 QTC=$(pkg-config --cflags Qt5Widgets 2>/dev/null || pkg-config --cflags Qt6Widgets 2>/dev/null)
 got=$(echo '#include "ephswiss.h"' | g++ -x c++ -std=gnu++17 -M -I ephsrv -I . $QTC - 2>/dev/null | tr ' \\' '\n\n' | grep -E 'swephexp\.h$' | sort -u)
