@@ -539,7 +539,11 @@ extern "C" {
 #define SEMOD_NUT_IAU_2000A         3 /* very time consuming ! */
 #define SEMOD_NUT_IAU_2000B         4 /* fast, but precision of milli-arcsec */
 #define SEMOD_NUT_WOOLARD           5
-#define SEMOD_NUT_DEFAULT           SEMOD_NUT_IAU_2000B  /* fast, but precision of milli-arcsec */
+/* This fork: the full series by default, made fast by a quarter-day grid
+ * (swephlib.cpp, calc_nutation), as the thread-safe Swiss fork does since
+ * ts.17 (its G29). Setting SEMOD_NUT_IAU_2000A explicitly computes the
+ * series directly at every instant. */
+#define SEMOD_NUT_DEFAULT           SEMOD_NUT_IAU_2000A
 
 /* methods for sidereal time */
 #define SEMOD_NSIDT		4

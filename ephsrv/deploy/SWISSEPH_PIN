@@ -1,9 +1,10 @@
 # The thread-safe Swiss Ephemeris fork astrolog-ephd is built against, by
 # commit: tools/ephsrv-fork.sh and the container image fetch exactly this,
 # so a server binary is reproducible from one commit of this repository.
-# nrvate/swisseph, tag v2.10.03-ts.16 (2026-09-29): fictitious bodies'
-# light time solved on the orbit and the frame bias paired (G27), on top of
-# ts.15's delta T observer invalidation (G26). Move it
+# nrvate/swisseph, tag v2.10.03-ts.17 (2026-09-29): the Vondrak mean
+# obliquity as the pole angle (G28) and full IAU 2000A nutation by default
+# (G29), on top of ts.16's fictitious-body fixes (G27) and ts.15's delta T
+# observer invalidation (G26). Move it
 # deliberately, after the server gates pass against the new commit.
 SWE_REPO=https://github.com/nrvate/swisseph.git
-SWE_COMMIT=91da8754518b9faf3d1bf91ca32d6327c149a298
+SWE_COMMIT=1af7b0a0780c72bef8408f40ae52bcde54a5866b

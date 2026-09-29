@@ -949,7 +949,21 @@ double swi_epsiln(double J, int32 iflag)
     eps *= DEGTORAD;
 //fprintf(stderr, "epso=%.17f\n", eps);
   } else { /* SEMOD_PREC_VONDRAK_2011 */
-    swi_ldp_peps(J, NULL, &eps);
+    /* This fork: the mean obliquity of date is the angle between the
+     * model's mean ecliptic and equator poles, not the fitted epsilon_A
+     * series (the ephemeris protocol's 3.5a; the thread-safe Swiss fork's
+     * G28, ts.17). Identical arithmetic, so astrolog-ephd and this
+     * program stay bit-identical. */
+    {
+      double pecl[3], peqr[3], cx, cy, cz;
+      pre_pecl(J, pecl);
+      pre_pequ(J, peqr);
+      cx = pecl[1] * peqr[2] - pecl[2] * peqr[1];
+      cy = pecl[2] * peqr[0] - pecl[0] * peqr[2];
+      cz = pecl[0] * peqr[1] - pecl[1] * peqr[0];
+      eps = atan2(sqrt(cx * cx + cy * cy + cz * cz),
+                  pecl[0] * peqr[0] + pecl[1] * peqr[1] + pecl[2] * peqr[2]);
+    }
     if ((iflag & SEFLG_JPLHOR_APPROX) && jplhora_model != SEMOD_JPLHORA_2) {
       tofs = (J - DCOR_EPS_JPL_TJD0) / 365.25;
       dofs = OFFSET_EPS_JPLHORIZONS;
@@ -2071,6 +2085,39 @@ done:
   return ans;
 }
 
+/* This fork: the DEFAULT nutation is full IAU 2000A, interpolated from
+ * quarter-day nodes by a quintic Lagrange polynomial, cached -- the same
+ * arithmetic as the thread-safe Swiss fork's calc_nutation_grid() (its G29:
+ * 0.018 microarcseconds worst against the direct series, at 2000B's cost).
+ * A file-level cache: this copy of Swiss runs on one thread. */
+#define NUT_GRID_SLOTS 512
+static struct { double k; double v[2]; AS_BOOL valid; } nut_grid[NUT_GRID_SLOTS];
+
+static void calc_nutation_grid(double J, double *nutlo)
+{
+  double x = J * 4.0, k0 = floor(x), u = x - k0, w[6];
+  int j, m;
+  nutlo[0] = nutlo[1] = 0.0;
+  for (j = 0; j < 6; j++) {
+    w[j] = 1.0;
+    for (m = 0; m < 6; m++)
+      if (m != j)
+	w[j] *= (u - (m - 2)) / (double) (j - m);
+  }
+  for (j = 0; j < 6; j++) {
+    double k = k0 + (j - 2);
+    long long ik = (long long) k;
+    int slot = (int) (((ik % NUT_GRID_SLOTS) + NUT_GRID_SLOTS) % NUT_GRID_SLOTS);
+    if (!nut_grid[slot].valid || nut_grid[slot].k != k) {
+      calc_nutation_iau2000ab(k * 0.25, nut_grid[slot].v);
+      nut_grid[slot].k = k;
+      nut_grid[slot].valid = TRUE;
+    }
+    nutlo[0] += w[j] * nut_grid[slot].v[0];
+    nutlo[1] += w[j] * nut_grid[slot].v[1];
+  }
+}
+
 static int calc_nutation(double J, int32 iflag, double *nutlo)
 {
   int n;
@@ -2078,6 +2125,7 @@ static int calc_nutation(double J, int32 iflag, double *nutlo)
   int nut_model = swed.astro_models[SE_MODEL_NUT];
   int jplhora_model = swed.astro_models[SE_MODEL_JPLHORA_MODE];
   AS_BOOL is_jplhor = FALSE;
+  AS_BOOL use_grid = (nut_model == 0);	/* the default, not a chosen model */
   if (nut_model == 0) nut_model = SEMOD_NUT_DEFAULT;
   if (jplhora_model == 0) jplhora_model = SEMOD_JPLHORA_DEFAULT;
   if (iflag & SEFLG_JPLHOR)
@@ -2107,7 +2155,10 @@ static int calc_nutation(double J, int32 iflag, double *nutlo)
   } else if (nut_model == SEMOD_NUT_IAU_1980 || nut_model == SEMOD_NUT_IAU_CORR_1987) {
     calc_nutation_iau1980(J, nutlo);
   } else if (nut_model == SEMOD_NUT_IAU_2000A || nut_model == SEMOD_NUT_IAU_2000B) {
-    calc_nutation_iau2000ab(J, nutlo);
+    if (use_grid && nut_model == SEMOD_NUT_IAU_2000A && fabs(J) < 1e12)
+      calc_nutation_grid(J, nutlo);
+    else
+      calc_nutation_iau2000ab(J, nutlo);
     if ((iflag & SEFLG_JPLHOR_APPROX) && jplhora_model == SEMOD_JPLHORA_2) {
       nutlo[0] += -41.7750 / 3600.0 / 1000.0 * DEGTORAD;
       nutlo[1] += -6.8192 / 3600.0 / 1000.0 * DEGTORAD;
