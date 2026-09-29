@@ -2202,6 +2202,12 @@ table).
 Prometheia project 2026-09-29: within 1550-2650 the two differ by at most
 0.01", and outside it IAU 2006 is degrees off by -10000, so one long-term
 model everywhere has no step at a span's ends):
+- **The mean obliquity of date** is the angle between the model's ecliptic
+  pole (P_A, Q_A) and equator pole (X_A, Y_A); the ε_A series of Vondrák 2011's
+  Table 3 is an approximation to it. (Agreed 2026-09-29. The angle is the
+  definition of the obliquity and puts the ecliptic pole of date exactly at
+  latitude 90°; the two differ by ≤0.02" over 1000-2650, 1.0" at -1000,
+  17.6" at -5000 and 46" at -13000, as measured by the Prometheia project.)
 - **True of date (0).** Equator: the true equator and true equinox of date
   (Vondrák 2011 precession, IAU 2000A nutation, or the server's advertised
   equivalent). Ecliptic: the mean ecliptic of date, longitudes counted from the
