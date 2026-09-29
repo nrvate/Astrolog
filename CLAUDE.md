@@ -112,6 +112,11 @@ Work happens on branch **`qt`**.
   first run found the sidereal node carrying nutation in both halves
   (C1e, fork ts.18). `--selftest` requires the same run at 0.01 x the
   bounds to fail. By hand; it skips without the other project's build.
+  **`tools/star-rates-xengine.py`** (2026-09-30) is its sibling for star RATES:
+  twelve stars, five epochs, four profiles, both daemons, angular rate to
+  3e-5 deg/d and distance rate to 1e-9 relative, with the stars whose
+  catalogues disagree on radial velocity reported and never graded (and a
+  ratchet so a stale entry fails); `--selftest` is in `ci-selftest.sh`.
 
   **`-cache.sh --selftest` and `-rates.sh --selftest` grade the GATE's
   own decisions** against crafted input, with no server, in about a

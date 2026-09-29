@@ -21624,7 +21624,8 @@ static void TestEphSrvLiveQt()
   {
     char szStarT[cchSzMax];
     real p1, p2, p3, p4, p5, p6, s1, s2, s3, s4, s5, s6, rD, jdT;
-    int rgisrcSrv[1], rgisrcSw[1], iZod;
+    int rgisrcSrv[1], rgisrcSw[1], iZod, iSt;
+    static CONST char *rgszP1[] = {"Sirius", "Aldebaran"};
 
     rgisrcSrv[0] = IEphSrcFromKey("server");
     rgisrcSw[0] = IEphSrcFromKey("swiss");
@@ -21641,39 +21642,74 @@ static void TestEphSrvLiveQt()
       Check(!us.fSidereal || is.rSid != 0.0,
         "the sidereal star leg really has an ayanamsa (%.6f)", is.rSid);
 
-      EphQueryInit(&eqp, jdT);
-      sprintf2(S(szStarT), "%s", "Sirius");
-      FEphQueryAdd(&eqp, 1, 0, 0, szStarT);
-      fP = FEphSubmitChain(&eqp, rgisrcSrv, 1) &&
-        FEphRead(&eqp, 1, &p1, &p2, &p3, &p4, &p5, &p6);
+      for (iSt = 0; iSt < 2; iSt++) {
+        EphQueryInit(&eqp, jdT);
+        sprintf2(S(szStarT), "%s", rgszP1[iSt]);
+        FEphQueryAdd(&eqp, 1, 0, 0, szStarT);
+        fP = FEphSubmitChain(&eqp, rgisrcSrv, 1) &&
+          FEphRead(&eqp, 1, &p1, &p2, &p3, &p4, &p5, &p6);
 
-      EphQueryInit(&eqs, jdT);
-      sprintf2(S(szStarT), "%s", "Sirius");
-      FEphQueryAdd(&eqs, 1, 0, 0, szStarT);
-      fS = FEphSubmitChain(&eqs, rgisrcSw, 1) &&
-        FEphRead(&eqs, 1, &s1, &s2, &s3, &s4, &s5, &s6);
+        EphQueryInit(&eqs, jdT);
+        sprintf2(S(szStarT), "%s", rgszP1[iSt]);
+        FEphQueryAdd(&eqs, 1, 0, 0, szStarT);
+        fS = FEphSubmitChain(&eqs, rgisrcSw, 1) &&
+          FEphRead(&eqs, 1, &s1, &s2, &s3, &s4, &s5, &s6);
 
-      if (!fP) {
-        // Said out loud rather than passed over: the server's --ephe is
-        // every -Yi directory, and sefstars.txt lives in the TREE ROOT,
-        // which "-Yi1 ephem" does not name. That is the whole of why
-        // this leg could not be written before.
-        printf("  P1 %s: the server served no star (nErr %d); its --ephe "
-          "needs a directory holding sefstars.txt\n",
-          iZod ? "sidereal" : "tropical", (int)eqp.rgrow[0].nErr);
-        continue;
+        if (!fP) {
+          // Said out loud rather than passed over: the server's --ephe is
+          // every -Yi directory, and sefstars.txt lives in the TREE ROOT,
+          // which "-Yi1 ephem" does not name. That is the whole of why
+          // this leg could not be written before.
+          printf("  P1 %s: the server served no star (nErr %d); its --ephe "
+            "needs a directory holding sefstars.txt\n",
+            iZod ? "sidereal" : "tropical", (int)eqp.rgrow[0].nErr);
+          continue;
+        }
+        Check(fS, "the local Swiss path serves the same star");
+        Check(FEqSz(SzSet(eqp.rgrow[0].szSrc), "server"),
+          "the %s star row really came from the server (%s)",
+          iZod ? "sidereal" : "tropical", SzSet(eqp.rgrow[0].szSrc));
+        if (!fS)
+          continue;
+        // RSepArcsecQt(), not SphDistance(): the acos in the latter cannot
+        // resolve below about 0.003 arcsec, and this once "passed" a star
+        // placed delta T early (1e-4 arcsec) because the number it printed
+        // was that floor (STARS_BACKLOG.md item 9). Same engine, the same
+        // Swiss on the same TT instant, so a millionth of an arcsecond.
+        rD = RSepArcsecQt(p1, p2, s1, s2);
+        printf("  P1 star %-9s %-9s server vs swiss: %11.6f\"\n",
+          rgszP1[iSt], iZod ? "sidereal" : "tropical", rD);
+        Check(rD < (strUrlEnv.isEmpty() ? 1e-6 : 1.0), "the %s %s star "
+          "through the server agrees with the local one (%.6f\")",
+          iZod ? "sidereal" : "tropical", rgszP1[iSt], rD);
+
+        // The three RATE columns, which are the derivative of the star's own
+        // positions on both sides since 2026-09-30 (STARS_BACKLOG.md item 1)
+        // and were Swiss's analytic rate before, 0.6 to 3.4% off. One half
+        // changing without the other is exactly what this catches: the local
+        // path alone reverted left every other check here green. Sirius is
+        // an orbit star and Aldebaran is not, so the correction's rate is
+        // graded too. Same engine: the difference of two identical
+        // computations; a foreign one: the cross-engine bounds.
+        {
+          CONST flag fSame = strUrlEnv.isEmpty();
+          CONST real rTolAng = fSame ? 1e-9 : RBoundRateEphQt();
+          CONST real rTolDist = fSame ? 1e-12 : 1e-9;
+          // FEphRead()'s order: lon, lat, lon rate, distance, lat rate,
+          // distance rate. The distance rate is graded against the
+          // distance, as the wire's bound is (A.3 0x0013).
+          CONST real rdLon = RAbs(p3 - s3), rdLat = RAbs(p5 - s5),
+            rdDist = RAbs(p6 - s6) / (p4 > 1.0 ? p4 : 1.0);
+
+          printf("  P1 star %-9s %-9s rates: %.3e %.3e deg/d, %.3e relative"
+            "\n", rgszP1[iSt], iZod ? "sidereal" : "tropical", rdLon, rdLat,
+            rdDist);
+          Check(rdLon < rTolAng && rdLat < rTolAng && rdDist < rTolDist,
+            "the %s %s star's rates through the server agree with the local "
+            "ones (%.3e, %.3e deg/d; %.3e relative)", iZod ? "sidereal" :
+            "tropical", rgszP1[iSt], rdLon, rdLat, rdDist);
+        }
       }
-      Check(fS, "the local Swiss path serves the same star");
-      Check(FEqSz(SzSet(eqp.rgrow[0].szSrc), "server"),
-        "the %s star row really came from the server (%s)",
-        iZod ? "sidereal" : "tropical", SzSet(eqp.rgrow[0].szSrc));
-      if (!fS)
-        continue;
-      rD = SphDistance(p1, p2, s1, s2) * 3600.0;
-      printf("  P1 star %-9s server vs swiss: %11.4f\"\n",
-        iZod ? "sidereal" : "tropical", rD);
-      Check(rD < 1.0, "the %s star through the server agrees with the "
-        "local one (%.4f\")", iZod ? "sidereal" : "tropical", rD);
     }
     us.fSidereal = fFalse;
     CastChart(0);

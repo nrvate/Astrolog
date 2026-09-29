@@ -23,6 +23,13 @@ version 3, and this section is the design authority behind it.
   as it stood on 2026-09-20 and describes the state that item 37 closed.
   Fixed-star work is parked in `STARS_BACKLOG.md`.
 
+- **UPDATE 2026-09-30: the star backlog's first item is done** (work log
+  item 39): fixed-star rates are differenced in the server and the
+  application, the application's own star delta-T slip is fixed, and there
+  is a two-engine star-rate instrument. The rest of `STARS_BACKLOG.md` is
+  data decisions (radial velocities, alpha Cen's parallax) for the
+  maintainer.
+
 - **UPDATE 2026-09-29 (evening): nothing is open on the plan or between the
   two projects.** Work log item 38: the coverage TLV, the cross-engine gate
   (`tools/ephsrv-prometheia.sh`), the sidereal-node defect it found (fork
@@ -3406,6 +3413,34 @@ instructions for a human to copy is the thing this direction exists to stop.
      bug into their own `corrapplied.py` and caught it by fault
      injection rather than by trusting the green. The symptom to grep
      for in any existing leg is a column of suspiciously exact zeros.
+
+39. **Fixed-star rates are differenced, and the application's stars were
+   delta T early (2026-09-30).**
+
+   *Rates.* A star's three rate columns are now differenced from the row's own
+   answered positions (`EphNodRateDiff()`, h = 1/1024 day), orbit stars
+   included, in `astrolog-ephd` (`FSrvStarRatePoint`) and in `FSwissStar()`
+   (`FStarRatePointLocal`); `ratesApprox` is no longer set on a star. Golden's
+   star oracle differences too (162/162). The rates gate: stars exact, worst
+   over 2175 series 1.2e-10 deg/day and 1.6e-11 (it was 1.29e-5 and 4.3e-10,
+   both on stars). Against Prometheia's analytic star rates
+   (`tools/star-rates-xengine.py`, 12 stars x 5 epochs x 4 profiles): angular
+   worst 2.4e-7 deg/day geocentric (1.3e-5 before) and 4.5e-6 topocentric
+   (1.7e-5 before, Polaris 2100); distance rate 1.2e-10 relative where the
+   catalogues agree, and 1.3-7.3 km/s where they do not (registry 4.4b).
+   The advertised 0x0013 stays 3e-5 deg/day and 1e-9: an f32 row rounds a
+   rate to 8e-7 deg/day on the Moon.
+
+   *The defect it found.* `FSwissStar()` gave `swe_fixstar2()` the UT day, so
+   the application placed every star delta T early (57 s in 1990, 1.4e-4" on
+   Sirius) while the server converted. The suite's star check could not see
+   it: `SphDistance()` floors at 0.003" and printed `0.0000"` (review T1). The
+   P1 leg now uses `RSepArcsecQt()` at 1e-6", compares Sirius and Aldebaran in
+   both zodiacs, and grades the rates; shown to fail with either half reverted.
+
+   *Also.* Prometheia's Toliman is 797.1 mas and its Rigil Kentaurus 754.9 mas
+   (two stars of one binary), ours 742.12 for both; the orbit value is about
+   747.2 (registry 4.4b).
 
 38. **Coverage on the wire, a cross-engine gate, the sidereal-node defect
    it found, and v8.00-qt.25 (2026-09-29, later).**

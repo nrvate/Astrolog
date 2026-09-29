@@ -72,7 +72,8 @@ int main(int argc, char **argv) {
            pctr:C   swe_calc_pctr_r at jd centred on body C
            aya      swe_calc_r, then one more column: the ayanamsa of the
                     mode (swe_get_ayanamsa_ex_r at jd with the same flags)
-           star:N   swe_fixstar2_r at jd for the star named N (ipl unused)
+           star:N   swe_fixstar2_r at jd for the star named N (ipl unused),
+                    the three RATE columns differenced from its positions
            nodapsd:P:M  as nodaps, but the three RATE columns differenced
                     from the same point (five points, h = 1/1024 day) --
                     what 3.5a defines a rate to be, and what the server
@@ -140,9 +141,39 @@ int main(int argc, char **argv) {
   } else if (strncmp(mode, "star:", 5) == 0) {
     /* ipl is ignored; the name is the body. swe_fixstar2_r rewrites the
        buffer, so it gets a writable copy. */
-    char star[256];
-    snprintf(star, sizeof(star), "%s", mode + 5);
+    char star[256], name[256];
+    int k, kk, bad = 0;
+    double v[4][6];
+    const double h = 1.0 / 1024.0;
+    snprintf(name, sizeof(name), "%s", mode + 5);
+    snprintf(star, sizeof(star), "%s", name);
     ret = swe_fixstar2_r(ctx, star, jd, iflag, xx, serr);
+    /* A star's three rate columns are differenced from its own positions,
+       as a body's are and for the same reason: Swiss's analytic star rate
+       misses the derivative of the position it returns by up to 3.4%
+       (registry 2.12). The same five points at h = 1/1024 day, positions
+       only, written out here by hand like every other flag in this file. */
+    for (k = 0; k < 4 && ret >= 0 && (iflag & SEFLG_SPEED); k++) {
+      double dj = (k < 2 ? -2.0 + (double)k : (double)k - 1.0) * h;
+      char serrD[256];
+      snprintf(star, sizeof(star), "%s", name);
+      if (swe_fixstar2_r(ctx, star, jd + dj, iflag & ~SEFLG_SPEED, v[k], serrD) < 0)
+        { bad = 1; break; }
+    }
+    if (!bad && ret >= 0 && (iflag & SEFLG_SPEED))
+      for (kk = 0; kk < 3; kk++) {
+        double a = v[0][kk], b = v[1][kk], d = v[2][kk], e = v[3][kk];
+        if (kk == 0 && !(iflag & SEFLG_XYZ)) {
+          double half = (iflag & SEFLG_RADIANS) ? 3.14159265358979323846 : 180.0;
+          while (b - a >  half) b -= 2.0 * half;
+          while (b - a < -half) b += 2.0 * half;
+          while (d - b >  half) d -= 2.0 * half;
+          while (d - b < -half) d += 2.0 * half;
+          while (e - d >  half) e -= 2.0 * half;
+          while (e - d < -half) e += 2.0 * half;
+        }
+        xx[kk + 3] = (a - 8.0 * b + 8.0 * d - e) / (12.0 * h);
+      }
   } else if (strncmp(mode, "nodaps:", 7) == 0) {
     int pnt = 0, meth = 0;
     double xn[6], xd[6], xp[6], xa[6], *px;

@@ -1076,12 +1076,12 @@ static void PrepareObject(swe_ctx *ctx, const eph::Request &req, uint32_t iObj,
   //
   // Bodies are differenced too since 2026-09-29 (CLIENT_SERVER_REVIEW.md
   // C1b: a topocentric Moon's longitude rate missed its own positions by
-  // 6.6e-3 deg/day, a Uranian's distance rate by 1.3e-4 AU/day), so the flag
-  // stays only on what still carries Swiss's rates: fixed stars (parked,
-  // STARS_BACKLOG.md). Osculating points joined the differenced set the same
-  // day, after the cross-test found them topocentrically out by 1.01e-4.
-  if (pf.speeds && prep->c.kind == eph::swiss::kCallFixstar)
-    m.flags |= eph::kMetaRatesApprox;
+  // 6.6e-3 deg/day, a Uranian's distance rate by 1.3e-4 AU/day). Osculating
+  // points joined the differenced set the same day, after the cross-test
+  // found them topocentrically out by 1.01e-4, and fixed stars the day after
+  // (STARS_BACKLOG.md item 1). Nothing carries Swiss's rates any more except
+  // a row whose stencil could not be computed, which ComputeObjectRows()
+  // flags itself.
 }
 
 // ---- 3.5a's fixed sidereal planes, computed here rather than by Swiss ----
@@ -1293,6 +1293,41 @@ static int FSrvNodRatePoint(void *pv, double dj, double *xx) {
   }
   if (p->fFixedFrame)
     RotateNodeToFixedFrame(p->ctx, p->jdEt + dj, p->iflagBody, xx);
+  return 1;
+}
+
+// A fixed star's stencil point: the row's own star call at an offset, then the
+// binary-orbit correction for the four stars that have one, all before the
+// plane rotation the row goes through afterwards. szAsk is the name Swiss is
+// asked for -- the resolved name, or for alpha Cen B the line of the star it
+// is placed from -- and iStar is -1 for a star with no orbit.
+struct SrvStarRate {
+  swe_ctx *ctx;
+  double jdUt, jdEt;
+  int32_t iflag;
+  bool fUt;
+  int iStar;
+  char szAsk[SE_MAX_STNAME * 2];
+};
+
+static int FSrvStarRatePoint(void *pv, double dj, double *xx) {
+  SrvStarRate *p = (SrvStarRate *)pv;
+  char nm[SE_MAX_STNAME * 2], serrD[AS_MAXCH];
+  // Positions only, as for a body; see FSrvCalcRatePoint().
+  const int32 iflag = p->iflag & ~SEFLG_SPEED;
+  // swe_fixstar2 rewrites the name it is handed, so each point gets a copy.
+  snprintf(nm, sizeof(nm), "%s", p->szAsk);
+  const int32_t r = p->fUt
+    ? swe_fixstar2_ut_r(p->ctx, nm, p->jdUt + dj, iflag, xx, serrD)
+    : swe_fixstar2_r(p->ctx, nm, p->jdEt + dj, iflag, xx, serrD);
+  if (r < 0) return 0;
+  if (p->iStar >= 0) {
+    double ayan = 0.0;
+    if ((iflag & SEFLG_SIDEREAL) &&
+        swe_get_ayanamsa_ex_r(p->ctx, p->jdEt + dj, iflag, &ayan, serrD) < 0)
+      return 0;
+    EphStarOrbApply(p->ctx, p->iStar, p->jdEt + dj, iflag, ayan, xx);
+  }
   return 1;
 }
 
@@ -1518,6 +1553,22 @@ static void ComputeObjectRows(swe_ctx *ctx, const eph::Request &req, uint32_t iO
             ret = -1;
           if (ret >= 0)
             EphStarOrbApply(ctx, iStar, jdEt(), iflagBody, ayan, xx);
+        }
+        // Rates differenced from the positions answered, as for a body: the
+        // row's own call, orbit included, at four offsets (registry 2.11a,
+        // 2.12, 4.4a; STARS_BACKLOG.md item 1). A star's Swiss rate is its
+        // own analytic one and missed by up to 3.4%.
+        if (ret >= 0 && pf.speeds && (iflagBody & SEFLG_SPEED)) {
+          SrvStarRate ssr;
+          ssr.ctx = ctx; ssr.jdUt = jd; ssr.jdEt = jdEt();
+          ssr.iflag = iflagBody;
+          ssr.fUt = c.fUT && !fDtGiven;
+          ssr.iStar = iStar;
+          const char *szLine = iStar >= 0 ? SzStarOrbLine(iStar) : NULL;
+          snprintf(ssr.szAsk, sizeof(ssr.szAsk), "%s", szLine != NULL ? szLine : star);
+          if (!EphNodRateDiff(&FSrvStarRatePoint, &ssr, xx,
+                (iflagBody & SEFLG_RADIANS) != 0, (iflagBody & SEFLG_XYZ) != 0))
+            e->meta[iObj].flags |= eph::kMetaRatesApprox;
         }
         break;
       }
@@ -3820,10 +3871,14 @@ static void BuildWelcome(const EphDiscovery &disc, const char *szSwe) {
   // included. Osculating points were then differenced too (the Prometheia
   // cross-test found them topocentrically out by 1.01e-4 deg/day), and over
   // 2175 series with Jupiter's and Saturn's osculating points at both sites
-  // the worst is 1.29e-5 deg/day and 4.3e-10, both on FIXED STARS -- the one
-  // class left on Swiss's rates, flagged ratesApprox and parked
-  // (STARS_BACKLOG.md). Every solar-system object is differenced and exact.
-  // Advertised at about twice that. The history above is how the old,
+  // the worst was 1.29e-5 deg/day and 4.3e-10, both on FIXED STARS, then the
+  // one class left on Swiss's rates. Stars are differenced too since
+  // 2026-09-30 (STARS_BACKLOG.md item 1) and the same grid now measures
+  // 1.2e-10 deg/day and 1.6e-11: every object is exact to the differencing's
+  // own noise, at f64. The figures advertised are NOT tightened to match, on
+  // purpose: an f32 row (kCapF32) carries a rate rounded to 6e-8 relative,
+  // which is 8e-7 deg/day on the Moon, and a bound a client is promised has
+  // to hold for the encoding it asks for. The history above is how the old,
   // absolute figures were reached.
   c.ratesAuPerDay = 1e-9f;
   for (int i = 0; i < eph::kHypotheticalTokenCount; i++)

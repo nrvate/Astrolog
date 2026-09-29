@@ -216,6 +216,7 @@ else
   skip "ephsrv-rates: not present"
 fi
 expect 0 "system-header-check: a decoy system header loses only with -I ." tools/system-header-check.sh --selftest
+expect 0 "star-rates-xengine: the two-engine star rate grading's own decisions" python3 tools/star-rates-xengine.py --selftest
 # ephsrv-soak.sh --selftest is NOT here on purpose: it starts a real server
 # and takes a minute, and trebling the pre-commit command is how a check
 # stops being run (CLAUDE.md). It is a by-hand gate like the other nine.

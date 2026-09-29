@@ -1003,6 +1003,8 @@ this project had said and was still getting wrong.
 
 ### 2.10 A fixed star's distance rate is unstable within days of an ephemeris file's start — 7.9e-3 AU/day
 
+**FIXED 2026-09-30 for every star row the server or the application answers:** a star's three rate columns are now differenced from the row's own answered positions (`EphNodRateDiff()`, h = 1/1024 day, the orbit stars' correction included), in `astrolog-ephd` and in `FSwissStar()` alike, so the column IS the derivative of the position the way 3.5a defines it and `ratesApprox` is no longer set on a star. What is recorded below is what Swiss's own analytic rate does, and it is still true of `libswe.a`. CLIENT_SERVER_REVIEW.md C1i. The instability is Swiss's analytic rate near a file's start; differencing meets it only where a stencil point will not compute, and then Swiss's rates stand and `ratesApprox` goes back on. It remains a measurement trap for anything that asks Swiss for a star's own rate.
+
 **Not a divergence and not ours: it is a MEASUREMENT trap**, recorded here
 because it is the one that made a gate's bound five times too wide, and the
 next sweep either side runs will step in it the same way.
@@ -1143,6 +1145,8 @@ there as unresolved is now attributable to this.
 
 ### 2.11a A topocentric star's distance rate collapses in scattered (instant, ΔT, site) cells — up to 8.2e-3 AU/day, over the advertised bound
 
+**FIXED 2026-09-30 for every star row the server or the application answers:** a star's three rate columns are now differenced from the row's own answered positions (`EphNodRateDiff()`, h = 1/1024 day, the orbit stars' correction included), in `astrolog-ephd` and in `FSwissStar()` alike, so the column IS the derivative of the position the way 3.5a defines it and `ratesApprox` is no longer set on a star. What is recorded below is what Swiss's own analytic rate does, and it is still true of `libswe.a`. CLIENT_SERVER_REVIEW.md C1i. Re-measured the same day, on the wire against Prometheia's analytic star rates over 12 stars x 5 epochs x 4 profiles (`tools/star-rates-xengine.py`): topocentric angular rate worst 4.5e-6 deg/day (Polaris, 2100), against 1.7e-5 before; distance rate 1.2e-10 relative for every star whose two catalogues agree on its radial velocity. The scattered cells are gone from the served column.
+
 Distinct from [§2.11](#211), which was a stale observer and is fixed. This
 one survives that fix unchanged, needs a **supplied** ΔT, and puts the
 server past what A.3 0x0013 advertises.
@@ -1264,6 +1268,8 @@ held?"** — and a conclusion that names no axis at all is the one to
 distrust first.
 
 ### 2.12 A fixed star's DISTANCE rate is not the derivative of its own distance — 0.6% to 3.4%, geocentric, every star
+
+**FIXED 2026-09-30 for every star row the server or the application answers:** a star's three rate columns are now differenced from the row's own answered positions (`EphNodRateDiff()`, h = 1/1024 day, the orbit stars' correction included), in `astrolog-ephd` and in `FSwissStar()` alike, so the column IS the derivative of the position the way 3.5a defines it and `ratesApprox` is no longer set on a star. What is recorded below is what Swiss's own analytic rate does, and it is still true of `libswe.a`. CLIENT_SERVER_REVIEW.md C1i.
 
 The plainest member of this family and the one to read first: no
 topocentric site, no ΔT, no ephemeris edge, no observer subtlety. A
@@ -1783,7 +1789,17 @@ quantity both engines report self-consistently and differently from each
 other passes a positions comparison and a self-consistency comparison
 both — the gap named below, exactly.
 
-### 4.4a The instrument gap this fell through — and it stays open
+### 4.4a The instrument gap this fell through — CLOSED 2026-09-30
+
+**CLOSED 2026-09-30 by `tools/star-rates-xengine.py`**, which compares two
+engines on star RATES: this server's differenced rates against Prometheia's
+analytic ones, twelve stars, five epochs, four profiles, with a `--selftest`
+of its grading (a control, an injection per leg, and the ratchet on the list
+of catalogue disagreements below). It is by hand, like the gates that need
+the other project's build. The reason given below for leaving it unfilled --
+that Horizons does not serve stars -- is still true, and is why the check is
+against an engine that does not difference rather than against a referee. What
+follows is the entry as it stood.
 
 The diagnosis above closes the Vega question and leaves this one exactly
 where it was. Geocentric Vega, JD 2415020.5, h = 1/1024 d, f64, AU/day:
@@ -1825,6 +1841,44 @@ having no instrument looks like when someone happens to look.
 
 *See also* [§2.12](#212), where the same Vega row sits above its
 quantisation floor on this side, so it is model rather than noise.
+
+### 4.4b More catalogue lines the two engines read differently — measured 2026-09-30
+
+Found by the star-rate instrument (4.4a), which grades distance rates only
+for the stars whose catalogues agree. The distance rate is the radial
+velocity plus the observer's motion, so a disagreement of a few km/s in the
+column is a disagreement in the catalogue line. Geocentric, J2000, ours minus
+theirs, in km/s:
+
+| star | difference | ours (`sefstars.txt`) |
+|---|---|---|
+| Vega | −7.10 | −20.6 (4.4) |
+| Toliman | +7.29 | −22.6, but placed from Rigil Kentaurus (−15.3) |
+| Regulus | +5.18 | +5.9 |
+| Spica | +4.31 | +1 |
+| Procyon | +1.31 | −3.2 |
+
+The projection is not in question: Sirius, Antares, Polaris, Canopus and
+Arcturus agree to 0.001–0.03 km/s (Aldebaran to 0.14). Ours for Regulus
+(+5.9), Spica (+1) and Procyon (−3.2) are the values this author remembers
+SIMBAD giving, but **none of the five was re-queried here**, so which side is
+current is not established -- the resolution is a re-query, as for Vega, and
+the other project's catalogue is theirs to re-query.
+
+**Alpha Centauri is a different kind of finding, and it is a parallax.** The
+distances Prometheia serves at J2000 are 273,240 AU for Rigil Kentaurus (a
+parallax of 754.9 mas) and **258,786 AU for Toliman (797.1 mas)**, and ours
+are 277,940 AU (742.12 mas, Hipparcos 2007) for both. The two components of
+one binary, 35 AU apart at most, cannot be 14,000 AU from each other; 755 and
+797 mas are the Gaia DR3 values for a pair of bright stars whose single-star
+astrometry is known to be poor, and the system's parallax from its orbit and
+radial velocities is **747.17 ± 0.61 mas** (Kervella et al. 2016, A&A 594,
+A107 -- quoted from memory and not re-checked against the paper). So neither side is at the best value: ours is 0.7% far, theirs 1% far
+for A and 6.7% near for B. It moves an apparent position by at most the
+annual parallax times the error, 0.75" x 6.7% = 0.05" for Toliman. This
+server places B from A (2.4), so it shares A's distance, which is the
+physically right structure; the value is `sefstars.txt`'s, the maintainer's
+call as for Vega.
 
 ### 4.5 Nessus — two orbit solutions 6.7″ apart, inside JPL's own 3σ
 

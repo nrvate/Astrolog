@@ -4188,6 +4188,18 @@ static int FNodRatePointLocal(void *pv, double dj, double *xx)
   return fTrue;
 }
 
+// The Swiss Ephemeris time argument (TT) for a Julian Day in UT: the day plus
+// delta T, the user's own if they gave one. Cached on the day, because a cast
+// asks for it once per object.
+static real RJdeSwiss(real jd)
+{
+  if (jd != is.jdDeltaT) {
+    is.jdDeltaT = jd;
+    is.rDeltaT = swe_deltat(jd);
+  }
+  return jd + (us.rDeltaT == rInvalid ? is.rDeltaT : us.rDeltaT/86400.0);
+}
+
 flag FSwissPlanet(int ind, real jd, int indCent,
   real *obj, real *objalt, real *dir, real *dist, real *diralt, real *dirlen)
 {
@@ -4205,11 +4217,7 @@ flag FSwissPlanet(int ind, real jd, int indCent,
     swe_set_topo(ss.topoLon, ss.topoLat, ss.topoElv);
 
   // Compute position of planet or node/helion.
-  if (jd != is.jdDeltaT) {
-    is.jdDeltaT = jd;
-    is.rDeltaT = swe_deltat(jd);
-  }
-  jde = jd + (us.rDeltaT == rInvalid ? is.rDeltaT : us.rDeltaT/86400.0);
+  jde = RJdeSwiss(jd);
   // "-Ys", the solar system plane: A.8's plane 2 is this program's own
   // arithmetic now, so Swiss is asked TROPICALLY in the mean ecliptic of
   // J2000 and ApplySidPlaneLocal() does the plane below. Swiss's own
@@ -4523,6 +4531,31 @@ void SwissStarSpec(SWISSSPEC *pss)
 }
 
 
+// What EphNodRateDiff() needs to re-ask for the same star at an offset
+// instant: the row's own call, orbit correction included, with the flags the
+// row was computed with. astrolog-ephd's FSrvStarRatePoint() is the twin and
+// the two must ask Swiss the same question at the same instants.
+typedef struct {
+  double jd;
+  int32 iflag;
+  char szStar[SE_MAX_STNAME * 2];
+} STARRATECTX;
+
+static int FStarRatePointLocal(void *pv, double dj, double *xx)
+{
+  STARRATECTX *p = (STARRATECTX *)pv;
+  char sz[SE_MAX_STNAME * 2], serr[AS_MAXCH];
+  // Positions only, as for a body: FCalcRatePointLocal() has the reason.
+  const int32 iflag = p->iflag & ~(int32)SEFLG_SPEED;
+
+  // swe_fixstar2() rewrites the name it is handed, so each point gets a copy.
+  sprintf(sz, "%s", p->szStar);
+  if (swe_fixstar2(sz, p->jd + dj, iflag, xx, serr) < 0)
+    return fFalse;
+  return FEphStarOrbCall(sz, p->jd + dj, iflag, xx);
+}
+
+
 flag FSwissStar(char *sz, real jd, real *rg)
 {
   char serr[AS_MAXCH];
@@ -4530,6 +4563,13 @@ flag FSwissStar(char *sz, real jd, real *rg)
   SWISSSPEC ss;
 
   SwissEnsurePath();
+  // jd is UT, as it is for a planet, and Swiss wants TT. This function used to
+  // hand the UT day straight to swe_fixstar2(), so every star was placed delta
+  // T early: 57 s in 1990. The server converts, so it disagreed with the
+  // application by exactly a star's motion over delta T on every star -- about
+  // 1e-4 arcsec now, and a few thousandths of an arcsec at the ends of the
+  // ephemeris. Small, and still wrong.
+  jd = RJdeSwiss(jd);
   SwissStarSpec(&ss);
   iflag = ss.iflag;
   // "-Ys", the solar system plane, EXACTLY AS FSwissPlanet() does it: A.8's
@@ -4566,6 +4606,18 @@ flag FSwissStar(char *sz, real jd, real *rg)
   // one rotation the star does.
   if (!FEphStarOrbCall(sz, jd, iflag, rg))
     return fFalse;
+  // The rates are differenced from the positions answered, as a body's are
+  // (registry 2.11a, 2.12, 4.4a): Swiss's own star rate is an analytic one
+  // that misses its own positions by up to 3.4%. Before the plane, so the
+  // rates take the same rotation the positions do. A stencil point that
+  // will not compute leaves Swiss's rates on the row.
+  if (iflag & SEFLG_SPEED) {
+    STARRATECTX src;
+    src.jd = jd; src.iflag = iflag;
+    sprintf(src.szStar, "%s", sz);
+    EphNodRateDiff(&FStarRatePointLocal, &src, rg,
+      (iflag & SEFLG_RADIANS) != 0, (iflag & SEFLG_XYZ) != 0);
+  }
   if (us.fSidereal && us.fSidereal2)
     ApplySidPlaneLocal(rg);
   return fTrue;
