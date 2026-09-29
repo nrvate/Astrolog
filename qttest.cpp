@@ -9820,9 +9820,9 @@ static void TestObjSelDialogQt()
   Group("Object Selections dialog");
 
   StrDriveObjSelQt(0);
-  Check(rgObjSwiss[iobj - custLo] == 2060,
-    "picking a body from the list sets it (obj %d)",
-    rgObjSwiss[iobj - custLo]);
+  Check(rgTypSwiss[iobj - custLo] == 2 && rgObjSwiss[iobj - custLo] == oChi,
+    "picking a body from the list sets it (type %d obj %d)",
+    rgTypSwiss[iobj - custLo], rgObjSwiss[iobj - custLo]);
   Check(FEqSz(szObjDisp[iobj], "Chiron"),
     "and the slot is named after it, not the body it used to be (%s)",
     szObjDisp[iobj]);
@@ -9870,15 +9870,17 @@ static void TestObjSelDialogQt()
 
     // Aim the slot somewhere else entirely, so a file that carries
     // nothing leaves it wrong rather than accidentally right.
-    rgObjSwiss[iobj - custLo] = 433;
+    rgTypSwiss[iobj - custLo] = 1; rgObjSwiss[iobj - custLo] = 433;
     FCloneSzCore("NotChiron", (char **)&szObjDisp[iobj],
       szObjDisp[iobj] == szObjName[iobj]);
 
     i = CReplaySettingsQt(szPath, FWantObjDefQt);
     Check(i > 0, "and the object lines read back (%d)", i);
-    Check(rgObjSwiss[iobj - custLo] == 2060,
-      "the body the dialog chose survives a save and load (%d, want 2060)",
-      rgObjSwiss[iobj - custLo]);
+    Check(rgTypSwiss[iobj - custLo] == 2 &&
+      rgObjSwiss[iobj - custLo] == oChi,
+      "the body the dialog chose survives a save and load (type %d obj "
+      "%d, want 2 %d)", rgTypSwiss[iobj - custLo],
+      rgObjSwiss[iobj - custLo], oChi);
     Check(FEqSz(szObjDisp[iobj], "Chiron"),
       "and so does the name it gave the slot (%s)", szObjDisp[iobj]);
 
@@ -10419,6 +10421,21 @@ static void TestObjSelTableQt()
       (FItem(j) && FItem(k) && j == k),
       "list says \"%s\" for type %d index %d, ephemeris says \"%s\"",
       rgObjSel[i].szName, rgObjSel[i].nTyp, rgObjSel[i].nObj, szName);
+
+    // And it COMPUTES. A name is not a position: Swiss names asteroid
+    // 2060 "Chiron" with no file for it at all, and the list's Chiron
+    // was that asteroid, so picking it from the list gave 0Ari00 and a
+    // missing-file error on every ephemeris but /swe.
+    {
+      Borrow bTyp(rgTypSwiss[0], rgObjSel[i].nTyp);
+      Borrow bObj(rgObjSwiss[0], rgObjSel[i].nObj);
+      Borrow bPnt(rgPntSwiss[0], 0), bFlg(rgFlgSwiss[0], 0);
+      real r1, r2, r3, r4, r5, r6;
+      Check(FSwissPlanet(custLo, 2451545.0, oEar, &r1, &r2, &r3, &r4, &r5,
+        &r6) && (r1 != 0.0 || r2 != 0.0),
+        "\"%s\" (type %d index %d) computes, not only resolves",
+        rgObjSel[i].szName, rgObjSel[i].nTyp, rgObjSel[i].nObj);
+    }
   }
   // Exactly, not a floor. Two reasons. A floor
   // tests the guess: 11 of these bodies resolve with no ephemeris files at
@@ -20629,6 +20646,69 @@ static void TestPrometheiaQt()
         } else
           Check(fFalse, "the host path's Jupiter node did not compute");
       }
+
+      // A numbered body past 119000, which the plugin used to refuse as
+      // unsupported on an upper bound nothing defines: Eris, Haumea,
+      // Makemake, Gonggong and a dozen more of the Object Selections
+      // list. In a real chain Swiss quietly answered them, so the
+      // provenance is the assertion, and the chain here holds the
+      // prometheia source alone. Needs the catalog.
+      //
+      // So every numbered body the Object Selections list offers, not
+      // just Eris: each must come back from this source, and agree with
+      // Swiss to 1". The count is exact -- a body that stopped being
+      // asked would otherwise shrink the loop and still pass.
+      if (fCat) {
+        int iSel, cNum = 0, cProm = 0, cNear = 0;
+        real rWorst = 0.0, rLim;
+        char szWorst[cchSzDef] = "";
+        for (iSel = 0; iSel < cObjSel; iSel++) {
+          if (rgObjSel[iSel].nTyp != 1 && rgObjSel[iSel].nTyp != 2)
+            continue;          // the Uranians are elements, not kind 0
+          cNum++;
+          rgTypSwiss[0] = rgObjSel[iSel].nTyp;
+          rgObjSwiss[0] = rgObjSel[iSel].nObj;
+          rgPntSwiss[0] = 0; rgFlgSwiss[0] = 0;
+          EphQueryInit(&eqh, jd);
+          FEphQueryAdd(&eqh, custLo, 0, oEar, NULL);
+          FEphSubmitChain(&eqh, rgisrc, 1);
+          fHost = FEphRead(&eqh, custLo, &h1, &h2, &h3, &h4, &h5, &h6);
+          if (!fHost || eqh.rgisrc[0] != rgisrc[0]) {
+            Check(fFalse, "%s (%d) is answered by the prometheia source",
+              rgObjSel[iSel].szName, rgObjSel[iSel].nObj);
+            continue;
+          }
+          cProm++;
+          fDirect = FSwissPlanet(custLo, jd, oEar, &r1, &r2, &r3, &r4, &r5,
+            &r6);
+          if (!fDirect) {
+            Check(fFalse, "%s (%d) computes on the Swiss side to compare "
+              "against", rgObjSel[iSel].szName, rgObjSel[iSel].nObj);
+            continue;
+          }
+          rD = SphDistance(h1, h2, r1, r2) * 3600.0;
+          // Nessus: the Swiss file and JPL's orbit sit 6.7" apart, inside
+          // JPL's own 3-sigma of 5.7" x 4.1" -- two orbit solutions, not
+          // a defect (EPHEMERIS_ACCURACY_REGISTRY.md 4.5).
+          rLim = rgObjSel[iSel].nObj == 7066 ? 10.0 : 1.0;
+          if (rgObjSel[iSel].nObj != 7066 && rD > rWorst) {
+            rWorst = rD;
+            sprintf2(S(szWorst), "%s", rgObjSel[iSel].szName);
+          }
+          if (rD < rLim)
+            cNear++;
+          else
+            Check(fFalse, "%s within %.0f\" of Swiss (%.4f\")",
+              rgObjSel[iSel].szName, rLim, rD);
+        }
+        printf("  oracle %-46s %9.4f\" (%s)\n",
+          "Object Selections, worst but Nessus, vs Swiss", rWorst, szWorst);
+        Check(cNum == 69 && cProm == cNum && cNear == cNum,
+          "all 69 non-Uranian Object Selections bodies answered here and "
+          "within bounds (%d asked, %d answered, %d within)", cNum, cProm,
+          cNear);
+      } else
+        printf("  skipped: no catalog, so no Object Selections leg\n");
 
       // Finding 2 of the Prometheia session's review of this file.
       // Star profiles are given zodiac "fagan-bradley" under fSidereal,

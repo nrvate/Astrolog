@@ -3379,10 +3379,12 @@ CONST OBJSEL rgObjSel[] = {
   // the list is kept to; tools/check-ephem.sh keeps the files honest from
   // the other side.
   //
-  // Chiron and Pholus need no file of their own: seas_18.se1 computes
-  // Chiron, and Pholus has a built-in definition (type 2 here, from
-  // rgTypSwissDef[]), which is why it is spelled differently.
-  {1,   2060, "Chiron"},
+  // Chiron and Pholus need no file of their own, and both are type 2 --
+  // Astrolog's own objects -- for that reason: seas_18.se1 computes
+  // Chiron, and Pholus has a built-in definition from rgTypSwissDef[].
+  // Chiron was type 1, asteroid 2060, which Swiss names without having
+  // a position for: that needs se02060s.se1, which only /swe carries.
+  {2,   oChi, "Chiron"},
   {2,   oPho, "Pholus"},
 
   // The first 29 main belt asteroids, Ceres to Amphitrite. The first

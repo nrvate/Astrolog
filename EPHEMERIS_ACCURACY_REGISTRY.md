@@ -1716,6 +1716,34 @@ having no instrument looks like when someone happens to look.
 *See also* [§2.12](#212), where the same Vega row sits above its
 quantisation floor on this side, so it is model rather than noise.
 
+### 4.5 Nessus — two orbit solutions 6.7″ apart, inside JPL's own 3σ
+
+**Measured 2026-09-29.** Geocentric apparent ecliptic of date, JD
+2461300.5 (2026-09-17 0h UT):
+
+| | longitude | latitude |
+|---|---|---|
+| JPL Horizons (JPL#10) | 351.4540634 | −10.5605025 |
+| Prometheia (SBDB catalog) | 351.4540781 | −10.5605096 |
+| Swiss `ephem/se07066.se1` | 351.4522177 | −10.5608205 |
+
+Upstream `swetest` over the same file gives Swiss's row to the last
+digit, so Astrolog's integration is not in it: this is the data file
+against JPL's orbit. The other 67 numbered Object Selections bodies agree
+between the two sources within 0.77″ (Vesta the worst).
+
+**Not adjudicable from here, and the reason is JPL's own:** orbit 10 was
+fitted to 111 observations from 1993-04-26 to **2009-09-28**, and
+Horizons gives the position's 3σ as **5.7″ in RA and 4.1″ in Dec**. The
+gap is the size of the uncertainty. Prometheia agreeing with Horizons is
+one orbit agreeing with itself, not a second opinion: its catalog is
+SBDB. The Swiss file was built 2026-03-12 and may carry a different fit.
+A recent astrometric observation would decide it; neither side has one.
+
+What holds it: the suite's `prometheia` group asks every numbered Object
+Selections body of the Prometheia source and requires 1″ against Swiss,
+with Nessus the one named exception at 10″ citing this entry.
+
 ## How to add an entry
 
 An entry earns its place by **measurement against something outside this

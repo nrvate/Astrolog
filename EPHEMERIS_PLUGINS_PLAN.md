@@ -3356,6 +3356,27 @@ instructions for a human to copy is the thing this direction exists to stop.
      injection rather than by trusting the green. The symptom to grep
      for in any existing leg is a column of suspiciously exact zeros.
 
+36. **Every Object Selections body, asked of Prometheia alone
+   (2026-09-29).** A dwarf-slot cast with `-bE prometheia` answered
+   Eris, Haumea, Makemake and Gonggong with 0Ari00: `NNaifFromSwiss()`
+   refused every asteroid past 119000 on an upper bound nothing defines,
+   so in a real chain Swiss answered 15 of the list's bodies with this
+   source primary. Pholus was refused too, having no case at all. Both
+   fixed; the `prometheia` group now asks all 69 non-Uranian bodies of
+   this source alone and requires its provenance and 1" against Swiss --
+   seen failing on both sabotages, naming all 16.
+
+   Nessus is the exception at 6.7", and it is not a defect on either
+   side: registry §4.5 (JPL's orbit ends in 2009 and its own 3-sigma is
+   5.7" x 4.1").
+
+   **And a shipped bug the loop surfaced on the Swiss side:** the list's
+   "Chiron" was asteroid 2060, which Swiss names but cannot compute
+   without `se02060s.se1` -- only `/swe` has it -- so picking Chiron from
+   Object Selections gave 0Ari00 and a missing-file error on the bundled
+   ephemeris. The entry is `{2, oChi}` now. The table's own group only
+   ever compared NAMES; it now requires every row to compute.
+
 35. **Prometheia as the primary source: first cast, and a leak
    (2026-09-29).** A console build with the plugin, `-bE
    prometheia,swiss,moshier` over `linux_p1550p2650.440`: Sun to Pluto,

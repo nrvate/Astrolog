@@ -783,12 +783,17 @@ static int NNaifFromSwiss(int iobj)
   case SE_NEPTUNE:   return PROMETHEIA_NEPTUNE;
   case SE_PLUTO:     return PROMETHEIA_PLUTO;
   case SE_CHIRON:    return 20002060;
+  case SE_PHOLUS:    return 20005145;
   case SE_CERES:     return 20000001;
   case SE_PALLAS:    return 20000002;
   case SE_JUNO:      return 20000003;
   case SE_VESTA:     return 20000004;
   default:
-    if (iobj > SE_AST_OFFSET && iobj < SE_VARUNA + 99000)
+    // Every Swiss id past SE_AST_OFFSET is a numbered asteroid. An upper
+    // bound of SE_VARUNA + 99000 used to stand here, refusing everything
+    // past 119000 -- Eris, Haumea, Makemake, Gonggong -- so Swiss
+    // answered them even with this source primary.
+    if (iobj > SE_AST_OFFSET)
       return 20000000 + (iobj - SE_AST_OFFSET);
     return ephNativeNone;
   }
