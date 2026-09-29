@@ -53,9 +53,13 @@ with Prometheia for every object and stays in flight.
    year, because the anchor is taken apparent. Its missing rate was fixed
    2026-09-18; the wobble itself is Swiss's convention and still followed.
 8. **Instruments that do not exist:**
-   - `tools/swetest-oracle.sh` has no fixed-star legs. (The delta-T slip in
-     the local star path lived in exactly this gap: nothing compared the
-     application's star with anything but the same call.)
+   - ~~`tools/swetest-oracle.sh` has no fixed-star legs~~ -- it has, since
+     2026-09-30: eight stars x five dates against upstream `swetest` at the
+     0.001 degree display precision (the four orbit stars are left out on
+     purpose); sabotaged with `-true` on the swetest side it fails at 0.023
+     degrees. **That resolution cannot see the delta-T slip the local star
+     path had (1e-4 arcsec)**, which lived in exactly this gap; it sees a
+     frame, epoch or zodiac handled wrongly. The slip is held by the P1 leg.
    - The local `./astrolog` star path is not refereed by FK5; only
      `astrolog-ephd` is.
    - ~~No two-engine RATES instrument for stars~~ -- built 2026-09-30,

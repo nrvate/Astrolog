@@ -1103,8 +1103,8 @@ tools/swetest-oracle.sh ./astrolog /path/to/swetest "$PWD/ephem"
 
 It builds nothing. Point it at a `swetest` compiled from **upstream**
 Swiss Ephemeris -- `aloistr/swisseph`, `SE_VERSION "2.10.03"`, exactly
-the version this tree vendors -- and it asks both programs the same 50
-questions. Upstream at the same version means a disagreement is about
+the version this tree vendors -- and it asks both programs the same 90
+questions (the ten planets, and since 2026-09-30 eight fixed stars). Upstream at the same version means a disagreement is about
 *Astrolog's integration*, not about two Swisses differing. It refuses to
 run unless `sepl_18.se1`, `semo_18.se1` and `seas_18.se1` are actually
 present, because upstream silently answers from Moshier when they are

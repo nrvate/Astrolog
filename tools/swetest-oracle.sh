@@ -83,6 +83,37 @@ for date in "15.6.1990" "1.1.2000" "4.7.1976" "29.2.2024" "21.12.2012"; do
   done
 done
 
+# FIXED STARS, added 2026-09-30. Until then no outside program had ever been
+# asked about a star, and the application's star path put every star delta T
+# early (57 s, 1e-4 arcsec) for as long as it had existed -- invisible to every
+# check because each one asked the same call. THIS RESOLUTION CANNOT SEE THAT
+# (0.001 degrees is 3.6 arcsec); it sees a frame, an epoch or a zodiac
+# handled wrongly, which is the class the other star nets share a blind spot
+# for. The four binary-orbit stars (Sirius, Procyon, alpha Cen A and B) are
+# left out on purpose: registry 2.4 moves them off the catalogue line by up to
+# 30 arcsec and upstream swetest does not.
+# sefstars.txt lives at the tree root, not in ephem/, so the root is on both
+# programs' paths; swetest takes them colon-separated.
+ROOT=$(cd "$(dirname "$0")/.." && pwd)
+for date in "15.6.1990" "1.1.2000" "4.7.1976" "29.2.2024" "21.12.2012"; do
+  ad=$(echo "$date" | awk -F. '{printf "%s %s %s", $2, $1, $3}')
+  as=$("$A" -Yi1 "$E" -Yi2 "$ROOT" -sd -qa $ad 12:00 0 0:00E 0:00N -U -R1 _X 2>/dev/null \
+       | sed -n 's/^\(Arct\|Vega\|Alde\|Anta\|Spic\|Regu\|Poll\|Cano\): *\([0-9.]*\) *[R ]*\([-+][0-9.]*\).*/\1 \2 \3/p')
+  for pair in Arct:Arcturus Vega:Vega Alde:Aldebaran Anta:Antares Spic:Spica Regu:Regulus Poll:Pollux Cano:Canopus; do
+    ab=${pair%%:*}; nm=${pair##*:}
+    s=$("$T" -pf -xf"$nm" -b"$date" -ut12:00 -fPlb -eswe -edir"$E:$ROOT" 2>/dev/null | awk -v x="$nm" '$1 ~ "^" x {print $2, $3; exit}')
+    a=$(printf '%s\n' "$as" | awk -v x="$ab" '$1==x{print $2, $3; exit}')
+    [ -n "$s" ] && [ -n "$a" ] || { echo "  PARSE FAILED for star $nm on $date"; exit 1; }
+    n=$((n+1))
+    d=$(awk -v s="$s" -v a="$a" 'BEGIN{split(s,p," "); split(a,q," ");
+      dl=p[1]-q[1]; if(dl<0)dl=-dl; if(dl>180)dl=360-dl; db=p[2]-q[2]; if(db<0)db=-db;
+      printf "%.4f", (dl>db)?dl:db}')
+    if [ "$(awk -v d="$d" -v w="$worst" 'BEGIN{print (d>w)?1:0}')" = 1 ]; then
+      worst=$d; worstwhat="star $nm on $date (swetest $s, astrolog $a)"
+    fi
+  done
+done
+
 echo "  $n comparisons, worst deviation ${worst} degrees"
 echo "  at: $worstwhat"
 # 0.001 degrees is Astrolog's own display precision at -sd, so anything at
