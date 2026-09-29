@@ -1353,6 +1353,44 @@ ours is, on the grounds that they cannot see this tree and had been
 wrong twice that day reasoning about the other side's — which is the
 right refusal, and is why the correction was worth acting on.
 
+### 2.13 A fictitious body's "equinox of date" is taken at the observation instant — 64″ at 80,000 AU, 0.06″ on Proserpina
+
+**§3.5a, as agreed with the Prometheia project on 2026-09-29:** under light
+time the instant evaluated is the EMISSION instant, for the elements and for
+an equinox of date alike. The light arriving at t left at t − τ, so the whole
+state, frame included, belongs to t − τ.
+
+Swiss takes an equinox of date at the OBSERVATION instant instead. Measured
+against `libswe.a` directly (astrometric, J2000 ecliptic, JD 2461300.5): the
+gap between Swiss's direction and B(t − τ) − E(t) with the equinox at t − τ is
+exactly the precession over τ, in every heliocentric equinox-of-date set of
+the stock `seorbel.txt`:
+
+| set | body | τ | gap |
+|---|---|---|---|
+| 18 | Proserpina | 0.460 d | 0.063″ |
+| 24 | Kore | 0.303 d | 0.041″ |
+| 26 | VEA (a = 80,000 AU) | 462.04 d | 63.70″ |
+
+Prometheia's kind 4 takes the emission instant. Their set-26 answers sit
+63.61″ and 63.62″ from the equinox-at-t reading, and their light time is
+converged to 4.9e-9 s. So this is not a solver defect on either side; one
+side follows the specification and one does not.
+
+**Where this fork stands:** with the `prometheia` source, fictitious bodies
+are computed by Prometheia's kind 4 from the stock elements (`ephpromelem.h`)
+and are right. With `swiss`, and in `astrolog-ephd`, they follow Swiss.
+**Moving this to §1** means changing Swiss's fictitious-body path, in the
+copy vendored into Astrolog and in the fork the server links. Vendored code
+is the maintainer's decision (asked 2026-09-29).
+
+**Not yet explained, and not part of this entry:** against the same
+reconstruction, Vulcan (set 16, heliocentric, τ = 0.0052 d) sits 0.103″ off,
+where precession explains 0.0007″, and the Earth-centred Selena (17) and
+Waldemath (19) sit 0.40″ and 3.6″ off. The reconstruction may not be the right
+definition for a geocentric orbit. Prometheia is refereeing all three with
+Swiss's full-precision values (`CLIENT_SERVER_REVIEW.md` C2e).
+
 ## 3. Divergences deliberately DECLINED
 
 ### 3.1 The Gaussian constant's truncation
