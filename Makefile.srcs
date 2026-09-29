@@ -107,14 +107,22 @@ $(SWISS_OBJS): override CFLAGS += $(SWISS_NOWARN)
 #
 #   CPPFLAGS += $(PROMETHEIA_FLAGS)
 #   LIBS += $(PROMETHEIA_LIBS)
+#
+# PROMETHEIA_HOME is where a Prometheia checkout lives, found the way
+# SWE_HOME finds the Swiss fork: a sibling by default, overridable with
+# "make PROMETHEIA_HOME=/path". Its build tree's prometheia.pc is appended
+# to whatever PKG_CONFIG_PATH the user already has, so an installed
+# Prometheia still wins and a checkout without the sibling builds as before.
+PROMETHEIA_HOME ?= /shares/ephemeris-prometheia
+PROMETHEIA_PKGCONFIG := PKG_CONFIG_PATH="$(PKG_CONFIG_PATH)$(if $(PKG_CONFIG_PATH),:)$(PROMETHEIA_HOME)/build" pkg-config
 UNAME := $(shell uname -s 2>/dev/null)
 ifneq ($(findstring Linux,$(UNAME)),Linux)
 PROMETHEIA_FOUND :=
 else
-PROMETHEIA_FOUND := $(shell pkg-config --exists prometheia 2>/dev/null && echo yes)
+PROMETHEIA_FOUND := $(shell $(PROMETHEIA_PKGCONFIG) --exists prometheia 2>/dev/null && echo yes)
 endif
-PROMETHEIA_FLAGS := $(if $(PROMETHEIA_FOUND),-DPROMETHEIA $(shell pkg-config --cflags prometheia 2>/dev/null))
-PROMETHEIA_LIBS := $(if $(PROMETHEIA_FOUND),$(shell pkg-config --static --libs prometheia 2>/dev/null))
+PROMETHEIA_FLAGS := $(if $(PROMETHEIA_FOUND),-DPROMETHEIA $(shell $(PROMETHEIA_PKGCONFIG) --cflags prometheia 2>/dev/null))
+PROMETHEIA_LIBS := $(if $(PROMETHEIA_FOUND),$(shell $(PROMETHEIA_PKGCONFIG) --static --libs prometheia 2>/dev/null))
 
 # That decision is made here, at parse time, and a flip of it changes no
 # source file's mtime -- so make happily links an ephem.o compiled
