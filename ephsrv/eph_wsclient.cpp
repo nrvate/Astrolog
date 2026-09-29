@@ -760,6 +760,11 @@ int main(int argc, char **argv) {
                caps.fRatesBound ? (double)caps.ratesAuPerDay : 0.0,
                caps.deltaTModel.c_str(), w.serverName.c_str(),
                w.datasetId.c_str(), w.engine.c_str());
+      // A.3 0x000A, one line per entry, in the server's order: the format
+      // the Prometheia project's wire client prints, so logs compare.
+      if (!quiet)
+        for (const Capabilities::Coverage &e : caps.coverage)
+          printf("# coverage %s %.9f %.9f\n", e.id.c_str(), e.tMin.Sum(), e.tMax.Sum());
     }
     if (cyc < cycles) {
       closeConn(fd);

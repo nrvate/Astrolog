@@ -3557,6 +3557,59 @@ static std::string DatasetIdOf(const EphDiscovery &disc, const char *szSwe) {
 // (ephswiss.h ApplyProfile), every A.11 zodiac and sidereal plane, UT1 and
 // TT, the ayanamsa and delta T columns, Swiss's own delta T model, the rate
 // budget when there is one, LOOKUP and the A.15 hypotheticals.
+// A.3 0x000A: every Swiss main file the server can reach, with its real span.
+//
+// Swiss names them in 600-year blocks by family -- se{pl,mo,as}{_,m}NN.se1,
+// "sepl_18" the planets from 1800, "seplm06" from 600 BC -- from m132 (13200
+// BC) to _162 (AD 16200). So the names are GENERATED and stat()ed, never
+// listed: discovery's rule (a production tree holds nearly a million files
+// and startup stays O(1) in its size) holds, at most 153 names per
+// directory. The first directory holding a name is the one Swiss reads, as
+// its own search does. Each file found is then LOADED by a calculation in
+// the middle of its block -- the Sun, the Moon or Ceres by family -- and its
+// span read back from swe_get_current_file_data_r(), which is the file's own
+// header rather than what its name suggests; a load that answers from any
+// other file is left out rather than guessed at. Spans are Swiss's ET, which
+// is TT; TDB differs by under 2 ms, far inside what coverage is for.
+// Order: planets, then the Moon, then the main asteroids, each in time.
+static void BuildCoverage(const EphDiscovery &disc, eph::Capabilities *c) {
+  static const struct { const char *szFam; int ipl, ifno; } rgFam[] = {
+    {"pl", SE_SUN, 0}, {"mo", SE_MOON, 1}, {"as", SE_CERES, 2}};
+  swe_ctx *ctx = swe_ctx_new();
+  if (ctx == nullptr) return;
+  for (const auto &fam : rgFam) {
+    for (int nBlock = -132; nBlock <= 162; nBlock += 6) {
+      char szName[32];
+      snprintf(szName, sizeof(szName), "se%s%c%02d.se1", fam.szFam,
+               nBlock < 0 ? 'm' : '_', nBlock < 0 ? -nBlock : nBlock);
+      bool fFound = false;
+      for (const EphDir &d : disc.dirs) {
+        struct stat st;
+        std::string path = d.dir + "/" + szName;
+        if (stat(path.c_str(), &st) == 0 && S_ISREG(st.st_mode)) { fFound = true; break; }
+      }
+      if (!fFound) continue;
+      // Mid-block: the block's first year plus 300.
+      double jdMid = 2451545.0 + ((double)nBlock * 100.0 + 300.0 - 2000.0) * 365.25;
+      double xx[6], tStart = 0, tEnd = 0;
+      int denum = 0;
+      char serr[AS_MAXCH];
+      if (swe_calc_r(ctx, jdMid, fam.ipl, SEFLG_SWIEPH, xx, serr) < 0) continue;
+      const char *szLoaded = swe_get_current_file_data_r(ctx, fam.ifno, &tStart, &tEnd, &denum);
+      if (szLoaded == nullptr) continue;
+      const char *pBase = strrchr(szLoaded, '/');
+      pBase = pBase ? pBase + 1 : szLoaded;
+      if (strcmp(pBase, szName) != 0 || !(tEnd > tStart)) continue;
+      eph::Capabilities::Coverage e;
+      e.id = szName;
+      e.tMin.jd1 = tStart;
+      e.tMax.jd1 = tEnd;
+      c->coverage.push_back(e);
+    }
+  }
+  swe_ctx_free(ctx);
+}
+
 static void BuildWelcome(const EphDiscovery &disc, const char *szSwe) {
   gDatasetId = DatasetIdOf(disc, szSwe);
   gEngine = std::string("Swiss Ephemeris ") + szSwe + " files";
@@ -3773,6 +3826,7 @@ static void BuildWelcome(const EphDiscovery &disc, const char *szSwe) {
   c.ratesAuPerDay = 1e-9f;
   for (int i = 0; i < eph::kHypotheticalTokenCount; i++)
     c.hypotheticals.push_back(eph::kHypotheticalTokens[i]);
+  BuildCoverage(disc, &c);
   eph::Welcome w;
   w.protoSession = eph::kProtoVersion;
   // Advertised is promised: a bit here is behaviour a client WILL take up,

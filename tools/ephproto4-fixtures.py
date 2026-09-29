@@ -324,6 +324,16 @@ def fixtures():
                                   caps_swiss() +
                                   [(0x0014, u8(1) + u32(0x80000004) +
                                     u32(0x40000002) + u8(1))])))
+    # 0x000A coverage (A.3, 3.5a): decoded by the codec since 2026-09-29, so
+    # a payload that is not its layout is refused like any decoded tag's.
+    # Here the count says two entries and one follows.
+    short_cov = [e for e in caps_swiss() if e[0] != 0x000A] + [
+        (0x000A, u16(2) + str8("sepl_18") + time(2378496.5) + time(2524624.5))]
+    short_cov.sort(key=lambda e: e[0])
+    add("welcome_coverage_short", "s2c", WELCOME, "malformed",
+        "coverage count says 2, one entry follows",
+        envelope(WELCOME, welcome(0b10011101, "Swiss Ephemeris 2.10.03 files",
+                                  "swiss-2.10.03/sepl_18", short_cov)))
     add("welcome_corrkind_reserved", "s2c", WELCOME, "malformed",
         "a 0x0014 mask with a bit above 0x07: reserved, MUST be zero, and "
         "3.1 says reject rather than normalise",

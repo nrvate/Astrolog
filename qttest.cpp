@@ -211,6 +211,8 @@ extern void SetHelloSrvTestQt(int);
 extern void SetChunkRowsSrvTestQt(int);
 extern int CRecastSrvTestQt();
 extern void SetWelcMaxObjsSrvTestQt(uint32_t);
+extern int CCoverageSrvTestQt(void);
+extern void SetCoverageSrvTestQt(double, double);
 extern void SetWelcMaxCellsSrvTestQt(uint32_t);
 extern void SzEphSrvStatusQt(char *, int);
 extern int NChunkProbeSrvTestQt(int);
@@ -21816,6 +21818,59 @@ static void TestEphSrvLiveQt()
   CastChart(0);
   Check(NCastWarnSrvTestQt() == cWarn && CReqSentEphSrvTestQt() == cReq,
     "a cast with the server deselected sends nothing and warns not");
+
+  // Coverage (A.3 0x000A): the server states the span of each ephemeris
+  // file it serves from, and a cast outside every span is not sent -- the
+  // chain walks on to the local files as it does when the server is down,
+  // with no round trip and no per-object warning box that the local
+  // answer then contradicts. The server's own list first: it carries at
+  // least the main planetary file, and the pinned 1990 instant is inside
+  // it, so a cast there is still sent.
+  {
+  int cCover = CCoverageSrvTestQt();
+  EphSourceSet("server,swiss");
+  ClearWinSrvTestQt();
+  OraclePinUtQt(1990, 6, 21, 12.0);
+  cReq = CReqSentEphSrvTestQt();
+  cWarn = NCastWarnSrvTestQt();
+  CastChart(0);
+  Check(cCover >= 1 && CReqSentEphSrvTestQt() > cReq &&
+    NCastWarnSrvTestQt() == cWarn,
+    "the server declares %d coverage spans, and a cast inside them is sent "
+    "(%d requests)", cCover, CReqSentEphSrvTestQt() - cReq);
+  // The same instant with the declared span moved to 2000: nothing sent,
+  // nothing warned, and the chart is the local one to the bit.
+  EphSourceSet("swiss");
+  CastChart(0);
+  SnapshotEphQt(&snLocal);
+  SetCoverageSrvTestQt(2451544.5, 2451910.5);
+  EphSourceSet("server,swiss");
+  ClearWinSrvTestQt();
+  cReq = CReqSentEphSrvTestQt();
+  cWarn = NCastWarnSrvTestQt();
+  CastChart(0);
+  SnapshotEphQt(&snSrv);
+  cDiff = CDiffEphQt(&snLocal, &snSrv, 0.0, S(szDiff));
+  Check(CReqSentEphSrvTestQt() == cReq && NCastWarnSrvTestQt() == cWarn &&
+    cDiff == 0, "a cast outside the declared coverage is not sent (%d "
+    "requests, %d warnings, %d differ: %s)", CReqSentEphSrvTestQt() - cReq,
+    NCastWarnSrvTestQt() - cWarn, cDiff, szDiff);
+  // With nothing behind the server, the chain's refusal says why.
+  {
+  flag fPopSav = FNoPopupQt(), fNoEphSav = is.fNoEphFile;
+  SetNoPopupQt(fTrue);
+  EphSourceSet("server");
+  CastChart(0);
+  SetNoPopupQt(fPopSav);
+  is.fNoEphFile = fNoEphSav;
+  }
+  Check(strstr(SzEphNoSourceWhy(), "coverage") != NULL,
+    "a server-only chain outside the coverage says so: \"%s\"",
+    SzEphNoSourceWhy());
+  SetCoverageSrvTestQt(1.0, 0.0);
+  EphSourceSet("swiss");
+  ClearWinSrvTestQt();
+  }
 
 
   // An object with no Astrolog object index is REFUSED, not written out

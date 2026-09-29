@@ -7961,6 +7961,39 @@ static void StopTransQt()
 }
 
 
+// The instant in TT, as FSwissPlanet() makes it from the cast's UT1.
+static real JdeSrvQt(real jd)
+{
+  if (jd != is.jdDeltaT) {
+    is.jdDeltaT = jd;
+    is.rDeltaT = swe_deltat(jd);
+  }
+  return jd + (us.rDeltaT == rInvalid ? is.rDeltaT : us.rDeltaT/86400.0);
+}
+
+
+// Is the instant outside every span the server declared (A.3 0x000A)? A
+// server that states no coverage, or has not said anything yet, is asked
+// as before. Measured against astrolog-ephd, which falls back to no other
+// ephemeris: outside its files every row is error 3, the mean node
+// included, so asking loses nothing the chain could have used -- it costs
+// a round trip and a per-object warning box that the next source in the
+// chain then contradicts by answering. The spans are TDB and the instant
+// TT; they differ by under 2 ms.
+static flag FSrvOutsideCoverageQt(real jd)
+{
+  real jde;
+
+  if (esrv.est != esWelcomed || esrv.caps.coverage.empty())
+    return fFalse;
+  jde = JdeSrvQt(jd);
+  for (CONST eph::Capabilities::Coverage &c : esrv.caps.coverage)
+    if (jde >= c.tMin.Sum() && jde <= c.tMax.Sum())
+      return fFalse;
+  return fTrue;
+}
+
+
 static flag FSubmitTransQt(CONST EPHQUERY *pq)
 {
   int i;
@@ -7984,6 +8017,14 @@ static flag FSubmitTransQt(CONST EPHQUERY *pq)
     if (pq->rgisrc[i] == ephSrcNone &&
       !FBetween(pq->rgobj[i], 0, objMax-1))
       return fFalse;
+  // Outside what the server says it covers: attempt nothing, so the
+  // chain walks on as it does when the server is down, and a chain with
+  // nothing behind it says why.
+  if (FSrvOutsideCoverageQt(pq->rJD)) {
+    SetEphSubmitWhy("the chart's date is outside the ephemeris coverage "
+      "the Ephemeris Server declares");
+    return fFalse;
+  }
   // One submit for the whole query, which is what a remote source needs:
   // a per-object fetch is a round trip per body (EPHEMERIS_CLIENT_PLAN.md
   // lesson 1). The plan it leaves is read back per object below.
@@ -8863,12 +8904,7 @@ void SrvPrefetchQt(real t, int objCentCalc, int imax, CONST EPHQUERY *pqSrv)
     }
   }
 
-  // The instant, as FSwissPlanet() makes it.
-  if (jd != is.jdDeltaT) {
-    is.jdDeltaT = jd;
-    is.rDeltaT = swe_deltat(jd);
-  }
-  jde = jd + (us.rDeltaT == rInvalid ? is.rDeltaT : us.rDeltaT/86400.0);
+  jde = JdeSrvQt(jd);
   s_plan.jde = jde;
 
   // The cast, as one version 4 question: every object with the profile its
@@ -9338,6 +9374,29 @@ int CRecastSrvTestQt() { return s_cSrvRecastQt; }
 flag FWaitingSrvTestQt() { return s_fSrvWaitingQt; }
 void SetWelcMaxObjsSrvTestQt(uint32_t dw) { esrv.welc.maxObjs = dw; }
 void SetWelcMaxCellsSrvTestQt(uint32_t dw) { esrv.welc.maxCells = dw; }
+// The coverage the server declared: how many spans, and one span put in
+// their place (jdMin > jdMax puts back what the server sent).
+int CCoverageSrvTestQt() { return (int)esrv.caps.coverage.size(); }
+void SetCoverageSrvTestQt(double jdMin, double jdMax)
+{
+  static std::vector<eph::Capabilities::Coverage> vecSaved;
+  static flag fSaved = fFalse;
+
+  if (jdMin > jdMax) {
+    if (fSaved)
+      esrv.caps.coverage = vecSaved;
+    fSaved = fFalse;
+    return;
+  }
+  if (!fSaved) {
+    vecSaved = esrv.caps.coverage;
+    fSaved = fTrue;
+  }
+  esrv.caps.coverage.assign(1, eph::Capabilities::Coverage());
+  esrv.caps.coverage[0].id = "test";
+  esrv.caps.coverage[0].tMin.jd1 = jdMin;
+  esrv.caps.coverage[0].tMax.jd1 = jdMax;
+}
 // Which name a per-object failure message would use, for one object of a
 // hand-built window. iCase 0 is a STAR in the plan slot of Astrolog object
 // 1, which is the Moon -- the shape SwissComputeStar() makes, and the one

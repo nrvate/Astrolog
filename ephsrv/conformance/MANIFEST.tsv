@@ -1,6 +1,6 @@
 # file	direction	type	expect	note
 # set-sha256 is sha256 over each .hex file's bytes, in the order of the rows below
-# set-sha256 07438c7fa6121d3ce558616a9c83f70d5d90b726a42b6d029e9eb91daedd9929
+# set-sha256 1df64f69af50b3ab8dfcc9fd90bbab6dfcd4e247f7626fe2be8fc0321c1f1c73
 hello_min.hex	c2s	1	ok	no token, no caps
 hello_token_caps.hex	c2s	1	ok	token and f32|cancel|lookup|segments caps
 hello_future_client.hex	c2s	1	ok	a version-9 client: envelope 9, protoMax 9, protoMin 4; the server answers v4
@@ -10,6 +10,7 @@ request_basic.hex	c2s	3	ok	Sun and Moon, TT hourly grid, geocentric
 welcome_corrkind.hex	s2c	2	ok	0x0014 carrying only exceptions: an orbit point from the Sun's centre or the barycentre honours the full mask where a body cannot
 welcome_corrkind_empty.hex	s2c	2	ok	0x0014 with n = 0: legal, and means exactly what its absence means
 welcome_corrkind_unknown_bits.hex	s2c	2	ok	unknown observer and kind bits in 0x0014 are IGNORED, because both registries are open and a future member must not break an older client
+welcome_coverage_short.hex	s2c	2	malformed	coverage count says 2, one entry follows
 welcome_corrkind_reserved.hex	s2c	2	malformed	a 0x0014 mask with a bit above 0x07: reserved, MUST be zero, and 3.1 says reject rather than normalise
 request_corrkind_shared_profile.hex	c2s	3	ok	one heliocentric profile at mask 7 referenced by a BODY and an ORBIT POINT: well formed, and a server whose 0x0014 grants the mask to the point but not the body refuses it whole with ERROR 11
 request_corrkind_split_profiles.hex	c2s	3	ok	the same two objects across TWO heliocentric profiles, mask 1 for the body and mask 7 for the orbit point: the served form of the case above, and what a client does when kinds disagree

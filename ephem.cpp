@@ -796,6 +796,18 @@ CONST char *SzEphNoSourceWhy()
 }
 
 
+// Why a source that returned false from FSubmit() attempted nothing, in
+// its own words. The walk clears it before each submit and reports it in
+// place of "attempted nothing" when the source filled it in, so a chain
+// with no source behind the one that declined says why it declined.
+static char szEphSubmitWhy[cchSzDef] = "";
+
+void SetEphSubmitWhy(CONST char *sz)
+{
+  sprintf2(S(szEphSubmitWhy), "%s", sz);
+}
+
+
 // Is some source in the chain still CONNECTING? A remote source answers
 // nothing while its socket is coming up, and the host must not say "no
 // source could answer" about a cast that is about to be answered: the Qt
@@ -861,11 +873,13 @@ flag FEphSubmitChain(EPHQUERY *pq, CONST int *rgisrcChain, int cisrc)
     // A source returning false attempted nothing (a transport that is
     // down): every open object stays open. Returning true, it has filled
     // a row for every open object, success or per-object error.
+    szEphSubmitWhy[0] = chNull;
     if (!pephsrc->FSubmit(pq)) {
       if (cWhy < 2) {
         int cchAt = CchSz(szEphNoSourceWhy);
         sprintf2(szEphNoSourceWhy + cchAt, cchSzMax - cchAt,
-          "%s%s (attempted nothing)", cWhy > 0 ? "; " : "", pephsrc->szKey);
+          "%s%s (%s)", cWhy > 0 ? "; " : "", pephsrc->szKey,
+          FSzSet(szEphSubmitWhy) ? szEphSubmitWhy : "attempted nothing");
       }
       cWhy++;
       continue;
