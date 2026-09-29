@@ -514,6 +514,14 @@ static double RInstantRow(CONST EPHPROMQ *pq, int iRow)
 // into a claim about orbital geometry. The default is now unsupported,
 // which is the honest "we cannot say more", and the text can only ever
 // sharpen that into coverage -- never invent a specific geometric claim.
+// PROMETHEIA_ERROR_COVERAGE, announced by the Prometheia project on
+// 2026-09-29 and appended to prometheia_status as 7 with no ABI change: an
+// instant outside the loaded data's span, which used to come back as
+// ARGUMENT and is classified from the message text above. Compared by
+// value, because a header from before the change has no such enumerator;
+// a library from before it never returns 7.
+#define kPromErrCoverage ((prometheia_status)7)
+
 static uint16_t NObjErrFromArgument(CONST char *szMsg, flag fOrbitPoint)
 {
   if (fOrbitPoint)
@@ -739,7 +747,8 @@ flag FEphPromCompute(CONST EPHPROMQ *pq, EPHPROMANSWER rga[])
               po->kind == eph::kObjOrbitPoint) :
             (s == PROMETHEIA_ERROR_NOT_FOUND ? eph::kOErrUnknownBody :
             (s == PROMETHEIA_ERROR_INTERNAL ? eph::kOErrInternal :
-            eph::kOErrDataMissing));
+            (s == kPromErrCoverage ? eph::kOErrCoverage :
+            eph::kOErrDataMissing)));
           sprintf2(S(pa->szErr), "%s", err.message);
         }
         continue;
