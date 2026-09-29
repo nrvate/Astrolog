@@ -1,8 +1,9 @@
 # The thread-safe Swiss Ephemeris fork astrolog-ephd is built against, by
 # commit: tools/ephsrv-fork.sh and the container image fetch exactly this,
 # so a server binary is reproducible from one commit of this repository.
-# nrvate/swisseph, tag v2.10.03-ts.15 (2026-09-29): the delta T observer
-# invalidation (G26) that retired the server's own workaround. Move it
+# nrvate/swisseph, tag v2.10.03-ts.16 (2026-09-29): fictitious bodies'
+# light time solved on the orbit and the frame bias paired (G27), on top of
+# ts.15's delta T observer invalidation (G26). Move it
 # deliberately, after the server gates pass against the new commit.
 SWE_REPO=https://github.com/nrvate/swisseph.git
-SWE_COMMIT=74de693838b4566be3cdb3a4186d82f2407c28dc
+SWE_COMMIT=91da8754518b9faf3d1bf91ca32d6327c149a298

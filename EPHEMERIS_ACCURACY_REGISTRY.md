@@ -1355,6 +1355,20 @@ right refusal, and is why the correction was worth acting on.
 
 ### 2.13 A fictitious body's "equinox of date" is taken at the observation instant — 64″ at 80,000 AU, 0.06″ on Proserpina
 
+**FIXED 2026-09-29, in the fork (ts.16, G27) and in the copy vendored here.**
+What this entry first described was the no-speed path only: with
+`SEFLG_SPEED`, which Astrolog always asks, Swiss already took the emission
+instant. The two real defects, both upstream (fork UPSTREAM-BUGS.md 19, 20):
+a fictitious body's position depended on `SEFLG_SPEED` (a straight-line light
+time without it), and a geocentric one mixed the dynamical and ICRS frames
+(the Earth 15.5 km off, 0.023″ on Vulcan). Now the light-time equation is
+solved on the orbit for every flag set, and a frame-bias pair brackets the
+centre. Against Prometheia's kind 4 every stock set agrees to 0.0005″ and
+0.7 km, with or without speeds; set 26's remaining 1.457″ is the file
+format's fixed-M reading against the protocol's rule, not a defect. The
+live group's Hamburg legs hold server and application bit-identical, and
+fail on all eight points with the vendored half removed.
+
 **§3.5a, as agreed with the Prometheia project on 2026-09-29:** under light
 time the instant evaluated is the EMISSION instant, for the elements and for
 an equinox of date alike. The light arriving at t left at t − τ, so the whole

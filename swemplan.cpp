@@ -675,6 +675,10 @@ int swi_osc_el_plan(double tjd, double *xp, int ipl, int ipli, double *xearth, d
     swi_precess(xp, tequ, 0, J_TO_J2000);
     swi_precess(xp+3, tequ, 0, J_TO_J2000);
   }
+  /* This fork: dynamical J2000 to ICRS before the ICRS Sun or Earth is
+   * added; app_pos_etc_plan_osc() takes it back, as for a planet. */
+  if (swi_get_denum(SEI_EARTH, pedp->iephe) >= 403)
+    swi_bias(xp, tjd, SEFLG_SPEED, TRUE);
   /* to solar system barycentre */
   if (fict_ifl & FICT_GEO) {
     for (i = 0; i <= 5; i++) {

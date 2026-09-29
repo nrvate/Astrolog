@@ -3475,13 +3475,34 @@ static int app_pos_etc_plan_osc(int ipl, int ipli, int32 iflag, char *serr)
       /* part of daily motion resulting from change of dt */
       for (i = 0; i <= 2; i++) 
 	xxsp[i] = pdp->x[i] - xx[i] - xxsp[i];
+    }
+    /* This fork: the light-time equation solved on the ORBIT, for every
+     * flag set, as the thread-safe Swiss fork does since ts.16 (its G27,
+     * UPSTREAM-BUGS.md 19). The straight line above is only a first
+     * guess; it used to be the whole answer without SEFLG_SPEED, so the
+     * position depended on that flag: 63.7" at 80,000 AU, 0.095" on
+     * Vulcan. Re-evaluating the elements at t - dt also takes an equinox
+     * of date at the emission instant (the ephemeris protocol's 3.5a). */
+    for (j = 0; j < 10; j++) {
+      double dtNew;
       t = pdp->teval - dt;
-      /* for accuracy in speed, we will need earth as well */
       retc = main_planet_bary(t, SEI_EARTH, epheflag, iflag, NO_SAVE, xearth, xearth, xsun, xmoon, serr);
       if (swi_osc_el_plan(t, xx, ipl-SE_FICT_OFFSET, ipli, xearth, xsun, serr) != OK)
 	return ERR;
       if (retc != OK)
 	return(retc);
+      for (i = 0; i <= 2; i++) {
+	dx[i] = xx[i];
+	if (!(iflag & SEFLG_HELCTR) && !(iflag & SEFLG_BARYCTR))
+	  dx[i] -= xobs[i];
+      }
+      dtNew = sqrt(square_sum(dx)) * AUNIT / CLIGHT / 86400.0;
+      if (fabs(dtNew - dt) < 1e-12)
+	break;
+      dt = dtNew;
+    }
+    dtsave_for_defl = dt;
+    if (iflag & SEFLG_SPEED) {
       if (iflag & SEFLG_TOPOCTR) {
         if (swi_get_observer(t, iflag | SEFLG_NONUT, NO_SAVE, xobs2, serr) != OK)
           return ERR;
@@ -3532,6 +3553,12 @@ static int app_pos_etc_plan_osc(int ipl, int ipli, int32 iflag, char *serr)
       for (i = 3; i <= 5; i++) 
 	xx[i] += xobs[i] - xobs2[i];
   }
+  /* This fork: ICRS to J2000, as app_pos_etc_plan() does for a planet;
+   * swi_osc_el_plan() carries the dynamical body into ICRS before adding
+   * the ICRS Sun or Earth (the thread-safe fork's G27, UPSTREAM-BUGS.md
+   * 20: without the pair the Earth was 15.5 km off, 0.023"). */
+  if (!(iflag & SEFLG_ICRS) && swi_get_denum(SEI_EARTH, pedp->iephe) >= 403)
+    swi_bias(xx, pdp->teval, iflag, FALSE);
   /* save J2000 coordinates; required for sidereal positions */
   for (i = 0; i <= 5; i++)
     xxsv[i] = xx[i];
