@@ -41,7 +41,8 @@
 // These indexes are this source's own, 0..2, for its internal use; the
 // map to the shared space is IepPromShared(), one place.
 enum {
-  epPromEphemeris, epPromCatalog, epPromPerturbers, cepPromParam
+  epPromEphemeris, epPromCatalog, epPromPerturbers, epPromLongspan,
+  cepPromParam
 };
 
 // Set one parameter; an empty string restores the default. Any engine

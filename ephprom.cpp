@@ -38,7 +38,8 @@
 // settings file and the dialog all miss this source entirely.
 
 static CONST int rgiepPromShared[cepPromParam] = {
-  epPrometheiaEphemeris, epPrometheiaCatalog, epPrometheiaPerturbers
+  epPrometheiaEphemeris, epPrometheiaCatalog, epPrometheiaPerturbers,
+  epPrometheiaLongspan
 };
 
 // This source's index 0..2 to the shared parameter space. The one place
@@ -73,7 +74,8 @@ CONST char *SzEphPromParam(int iParam)
 static prometheia_engine *pephProm = NULL;
 static flag fEphPromOpen = fFalse;      // resolved and opened
 static char szEphPromState[512];        // the current state text
-static char szEphPromEphe[300], szEphPromCat[300], szEphPromPert[300];
+static char szEphPromEphe[300], szEphPromCat[300], szEphPromPert[300],
+  szEphPromLong[300];
 
 // What the open engine was opened FROM, so a parameter that has moved
 // since is noticed here rather than announced from elsewhere. A
@@ -85,7 +87,7 @@ static char szEphPromEphe[300], szEphPromCat[300], szEphPromPert[300];
 // absolute path easily is, would take the reopen branch on every single
 // call for the life of the process (phase 8 review, D6). Cloned, so the
 // comparison is against the whole value.
-static char *rgszEphPromOpenedFrom[cepPromParam] = {NULL, NULL, NULL};
+static char *rgszEphPromOpenedFrom[cepPromParam] = {NULL, NULL, NULL, NULL};
 
 // The Delta T hook, bound to Astrolog's own: a finite per-cast value
 // when the question carries one, else the user's -Yz override, else the
@@ -207,6 +209,25 @@ static flag FEphPromResolve(char *szWhy, int cch)
         SzEphPromParam(epPromCatalog));
     return fFalse;
   }
+  // The long-span file, behind the first and consulted outside its span.
+  // Named: it must be found. Empty: JPL's DE441 by its file name, if it is
+  // on the -Yi paths, and nothing otherwise -- a missing long-span file is
+  // not a missing ephemeris, it only means dates outside the first file's
+  // span fall through the chain to the next source, as they always have.
+  *szEphPromLong = chNull;
+  if (FSzSet(SzEphPromParam(epPromLongspan))) {
+    if (!FEphPromFindFile(SzEphPromParam(epPromLongspan), szEphPromLong,
+      (int)sizeof(szEphPromLong))) {
+      sprintf2(S(szEphPromState), "long-span ephemeris '%s' not found",
+        SzEphPromParam(epPromLongspan));
+      if (szWhy != NULL)
+        sprintf2(szWhy, cch, "long-span ephemeris '%s' not found",
+          SzEphPromParam(epPromLongspan));
+      return fFalse;
+    }
+  } else if (!FEphPromFindFile("linux_m13000p17000.441", szEphPromLong,
+    (int)sizeof(szEphPromLong)))
+    *szEphPromLong = chNull;
   *szEphPromPert = chNull;
   if (FSzSet(SzEphPromParam(epPromPerturbers)) &&
     !FEphPromFindFile(SzEphPromParam(epPromPerturbers), szEphPromPert,
@@ -288,6 +309,16 @@ flag FEphPromStart(char *szWhy, int cch)
     sprintf2(S(szEphPromState), "failed: %s", err.message);
     if (szWhy != NULL)
       sprintf2(szWhy, cch, "the ephemeris did not open: %s", err.message);
+    return fFalse;
+  }
+  if (FSzSet(szEphPromLong) &&
+    prometheia_engine_add_ephemeris(pephProm, szEphPromLong, &err) !=
+    PROMETHEIA_OK) {
+    EphPromStop();
+    sprintf2(S(szEphPromState), "failed: %s", err.message);
+    if (szWhy != NULL)
+      sprintf2(szWhy, cch, "the long-span ephemeris did not open: %s",
+        err.message);
     return fFalse;
   }
   if (FSzSet(szEphPromCat) &&

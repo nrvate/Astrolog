@@ -51,6 +51,11 @@ PARAMS = [
     ("prometheia", "perturbers", "Perturber Kernel",   "epkFile", ""),
     ("server", "url",   "Server Address", "epkUrl",   ""),
     ("server", "token", "Server Token",   "epkToken", ""),
+    # Appended, never inserted: the index space is the settings file's.
+    # A second planetary file behind the first, consulted outside its span
+    # (prometheia_engine_add_ephemeris(), Prometheia's DE441 support, their
+    # bbc38f2). Empty searches the -Yi paths for JPL's DE441 file name.
+    ("prometheia", "longspan", "Long-span Ephemeris", "epkFile", ""),
 ]
 
 

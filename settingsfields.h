@@ -279,6 +279,7 @@ static CONST SETTINGFIELD rgsetfield[] = {
   {"us.rgszEphParam[3]", "Ephemeris selection", "-bP", (short)(offsetof(US, rgszEphParam) + 3 * (int)sizeof(char *)), 's', 0},
   {"us.rgszEphParam[4]", "Ephemeris selection", "-bP", (short)(offsetof(US, rgszEphParam) + 4 * (int)sizeof(char *)), 's', 0},
   {"us.rgszEphParam[5]", "Ephemeris selection", "-bP", (short)(offsetof(US, rgszEphParam) + 5 * (int)sizeof(char *)), 's', 0},
+  {"us.rgszEphParam[6]", "Ephemeris selection", "-bP", (short)(offsetof(US, rgszEphParam) + 6 * (int)sizeof(char *)), 's', 0},
   {"gs.ft", "", "-Xb", (short)(offsetof(GS, ft)), 'i', 1},
   {"gs.fPSComplete", "", "-Xp0", (short)(offsetof(GS, fPSComplete)), 'f', 1},
   {"gs.fColor", "", "-Xm", (short)(offsetof(GS, fColor)), 'f', 1},

@@ -20115,12 +20115,13 @@ static void TestPrometheiaQt()
   // 2026-09-18, which nothing read and which had drifted from the
   // generated one in both label and kind.
   Check(CEphParamOfSrc("prometheia") == cepPromParam,
-    "the generated table declares this source's three parameters (%d)",
+    "the generated table declares this source's four parameters (%d)",
     CEphParamOfSrc("prometheia"));
   Check(IepOfSrc("prometheia", 0) == epPrometheiaEphemeris &&
     IepOfSrc("prometheia", 1) == epPrometheiaCatalog &&
     IepOfSrc("prometheia", 2) == epPrometheiaPerturbers &&
-    IepOfSrc("prometheia", 3) < 0,
+    IepOfSrc("prometheia", 3) == epPrometheiaLongspan &&
+    IepOfSrc("prometheia", 4) < 0,
     "and hands them back in order, with nothing past the last");
   Check(FEqSz(rgephparam[epPrometheiaEphemeris].ep.szKey, "ephemeris") &&
     FEqSz(rgephparam[epPrometheiaCatalog].ep.szKey, "catalog") &&
@@ -20712,6 +20713,46 @@ static void TestPrometheiaQt()
       } else
         printf("  skipped: no catalog, so no Object Selections leg\n");
 
+      // The long-span file (prometheia.longspan, or DE441 by name on the
+      // -Yi paths): an instant outside DE440's 1550-2650 is answered by
+      // this source, not left for the chain's next one. Measured against
+      // Swiss at 1400, it agrees to the displayed arcsecond. A machine
+      // without DE441 skips, and says so.
+      {
+        char szLong[cchSzMax];
+        if (FEphPromFindFile("linux_m13000p17000.441", szLong,
+          (int)sizeof(szLong))) {
+          real jdL;
+          OraclePinUtQt(1400, 6, 15, 12.0);
+          ciCore.lon = 0.0; ciCore.lat = 0.0;
+          CastChart(0);
+          jdL = JulianDayFromTime(is.T);
+          EphQueryInit(&eqh, jdL);
+          FEphQueryAdd(&eqh, oSun, 0, oEar, NULL);
+          FEphQueryAdd(&eqh, oMar, 0, oEar, NULL);
+          FEphSubmitChain(&eqh, rgisrc, 1);
+          fHost = FEphRead(&eqh, oMar, &h1, &h2, &h3, &h4, &h5, &h6);
+          Check(fHost && eqh.rgisrc[0] == rgisrc[0] &&
+            eqh.rgisrc[1] == rgisrc[0],
+            "1400, outside DE440, is answered by this source from the "
+            "long-span file");
+          fDirect = FSwissPlanet(oMar, jdL, oEar, &r1, &r2, &r3, &r4, &r5,
+            &r6);
+          if (fHost && fDirect) {
+            rD = SphDistance(h1, h2, r1, r2) * 3600.0;
+            printf("  oracle %-46s %9.4f\"\n", "1400 Mars from DE441 vs Swiss",
+              rD);
+            Check(rD < 1.0, "and agrees with Swiss within 1\" (%.4f\")", rD);
+          }
+          OraclePinUtQt(2026, 9, 17, 0.0);
+          ciCore.lon = 0.0; ciCore.lat = 0.0;
+          CastChart(0);
+          jd = JulianDayFromTime(is.T);
+        } else
+          printf("  skipped: no DE441 (linux_m13000p17000.441) on the -Yi "
+            "paths, so no long-span leg\n");
+      }
+
       // Finding 2 of the Prometheia session's review of this file.
       // Star profiles are given zodiac "fagan-bradley" under fSidereal,
       // while the read deliberately does NOT subtract is.rSid, on the
@@ -20896,8 +20937,15 @@ static void TestPrometheiaQt()
           double rgJd[4];
           int iJd;
 
+          // Straddle the end of whatever this engine can reach: DE440's
+          // 2650, or DE441's 17000 when the long-span file is loaded
+          // behind it (found by name on the -Yi paths). 250000-day steps
+          // cross the first; 2000000-day steps the second.
+          char szLongL[cchSzMax];
+          double dStep = FEphPromFindFile("linux_m13000p17000.441", szLongL,
+            (int)sizeof(szLongL)) ? 2000000.0 : 250000.0;
           for (iJd = 0; iJd < 4; iJd++)
-            rgJd[iJd] = jd + (double)iJd * 250000.0;
+            rgJd[iJd] = jd + (double)iJd * dStep;
           obL = eph::Object();
           obL.kind = eph::kObjBody; obL.profile = 0; obL.naif = 301;
           aT.prgVal = rgVal;

@@ -2773,7 +2773,7 @@ typedef struct _EphSrcDef {
 | `swiss` | ephswiss.cpp | local | (uses `-Yi` paths) | Swiss Ephemeris files; bit-exact with today |
 | `moshier` | ephswiss.cpp | local | — | analytic; major planets and Moon; always available |
 | `jpl` | ephswiss.cpp | local | `file` | Swiss over a JPL DE file (a new parameter; today there is no setting and the default is de431.eph) |
-| `prometheia` | ephprom.cpp | local | `ephemeris`, `catalog`, `perturbers` | `#ifdef PROMETHEIA`, detected with `pkg-config prometheia`; C API `prometheia_calc*`, `calc_orbit_point*`, `engine_lookup`; ΔT hook bound to Astrolog's |
+| `prometheia` | ephprom.cpp | local | `ephemeris`, `catalog`, `perturbers`, `longspan` | `#ifdef PROMETHEIA`, detected with `pkg-config prometheia`; C API `prometheia_calc*`, `calc_orbit_point*`, `engine_lookup`; ΔT hook bound to Astrolog's |
 | `server` | ephserver.cpp + transport | remote | `url`, `token` | protocol v4; astrolog-ephd or prometheiad |
 | `horizons` | ephhorizons.cpp | remote | — | rewritten to take instants and batch per body over the Horizons API |
 | `matrix` | matrix.cpp | local | — | Sun–Pluto, Moon, mean node; legacy cast |

@@ -20,6 +20,7 @@ enum {
   epPrometheiaPerturbers,  // prometheia: perturbers
   epServerUrl,             // server: url
   epServerToken,           // server: token
+  epPrometheiaLongspan,    // prometheia: longspan
   cEphParam
 };
 
@@ -37,7 +38,8 @@ enum {
     {"prometheia", {"catalog", "Small-body Catalog", epkFile, ""}}, \
     {"prometheia", {"perturbers", "Perturber Kernel", epkFile, ""}}, \
     {"server", {"url", "Server Address", epkUrl, ""}}, \
-    {"server", {"token", "Server Token", epkToken, ""}} \
+    {"server", {"token", "Server Token", epkToken, ""}}, \
+    {"prometheia", {"longspan", "Long-span Ephemeris", epkFile, ""}} \
   }
 
 #endif // _EPHPARAM_H
