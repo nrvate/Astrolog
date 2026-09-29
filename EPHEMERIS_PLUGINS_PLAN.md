@@ -2122,6 +2122,8 @@ These numbers are reserved and have no layout yet.
 - **Unused fields.** `observerBody`, the site, `anchorEpoch` and
   `anchorAyanamsaDeg` MUST be zero unless the observer or zodiac uses them.
   - Site ranges: longitude in [−180, 180], latitude in [−90, 90].
+    `siteHeightM` at or below −6356752 m (the WGS-84 polar radius) is
+    malformed; there is no upper bound.
   - Zodiac `""` (tropical) requires `siderealPlane = 0`.
   - Zodiac `user` requires a nonzero anchor epoch.
 - **Speeds.** When `speeds = 0`, the three rate columns are 0 and META's
@@ -2234,15 +2236,20 @@ may select another from A.20):
   checking a server's rates asks for f64; a server measuring itself uses f64.
   Neither tolerance below is meetable at f32 by any implementation, which is
   how this was found: both engines measured each other failing it.
-- A server whose rates may differ from the central difference of its own
-  positions over ±0.001 day by more than **1e-5 °/day** (angles) or
-  **1e-6 AU/day** (distance) sets META's `ratesApprox` flag on the objects
-  concerned, and states its largest such difference in the rates-bound
-  capability (A.3 0x0013). The distance figure is loose on purpose: a distance
-  rate that omits the light-time term differs by the observer's acceleration
-  times the light time — measured at 3e-5 AU/day for Uranus in the Swiss
-  Ephemeris — which is a definitional difference, not an error, and a server
-  whose distance rates omit it says so with the flag.
+- **The check.** Rates are compared with a five-point central difference of
+  the server's own f64 positions at h = 1/1024 day. 0x0013's degPerDay bounds
+  the angular rate error absolutely; its auPerDay bounds |distance-rate error|
+  / max(1 AU, r), so it is absolute within 1 AU and relative beyond. Absent
+  0x0013: 1e-5 °/day and 1e-9 AU/day under that reading. (Agreed by both
+  projects' maintainers, 2026-09-29. The reading loosens every object beyond
+  1 AU by its distance, not stars alone.)
+- A server whose rates may exceed those bounds sets META's `ratesApprox` flag
+  on the objects concerned, and states its largest such difference, under the
+  same reading, in the rates-bound capability (A.3 0x0013). A distance rate
+  that omits the light-time term differs by the observer's acceleration times
+  the light time, along the line of sight — 3e-5 AU/day for Uranus in the
+  Swiss Ephemeris — and a server whose distance rates omit it says so this
+  way.
 
 **Sidereal zodiacs** (see §3.5):
 - A zodiac has a **zero point**, and it is a **DIRECTION IN THE SKY**, not an
@@ -2326,9 +2333,10 @@ may select another from A.20):
 - **Which orbit.** The body's orbit about the Sun (heliocentric) — or about the
   solar-system barycentre for method 3 — and, for the Moon (301), its orbit
   about the Earth.
-- **Nodes** lie on the ecliptic of the profile's frame (the mean ecliptic of
-  date for frames 0 and 1; the J2000 ecliptic for frames 2 and 3). The node is
-  the point on the orbit at that plane crossing, at the orbit's radius there.
+- **Nodes** lie on the mean ecliptic of date, for every frame; the profile's
+  frame gives only the coordinates the node is expressed in, not which point
+  it is. The node is the point on the orbit at that plane crossing, at the
+  orbit's radius there.
 - **Apsides** are the points of the orbit at pericentre, a(1−e), and apocentre,
   a(1+e); method 4 answers the empty focus, 2ae from the centre, in place of
   the apocentre.
@@ -2411,8 +2419,11 @@ elements, identically on every server, sends it as kind 4 with those elements.
 - **Motion is pure two-body Keplerian**: at each instant the polynomial
   elements are evaluated at T = (t_TT − epoch)/36525 and the position is the
   Kepler solution with those elements; no perturbations.
-- μ = GM of the centre (Sun or Earth) from the ephemeris's constants, the body
-  massless.
+- μ = k², k = 0.01720209895 rad/day (the Gaussian gravitational constant),
+  for a heliocentric orbit; μ = k² / 332946.050895 (the Sun/Earth mass ratio,
+  the Earth alone and not the Earth–Moon barycentre) for a geocentric one. The
+  body is massless. Not the ephemeris's own GM: a kind-4 answer is a function
+  of the elements sent, not of which ephemeris the server has open.
 - The elements refer to the mean ecliptic and equinox named by `equinox`.
 - Light time, deflection and aberration apply as to a body (light time through
   the same two-body motion); rates are as for any body.
@@ -2907,8 +2918,8 @@ older than the server it is talking to.
 | 0x0010 | lookup: u16 maxMatches |
 | 0x0011 | hypotheticals: u16 n, n × str8 (A.15 tokens served) |
 | 0x0012 | equinoxes for elements: u32 bitmask of A.16 |
-| 0x0013 | rates bound: f32 degPerDay, f32 auPerDay — the largest difference of the server's rates from central differences of its positions (§3.5a); absent means rates meet the 1e-5 °/day, 1e-9 AU/day tolerance |
-| 0x0014 | corrections by kind: u8 n, n × {u32 observers (A.5), u32 kinds (A.4), u8 mask (A.7)} — ADDS to tag 0x0004 per (observer, kind). 0x0004 is the intersection over kinds; a pair no entry names falls back to it, so a kind-uniform server sends nothing and the two cannot contradict. A profile's mask is checked against every (observer, kind) of the objects referencing it, ERROR 11 for the whole request; an unreferenced profile against 0x0004 alone. Mask bits above 0x07 are reserved and MUST be zero (§3.1: reject, do not normalise); unknown observer and kind bits are ignored |
+| 0x0013 | rates bound: f32 degPerDay, f32 auPerDay — the largest rate error, measured and read as §3.5a defines it (auPerDay bounds the distance-rate error's magnitude divided by max(1 AU, r)); absent means 1e-5 °/day and 1e-9 AU/day under that reading |
+| 0x0014 | corrections by kind: u8 n, n × {u32 observers (A.5), u32 kinds (A.12), u8 mask (A.7)} — ADDS to tag 0x0004 per (observer, kind). 0x0004 is the intersection over kinds; a pair no entry names falls back to it, so a kind-uniform server sends nothing and the two cannot contradict. A profile's mask is checked against every (observer, kind) of the objects referencing it, ERROR 11 for the whole request; an unreferenced profile against 0x0004 alone. Mask bits above 0x07 are reserved and MUST be zero (§3.1: reject, do not normalise); unknown observer and kind bits are ignored |
 
 **A.4 REQUEST TLVs:**
 - 0x0003 precession model, str8 (non-critical; an unknown model falls back and
