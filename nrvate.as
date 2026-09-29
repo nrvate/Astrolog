@@ -144,7 +144,7 @@ _pv           ; Converse progress/directions   [=pv is converse]
 -YR 11 21    0 0 1 1 1 0 0 1 1 1 1    ; Minor planets
 -YR 22 33    0 1 1 0 1 1 0 1 1 0 1 1  ; House cusps
 -YR 34 42    0 1 1 1 1 1 1 1 1        ; Uranians
--YR 43 51    1 1 1 1 1 1 1 1 1        ; Dwarfs
+-YR 43 51    1 1 1 1 1 1 1 1 0        ; Dwarfs
 -YR 52 78    1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  ; Moons
 -YR 79 83    1 1 1 1 1                ; Centers of body
 -YR 84 108   1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  ; Fixed stars
