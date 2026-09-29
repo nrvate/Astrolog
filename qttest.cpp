@@ -21676,7 +21676,14 @@ static void TestEphSrvLiveQt()
   }
 
   // A drop mid-session: the cast fails soft, once in words; the server
-  // comes back and the next cast is bit-identical again.
+  // comes back and the next cast is bit-identical again. Only a server
+  // this group started can be dropped and restarted: under
+  // ASTROLOG_EPHSRV_URL these legs used to FAIL rather than say they did
+  // not apply (CLIENT_SERVER_REVIEW.md C1c).
+  if (!strUrlEnv.isEmpty())
+    printf("  (drop and reconnect legs skipped: ASTROLOG_EPHSRV_URL names a "
+      "server this group did not start)\n");
+  else {
   proc.kill();
   proc.waitForFinished(2000);
   Check(FWaitEstQt(0, 5000), "the backend sees the server go");
@@ -21720,6 +21727,7 @@ static void TestEphSrvLiveQt()
   Check(NCastWarnSrvTestQt() == cWarn && cDiff == 0,
     "after the reconnect a cast is bit-identical again (%d differ: %s)",
     cDiff, szDiff);
+  }
 
   // A server whose WELCOME allows fewer objects a request than a chart
   // has: the cast is split into more requests, not clamped under a plan
@@ -21864,9 +21872,14 @@ static void TestEphSrvLiveQt()
     char szErr[cchSzMax];
     flag fCerts, fRefused;
 
-    if (strOpenssl.isEmpty() || !dirTls.isValid() ||
+    if (!strUrlEnv.isEmpty() || strOpenssl.isEmpty() || !dirTls.isValid() ||
       !QSslSocket::supportsSsl()) {
-      printf("  (TLS leg skipped: %s)\n", strOpenssl.isEmpty() ?
+      // Under ASTROLOG_EPHSRV_URL this leg has no server of its own to
+      // start: strBin and port are only set when the group starts
+      // astrolog-ephd, and the leg is about that server's TLS.
+      printf("  (TLS leg skipped: %s)\n", !strUrlEnv.isEmpty() ?
+        "it starts its own astrolog-ephd, and ASTROLOG_EPHSRV_URL names a "
+        "server this group did not start" : strOpenssl.isEmpty() ?
         "no openssl on PATH to make a test certificate" :
         !QSslSocket::supportsSsl() ? "this Qt has no TLS support" :
         "no temporary directory");
