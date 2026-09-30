@@ -112,6 +112,12 @@ Work happens on branch **`qt`**.
   first run found the sidereal node carrying nutation in both halves
   (C1e, fork ts.18). `--selftest` requires the same run at 0.01 x the
   bounds to fail. By hand; it skips without the other project's build.
+  **`tools/ephsrv-houses.sh`** (2026-09-30) grades the server's house points
+  (protocol object kind 6, 3.5b) against `tools/houses_ref.py`, an executable
+  reference written from the specification's definitions alone: 10,912 rows,
+  each at its own reported ARMC and obliquity, every override the server makes
+  where Swiss and the definitions part sabotaged. `houses_ref.py --compare`
+  checks the reference against the fork's Swiss by hand.
   **`tools/star-rates-xengine.py`** (2026-09-30) is its sibling for star RATES:
   twelve stars, five epochs, four profiles, both daemons, angular rate to
   3e-5 deg/d and distance rate to 1e-9 relative, with the stars whose

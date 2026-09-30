@@ -217,6 +217,8 @@ else
 fi
 expect 0 "system-header-check: a decoy system header loses only with -I ." tools/system-header-check.sh --selftest
 expect 0 "raw-sprintf-check: refuses a bare sprintf, accepts sprintf2 and comments" tools/raw-sprintf-check.sh --selftest
+expect 0 "ephsrv-houses: the houses gate's own decisions" tools/ephsrv-houses.sh --selftest
+expect 0 "houses_ref: the reference implementation's own arithmetic" python3 tools/houses_ref.py --selftest
 expect 0 "star-rates-xengine: the two-engine star rate grading's own decisions" python3 tools/star-rates-xengine.py --selftest
 # ephsrv-soak.sh --selftest is NOT here on purpose: it starts a real server
 # and takes a minute, and trebling the pre-commit command is how a check

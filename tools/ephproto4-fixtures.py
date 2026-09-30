@@ -161,6 +161,11 @@ def obj_designation(s, prof=0):
     return obj_head(5, prof) + str8(s)
 
 
+def obj_house(system, point, prof=0):
+    """Kind 6 (3.4): u8 system (A.22), u8 point (A.23)."""
+    return obj_head(6, prof) + u8(system) + u8(point)
+
+
 def question(time_bytes, profiles, objects, delta_t=NAN, ext=None,
              delta_t_raw=None):
     b = time_bytes
@@ -785,9 +790,9 @@ def fixtures():
         envelope(REQUEST, delivery() + question(grid_block(1, J2000, 0.0, 0, 1),
                                                 [profile(corrections=15)], [obj_body(10)]), request_id=1),
         expect="unsupported")
-    bad("kind_unregistered", "object kind 6",
+    bad("kind_unregistered", "object kind 7 (A.12 ends at 6)",
         envelope(REQUEST, delivery() + question(grid_block(1, J2000, 0.0, 0, 1), [geo],
-                                                [obj_head(6) + i32(10)]), request_id=1),
+                                                [obj_head(7) + i32(10)]), request_id=1),
         expect="unsupported")
     bad("segments_spherical", "segments with form 0",
         envelope(REQUEST, delivery(representation=1, seg_err=0.1) +
@@ -811,6 +816,132 @@ def fixtures():
         envelope(REQUEST, delivery() + question(grid_block(1, J2000, 0.0, 0, 1),
                                                 [profile(zodiac="martian")], [obj_body(10)]), request_id=1),
         expect="unsupported")
+
+    # ---- houses: OBJECT kind 6 (3.4, 3.5, 3.5b; A.22, A.23; 2026-09-30) -------
+    # 3.5's kind 6 paragraph: the topocentric observer supplies the site; no
+    # correction applies, so the mask does not enter (0 here, and one request
+    # below sends 7, which is the same question).
+    house_prof = profile(observer=1, corrections=0, site=(-122.3, 47.6, 50.0),
+                         columns=0b111010)
+    house_sid = profile(observer=1, corrections=0, site=(-122.3, 47.6, 0.0),
+                        zodiac="lahiri", columns=0b111010)
+    cusps = [obj_house(0, 11), obj_house(1, 13), obj_house(3, 14),
+             obj_house(6, 13), obj_house(10, 10), obj_house(5, 16)]
+    add("request_houses_grid", "c2s", REQUEST, "ok",
+        "kind 6: Placidus cusp 11, Koch Ascendant, Regiomontanus MC, Whole Sign "
+        "Ascendant, Topocentric cusp 10, Equal equatorial Ascendant; TT hourly "
+        "grid; topocentric profile, mask 0, ayanamsa+dT+ARMC+obliquity columns",
+        envelope(REQUEST, delivery() + question(grid_block(1, J2000, 0.0, 3600 * 10**9, 24),
+                                                [house_prof], cusps), request_id=2))
+    add("request_houses_sidereal", "c2s", REQUEST, "ok",
+        "kind 6 in a sidereal zodiac: Vertex and a Whole Sign cusp, Lahiri",
+        envelope(REQUEST, delivery() + question(grid_block(1, J2000, 0.0, 3600 * 10**9, 4),
+                                                [house_sid], [obj_house(6, 1), obj_house(4, 15)]),
+                 request_id=3))
+    add("request_houses_mask7", "c2s", REQUEST, "ok",
+        "kind 6 with correction mask 7: well-formed, and the same answer as mask "
+        "0 (no correction applies to a house point), a different cache key",
+        envelope(REQUEST, delivery() + question(grid_block(1, J2000, 0.0, 3600 * 10**9, 2),
+                                                [profile(observer=1, corrections=7,
+                                                         site=(-122.3, 47.6, 50.0),
+                                                         columns=0b111010)],
+                                                [obj_house(0, 13)]), request_id=7))
+    add("request_houses_list", "c2s", REQUEST, "ok",
+        "kind 6 over an instant list, one profile shared with nothing else",
+        envelope(REQUEST, delivery() + question(list_block(1, [(J2000, 0.0), (J2000 + 0.25, 0.0)]),
+                                                [house_prof], [obj_house(7, 12), obj_house(8, 10)]),
+                 request_id=4))
+    add("request_houses_and_body", "c2s", REQUEST, "ok",
+        "a body and a house point in one request, each on its own profile "
+        "(the columns of one are refused for the other, per object)",
+        envelope(REQUEST, delivery() + question(grid_block(1, J2000, 0.0, 3600 * 10**9, 2),
+                                                [geo, house_prof],
+                                                [obj_body(10), obj_house(0, 13, prof=1)]),
+                 request_id=5))
+    add("request_small_objects", "c2s", REQUEST, "ok",
+        "three one-character star names, 6 bytes each: the smallest legal "
+        "object. The codec's object-list precheck once assumed 8 and refused "
+        "this (found when kind 6, also 6 bytes, arrived)",
+        envelope(REQUEST, delivery() + question(grid_block(1, J2000, 0.0, 0, 1), [geo],
+                                                [obj_star("M"), obj_star("N"), obj_star("O")]),
+                 request_id=6))
+    bad("house_system_unregistered", "house system 11 (A.22 has 0..10)",
+        envelope(REQUEST, delivery() + question(grid_block(1, J2000, 0.0, 0, 1), [house_prof],
+                                                [obj_house(11, 1)]), request_id=1),
+        expect="unsupported")
+    bad("house_point_zero", "house point 0 (A.23 starts at 1)",
+        envelope(REQUEST, delivery() + question(grid_block(1, J2000, 0.0, 0, 1), [house_prof],
+                                                [obj_house(0, 0)]), request_id=1),
+        expect="unsupported")
+    bad("house_point_seventeen", "house point 17 (A.23 ends at 16)",
+        envelope(REQUEST, delivery() + question(grid_block(1, J2000, 0.0, 0, 1), [house_prof],
+                                                [obj_house(0, 17)]), request_id=1),
+        expect="unsupported")
+    bad("house_reserved_nonzero", "kind 6 with the object head's reserved field set",
+        envelope(REQUEST, delivery() + question(grid_block(1, J2000, 0.0, 0, 1), [house_prof],
+                                                [obj_head(6, 0, reserved=1) + u8(0) + u8(1)]),
+                 request_id=1))
+    bad("house_column_bit_unregistered", "column bit 6 (A.10 ends at bit 5)",
+        envelope(REQUEST, delivery() + question(grid_block(1, J2000, 0.0, 0, 1),
+                                                [profile(observer=1, corrections=0,
+                                                         site=(0.0, 0.0, 0.0), columns=0b1000000)],
+                                                [obj_house(0, 1)]), request_id=1),
+        expect="unsupported")
+    houses_caps = [e for e in caps_swiss() if e[0] not in (0x0001, 0x0006)] + [
+        (0x0001, u32(0b1111111)),
+        (0x0006, u32(0b111010)),
+        (0x0015, u16(11) + bytes(range(11))),
+        (0x0016, str8("iau2006-2000a")),
+    ]
+    houses_caps.sort(key=lambda e: e[0])
+    add("welcome_houses", "s2c", WELCOME, "ok",
+        "a server that serves kind 6: all eleven systems and the reference "
+        "sidereal-time model",
+        envelope(WELCOME, welcome(0b10011101, "Swiss Ephemeris 2.10.03 files",
+                                  "swiss-2.10.03/sepl_18", houses_caps)))
+    short_hs = [e for e in houses_caps if e[0] != 0x0015] + [
+        (0x0015, u16(3) + bytes([0, 1]))]
+    short_hs.sort(key=lambda e: e[0])
+    add("welcome_houses_short", "s2c", WELCOME, "malformed",
+        "0x0015 says three systems and two follow",
+        envelope(WELCOME, welcome(0b10011101, "Swiss Ephemeris 2.10.03 files",
+                                  "swiss-2.10.03/sepl_18", short_hs)))
+    # DATA: three hourly rows of two house points, numbers from the reference
+    # implementation (tools/houses_ref.py), which is written from 3.5b alone.
+    import houses_ref as H
+    eps_h, lat_h, armc0, sid_rate = 23.4393, 47.6, 280.457, 360.98564736629
+    hh = 1.0 / 1024.0
+
+    def house_value(system, point, dt_days):
+        armc = armc0 + sid_rate * dt_days
+        if point == 13:
+            return H.asc_point(armc, lat_h, eps_h)
+        return H.cusps(H.SYSTEMS[system], armc, lat_h, eps_h)[point - 1]
+
+    def unwrap(a, b):
+        while b - a > 180.0: b -= 360.0
+        while b - a < -180.0: b += 360.0
+        return b
+
+    def house_row(system, point, i):
+        dt = i / 24.0
+        v = [house_value(system, point, dt + d) for d in (-2 * hh, -hh, hh, 2 * hh)]
+        for k in range(1, 4):
+            v[k] = unwrap(v[k - 1], v[k])
+        rate = (v[0] - 8.0 * v[1] + 8.0 * v[2] - v[3]) / (12.0 * hh)
+        return [house_value(system, point, dt), 0.0, 0.0, rate, 0.0, 0.0,
+                (armc0 + sid_rate * dt) % 360.0, eps_h]
+    rows0 = [house_row(0, 11, i) for i in range(3)]
+    rows1 = [house_row(1, 13, i) for i in range(2)] + [[NAN] * 8]
+    mh = (sources(["Swiss Ephemeris files (sepl_18)"]) +
+          meta(3, flags=0b0100000, name="Placidus cusp 11") +
+          meta(2, err=9, flags=0b0101000, first_failed=2, name="Koch Ascendant",
+               err_text="undefined inside the polar circle"))
+    add("data_houses", "s2c", DATA, "ok",
+        "kind 6 answer: the ARMC and obliquity columns, noDistance, and a "
+        "Koch row refused (error 9) so the object is partial",
+        envelope(DATA, data_chunk(0, 0, 3, 3, 0, 0b101, 0b110000, mh,
+                                  [rows0, rows1]), request_id=2))
     return F
 
 

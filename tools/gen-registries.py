@@ -219,7 +219,7 @@ def registries(text):
     put("zodiac_tokens", "A.11", "Zodiac tokens", "token", zod)
 
     put("object_kinds", "A.12", "Object kinds", "value",
-        [value_item(b) for b in bullets(subsection(text, "A.12"))], count=6)
+        [value_item(b) for b in bullets(subsection(text, "A.12"))], count=7)
     put("orbit_points", "A.13", "Orbit points", "value",
         [value_item(i) for i in inline_items(subsection(text, "A.13"), "A.13")], count=4)
     put("orbit_methods", "A.14", "Orbit methods", "value",
@@ -257,6 +257,12 @@ def registries(text):
         note = b.split("`%s`" % t[0], 1)[1].strip().lstrip(DASHES).strip()
         prec.append({"index": len(prec), "token": t[0], "note": note})
     put("precession_model_tokens", "A.20", "Precession model tokens", "token", prec)
+
+    # A.22 house systems and A.23 house points: value and name.
+    put("house_systems", "A.22", "House systems", "value",
+        [value_item(b) for b in bullets(subsection(text, "A.22"))], count=11)
+    put("house_points", "A.23", "House points", "value",
+        [value_item(b) for b in bullets(subsection(text, "A.23"))], count=16)
     return reg
 
 

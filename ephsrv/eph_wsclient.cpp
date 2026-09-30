@@ -443,6 +443,7 @@ static std::string labelOf(const Object &o) {
     case kObjStar: s = "s:" + o.name; break;
     case kObjHypothetical: s = "h:" + o.name; break;
     case kObjDesignation: s = "d:" + o.name; break;
+    case kObjHouse: s = "H:" + std::to_string(o.system) + "/" + std::to_string(o.point); break;
     default: s = "e:" + o.name; break;
   }
   for (char &ch : s)
@@ -558,6 +559,15 @@ int main(int argc, char **argv) {
       for (const std::string &t : split(v, ',')) { Object o; o.kind = kObjHypothetical; o.name = t; addObj(o); }
     } else if (!strcmp(a, "--desig") && next()) {
       for (const std::string &t : split(v, ';')) { Object o; o.kind = kObjDesignation; o.name = t; addObj(o); }
+    } else if (!strcmp(a, "--house") && next()) {
+      // SYSTEM:POINT[,SYSTEM:POINT...] -- A.22 system, A.23 point (kind 6).
+      for (const std::string &t : split(v, ',')) {
+        Object o;
+        int sys, pt;
+        if (sscanf(t.c_str(), "%d:%d", &sys, &pt) != 2) die("bad --house entry %s", t.c_str());
+        o.kind = kObjHouse; o.system = (uint8_t)sys; o.point = (uint8_t)pt;
+        addObj(o);
+      }
     } else if (!strcmp(a, "--elements") && next()) {
       Object o;
       o.kind = kObjElements; o.name = v; o.epoch = {2451545.0, 0.0}; o.nTerms = 1;
@@ -874,7 +884,7 @@ int main(int argc, char **argv) {
       usleep((useconds_t)cancelAfterMs * 1000);
       sendMessage(fd, kMsgCancel, pend[0].id, std::vector<uint8_t>());
     }
-    cols.assign(nObj * count * 8, 0.0);
+    cols.assign(nObj * count * 12, 0.0);
     meta.assign(nObj, Meta());
 
     uint32_t nOpen = nSend;
@@ -974,8 +984,8 @@ int main(int argc, char **argv) {
       if (exitCode) break;
       for (size_t o = 0; o < nObj; o++)
         for (uint32_t rr = 0; rr < d.nRows; rr++)
-          for (uint32_t c = 0; c < nCols && c < 8; c++)
-            cols[(o * count + d.iTime + rr) * 8 + c] = d.values[(o * d.nRows + rr) * nCols + c];
+          for (uint32_t c = 0; c < nCols && c < 12; c++)
+            cols[(o * count + d.iTime + rr) * 12 + c] = d.values[(o * d.nRows + rr) * nCols + c];
       pp->got += d.nRows;
       if (pp->got == count) {
         pp->done = true;
@@ -1092,9 +1102,9 @@ int main(int argc, char **argv) {
       for (size_t o = 0; o < nObj; o++) {
         std::string label = labelOf(req.objs[o]);
         for (uint32_t r2 = 0; r2 < count; r2++) {
-          const double *dv = cols.data() + (o * count + r2) * 8;
+          const double *dv = cols.data() + (o * count + r2) * 12;
           fprintf(out, "%zu %s %u %d %u", o, label.c_str(), meta[o].errCode, meta[o].rowsOk, meta[o].flags);
-          for (uint32_t c = 0; c < nCols && c < 8; c++) fprintf(out, " %a", dv[c]);
+          for (uint32_t c = 0; c < nCols && c < 12; c++) fprintf(out, " %a", dv[c]);
           fprintf(out, "\n");
         }
       }

@@ -947,7 +947,8 @@ int main(int argc, char **argv) {
                       eph::kCapTagCoverage, eph::kCapTagCatalogs, eph::kCapTagDeltaT,
                       eph::kCapTagPrecession, eph::kCapTagRate, eph::kCapTagSegments,
                       eph::kCapTagLookup, eph::kCapTagHypotheticals, eph::kCapTagEquinoxes,
-                      eph::kCapTagRatesBound, eph::kCapTagCorrectionsByKind}),
+                      eph::kCapTagRatesBound, eph::kCapTagCorrectionsByKind,
+                      eph::kCapTagHouseSystems, eph::kCapTagSiderealTime}),
           "A.3 WELCOME capability tags are exactly the codec's");
     Check(RegTagsAre(Registry("request_tlvs"),
                      {eph::kReqTagPrecession, eph::kReqTagEphemerisPin, eph::kReqTagCatalogPin,
@@ -992,9 +993,10 @@ int main(int argc, char **argv) {
     auto cols = Registry("extra_column_bits");
     // The sigma column's name is Greek in the appendix, so the four are
     // checked by position -- which is what a bit registry is.
-    Check(cols.size() == 4 && RegTagsAre(cols, {0, 1, 2, 3}) &&
+    Check(cols.size() == 6 && RegTagsAre(cols, {0, 1, 2, 3, 4, 5}) &&
               eph::kColSigma == 1u && eph::kColAyanamsa == 2u && eph::kColLightTime == 4u &&
-              eph::kColDeltaT == 8u && eph::kColMask == 0xFu,
+              eph::kColDeltaT == 8u && eph::kColArmc == 16u && eph::kColObliquity == 32u &&
+              eph::kColMask == 0x3Fu,
           "A.10 extra column bits agree with the codec");
     auto zod = Registry("zodiac_tokens");
     bool fZod = zod.size() == (size_t)eph::kZodiacTokenCount;
@@ -1003,7 +1005,8 @@ int main(int argc, char **argv) {
     Check(fZod, "A.11 zodiac tokens are the codec's, in order (" +
                     std::to_string(zod.size()) + ")");
     auto kinds = Registry("object_kinds");
-    Check(kinds.size() == 6 && RegMax(kinds) == eph::kObjKindMax &&
+    Check(kinds.size() == 7 && RegMax(kinds) == eph::kObjKindMax &&
+              RegNum(kinds, "house point") == eph::kObjHouse &&
               RegNum(kinds, "body") == eph::kObjBody &&
               RegNum(kinds, "orbit point") == eph::kObjOrbitPoint &&
               RegNum(kinds, "fixed star") == eph::kObjStar &&
@@ -1040,7 +1043,8 @@ int main(int argc, char **argv) {
     Check(RegMax(Registry("element_centres")) == eph::kCentreMax,
           "A.21 element centres agree with the codec");
     auto oerr = Registry("object_error_codes");
-    Check(oerr.size() == 9 && RegNum(oerr, "none") == eph::kOErrNone &&
+    Check(oerr.size() == 10 && RegNum(oerr, "undefined here") == eph::kOErrUndefinedHere &&
+              RegNum(oerr, "none") == eph::kOErrNone &&
               RegNum(oerr, "unknown body or name") == eph::kOErrUnknownBody &&
               RegNum(oerr, "unsupported by this source") == eph::kOErrUnsupported &&
               RegNum(oerr, "outside the data's time coverage") == eph::kOErrCoverage &&
@@ -1073,6 +1077,24 @@ int main(int argc, char **argv) {
               RegNum(err, "unsupported") == eph::kErrUnsupported &&
               RegNum(err, "draining") == eph::kErrDraining,
           "A.19 ERROR codes agree with the codec");
+    auto hs = Registry("house_systems");
+    Check(hs.size() == 11 && RegMax(hs) == eph::kHouseSystemMax &&
+              RegNum(hs, "placidus") == eph::kHsPlacidus && RegNum(hs, "koch") == eph::kHsKoch &&
+              RegNum(hs, "porphyry") == eph::kHsPorphyry &&
+              RegNum(hs, "regiomontanus") == eph::kHsRegiomontanus &&
+              RegNum(hs, "campanus") == eph::kHsCampanus && RegNum(hs, "equal") == eph::kHsEqual &&
+              RegNum(hs, "whole-sign") == eph::kHsWholeSign &&
+              RegNum(hs, "alcabitius") == eph::kHsAlcabitius &&
+              RegNum(hs, "morinus") == eph::kHsMorinus && RegNum(hs, "meridian") == eph::kHsMeridian &&
+              RegNum(hs, "topocentric") == eph::kHsTopocentric,
+          "A.22 house systems agree with the codec");
+    auto hp = Registry("house_points");
+    Check(hp.size() == 16 && RegMax(hp) == eph::kHousePointMax &&
+              RegNum(hp, "cusp 1") == 1 && RegNum(hp, "cusp 12") == 12 &&
+              RegNum(hp, "Ascendant") == eph::kHpAsc && RegNum(hp, "Midheaven") == eph::kHpMc &&
+              RegNum(hp, "Vertex") == eph::kHpVertex &&
+              RegNum(hp, "equatorial Ascendant") == eph::kHpEquAsc,
+          "A.23 house points agree with the codec");
     auto prec = Registry("precession_model_tokens");
     Check(prec.size() == 2 && prec[0].token == "iau2006" && prec[1].token == "vondrak2011",
           "A.20 precession model tokens");

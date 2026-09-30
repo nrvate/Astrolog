@@ -23,6 +23,10 @@ version 3, and this section is the design authority behind it.
   as it stood on 2026-09-20 and describes the state that item 37 closed.
   Fixed-star work is parked in `STARS_BACKLOG.md`.
 
+- **UPDATE 2026-09-30 (later): houses are in v4** as object kind 6 (work log
+  item 40). The fixture set, `registries.json`, `ephproto.h` and
+  `ephsrv/houses-rows.tsv` all changed; the other project re-vendors them.
+
 - **UPDATE 2026-09-30: the star backlog's first item is done** (work log
   item 39): fixed-star rates are differenced in the server and the
   application, the application's own star delta-T slip is fixed, and there
@@ -1863,6 +1867,7 @@ OBJECT (a 4-byte head, then a payload that depends on the kind; Appendix A.12):
 | 3 named hypothetical | `str8 name` — a token from A.15; elements server-defined (§3.5a) |
 | 4 elements | `TIME epoch`, `u8 equinox` (A.16), `u8 centre` (0 Sun, 1 Earth), `u8 nTerms` (1..5), `u8 reserved`, `f64 equinoxJd` (A.16 value 4 only, else 0), then `6 × nTerms f64`: the polynomial coefficients c0..c(nTerms−1) of, in order, mean anomaly M (deg), semi-major axis a (AU), eccentricity e, argument of perihelion ω (deg), ascending node Ω (deg), inclination i (deg); then `str8 name` |
 | 5 designation | `str8 designation` — resolved as an exact LOOKUP; ambiguity is a per-object error (§3.5) |
+| 6 house point | `u8 system` (A.22), `u8 point` (A.23) — a cusp or an angle of one house system (§3.5b) |
 
 #### DATA (4, server → client)
 Answers a samples REQUEST in one or more chunks. Header (24 bytes):
@@ -2174,6 +2179,40 @@ These numbers are reserved and have no layout yet.
     tropical.
   - Light time is the τ applied, in days; 0 when light time is off.
   - ΔT is the TT − UT1 used for that row, in seconds.
+  - ARMC is the right ascension of the meridian used for that row, in degrees,
+    and true obliquity the obliquity of date used, in degrees (§3.5b). They are
+    answered for kind 6 only; asked of any other kind they are per-object
+    error 2.
+
+**House points** (kind 6). The row is the point's ecliptic longitude in degrees
+(true equinox of date), latitude 0, distance 0 with META's `noDistance` set,
+then their rates. The definitions are §3.5b's.
+- **Profile.** The profile a kind 6 object references is observer 1
+  (topocentric), which supplies the site, plane ecliptic, form spherical, frame
+  true of date and `siderealPlane` 0; any other value is per-object error 2.
+  `zodiac` is tropical or a served token. **No parallax, no refraction and no
+  correction of any kind is applied to a house point, and the site's height does
+  not enter.** So the correction mask does not enter either: any mask the
+  observer's row of A.3 0x0004 honours is honoured, vacuously, and META's
+  `corrApplied` is 0. Height and mask are carried, not pinned: two spellings of
+  one question are two cache keys for one answer, a cost and not an error.
+- **Sidereal.** With a zodiac every point is the tropical value less the
+  ayanamsa of that row (§3.5a; the value the ayanamsa column reports), and
+  Whole Sign starts at the sign of the *sidereal* Ascendant.
+- **Columns.** For kind 6 the ayanamsa, ΔT, ARMC and true obliquity columns are
+  answered; σ and light time are per-object error 2.
+- **Rates.** As §3.5a: the five-point stencil derivative of the answered
+  longitude, h = 1/1024 day, with the 360° wrap unwrapped before differencing.
+  When any stencil point is refused (error 9), or two adjacent stencil values
+  differ by more than 90° after unwrapping, the three rate columns of that row
+  are 0 and META's `ratesApprox` is set for the object (the flag is per object:
+  a client cannot tell which rows). **Whole Sign rates are 0 always**, even when
+  a sign change falls inside the stencil, and set no flag: a step has no
+  derivative and 0 is the one answer that is not an artefact of h.
+- **Failure.** A point that is undefined for a row's instant and site is that
+  row failing (below) with errCode 9, decided per row with that row's own
+  obliquity: a series can cross the boundary partway, and the object is
+  `partial` with `firstFailedRow`.
 
 **Failure**
 - **Row failure.** A row that failed has NaN in every column of that row. An
@@ -2478,6 +2517,100 @@ elements, identically on every server, sends it as kind 4 with those elements.
 **Error text** (META errText, ERROR text) is covered by §3.8: it never quotes
 instants, places or request contents. Servers rewrite engine messages that
 would.
+
+### 3.5b Houses (normative)
+
+Inputs, per row: the instant, the site's east longitude λ and latitude φ, and
+the frame of date of §3.5a. Two derived quantities are **reported** with the row
+(A.10 bits 4 and 5), and every point is a function of them and φ alone:
+
+- **ARMC** = GAST + λ, degrees, GAST the Greenwich apparent sidereal time.
+- **ε** = the true obliquity of date: the mean obliquity of the model §3.5a
+  names plus the IAU 2000A nutation in obliquity.
+
+**Sidereal time.** The reference is IAU 2006 GMST (from the Earth rotation
+angle) plus the IAU 2000A equation of the equinoxes (ERFA `gst06a`). A server
+MUST agree with it to 0.01″ over 1850–2050; outside that range it MAY deviate,
+and names its model in WELCOME 0x0016 (`iau2006-2000a` for the reference).
+Swiss's long-term model deviates from it by +1.22″ at 1600, +0.35″ at 1800,
+−1.79″ at 2100 and −0.68″ at 2200 (the same instants under Swiss's own ΔT;
+it agrees exactly over 1900–2026), and the deviation is not ΔT. Cusps and
+angles are graded **at the row's own ARMC and ε**, and the ARMC separately at
+the tolerance above.
+
+**Notation.** All angles are in degrees. `E(a)` is the ecliptic point of right
+ascension `a`, on the hour circle: tan λ = tan a / cos ε. α(P) is the right
+ascension of the ecliptic point P.
+
+**Angles.**
+- **Ascendant** (13): the intersection of the ecliptic with the horizon that lies
+  **east** of the meridian (negative hour angle). Inside the polar circle the
+  closed form atan2(cos θ, −(sin θ cos ε + tan φ sin ε)), θ = ARMC, returns the
+  western one; the side, not the formula, is the definition.
+- **Midheaven** (14): E(ARMC), the culminating point of the ecliptic, in every
+  system. It can be below the horizon.
+- **Vertex** (15): the intersection of the ecliptic with the prime vertical on the
+  **west** side (positive hour angle).
+- **Equatorial Ascendant** (16): E(ARMC + 90°).
+
+**Cusps.** Cusp k is a point of the ecliptic and in every system below cusp k + 6
+is the opposite of cusp k, so each entry defines the cusps it needs. Cusp 1 is the
+Ascendant and cusp 10 the MC except where an entry says otherwise (Equal at cusp
+10, Whole Sign, Morinus and Meridian).
+- **Equal** (5): Ascendant + 30° (k − 1). **Whole Sign** (6): 30° · floor(Ascendant
+  / 30°) + 30° (k − 1); in a sidereal zodiac the *sidereal* Ascendant.
+- **Porphyry** (2): cusps 10 and 1 are the MC and the Ascendant; the arc of ecliptic
+  from the MC to the Ascendant, and from the Ascendant to the IC, are each
+  trisected.
+- **Meridian** (9): cusp k = E(ARMC + 30° (k − 10)). **Morinus** (8): the ecliptic
+  point of the same *longitude* as the equator point of right ascension a = ARMC +
+  30° (k − 10): λ = atan2(sin a cos ε, cos a). Morinus cusp 10 is **not** the MC.
+- **Regiomontanus** (3): cusp k is the ecliptic point on the great circle through
+  the horizon's north and south points and the equator point of hour angle −30°
+  (k − 10), on the half of that circle holding that point. For k = 10 that circle is
+  the meridian and the point is the one above the horizon; where the MC culminates
+  below it, that is the IC.
+- **Campanus** (4): the same circles through the north and south points and the
+  prime-vertical points at 0°, 30°, 60°, 90°, 120°, 150°, 180° from the east point
+  toward the zenith for cusps 1, 12, 11, 10, 9, 8, 7, and at −30° … −150° for cusps
+  2 … 6.
+- **Alcabitius** (7): with D = α(Ascendant) − ARMC (mod 360°), the Ascendant's
+  diurnal semi-arc, the equator points ARMC + D/3 and ARMC + 2D/3 give cusps 11 and
+  12, and α(Ascendant) + (180° − D)/3 and α(Ascendant) + 2 (180° − D)/3 give
+  cusps 2 and 3, each carried to the ecliptic by E.
+- **Koch** (1): with SA = 90° + asin(tan φ tan δ), δ the declination of the MC
+  point, cusps 11, 12, 2, 3 are the Ascendant for ARMC − 2SA/3, ARMC − SA/3,
+  ARMC + SA/3, ARMC + 2SA/3. (One SA serves all four.) Near the polar circle these
+  can fall out of order, 8° before the MC at φ = 66.56° and ARMC 280.457°; that is
+  the construction, and no rule reorders them.
+- **Topocentric** (10, Polich–Page): with φ₁ = atan(tan φ / 3) and φ₂ = atan(2 tan φ
+  / 3), cusp 11 is the Ascendant at latitude φ₁ for ARMC − 60°, cusp 12 at φ₂ for
+  ARMC − 30°, cusp 2 at φ₂ for ARMC + 30°, cusp 3 at φ₁ for ARMC + 60°. Cusp 10 is
+  the MC. **No reordering is applied inside the polar circle**; the definition gives
+  no rule for one.
+- **Placidus** (0): a cusp is the ecliptic point whose hour angle H is a fixed
+  fraction of its own semi-arcs. With SA_d the diurnal semi-arc of the point
+  (acos(−tan φ tan δ)) and SA_n = 180° − SA_d: cusp 11, H = −SA_d/3; cusp 12,
+  H = −2SA_d/3; cusp 2, H = −SA_d − SA_n/3; cusp 3, H = −SA_d − 2SA_n/3.
+
+**Where a point is undefined** (error 9):
+- **|φ| = 90°.** There is no meridian, λ is arbitrary and the ARMC is undefined:
+  every kind 6 point is error 9, in every system.
+- **Placidus and Koch, |φ| > 90° − ε**, ε the value the row reports, at every
+  instant: inside the polar circle part of the ecliptic never rises or sets and
+  Koch's shifted Ascendants can be setting points. The server MUST NOT substitute
+  another system. **A server MAY answer or refuse within ±1″ of 90° − ε**; the
+  fixture rows sit at ±0.001° outside that band. At exactly 90° − ε the reference
+  implementation and Prometheia both answer; that is behaviour, not normative.
+- **Degenerate instants:** where the ecliptic lies along the horizon or the prime
+  vertical the Ascendant or the Vertex has no intersection, which can happen only
+  on the boundary; that row is error 9.
+Every other system, and every other angle, answers at every other latitude.
+
+The reference implementation is `tools/houses_ref.py`, written from this section
+and nothing else; its Placidus is iterated to full precision, and conformance for
+Placidus is 0.01″ because other implementations iterate less far (Swiss's stops
+at about 1e-3″ at high latitudes); every other system conforms to 0.0001″.
 
 ### 3.6 Extension rules
 
@@ -2967,6 +3100,8 @@ older than the server it is talking to.
 | 0x0012 | equinoxes for elements: u32 bitmask of A.16 |
 | 0x0013 | rates bound: f32 degPerDay, f32 auPerDay — the largest rate error, measured and read as §3.5a defines it (auPerDay bounds the distance-rate error's magnitude divided by max(1 AU, r)); absent means 1e-5 °/day and 1e-9 AU/day under that reading |
 | 0x0014 | corrections by kind: u8 n, n × {u32 observers (A.5), u32 kinds (A.12), u8 mask (A.7)} — ADDS to tag 0x0004 per (observer, kind). 0x0004 is the intersection over kinds; a pair no entry names falls back to it, so a kind-uniform server sends nothing and the two cannot contradict. A profile's mask is checked against every (observer, kind) of the objects referencing it, ERROR 11 for the whole request; an unreferenced profile against 0x0004 alone. Mask bits above 0x07 are reserved and MUST be zero (§3.1: reject, do not normalise); unknown observer and kind bits are ignored |
+| 0x0015 | house systems served: u16 n, n × u8 (A.22 ids) |
+| 0x0016 | sidereal time model for houses: str8, `iau2006-2000a` for §3.5b's reference, otherwise a name the server chooses |
 
 **A.4 REQUEST TLVs:**
 - 0x0003 precession model, str8 (non-critical; an unknown model falls back and
@@ -3004,6 +3139,8 @@ older than the server it is talking to.
 - bit 1: ayanamsa applied, deg
 - bit 2: light time, days
 - bit 3: ΔT used, s
+- bit 4: ARMC, deg (kind 6 only)
+- bit 5: true obliquity of date used, deg (kind 6 only)
 
 **A.11 Zodiac tokens.** The Swiss Ephemeris 2.10.03 sidereal modes are listed
 in `SE_SIDM_*` order. Other engines implement whichever subset they choose and
@@ -3030,6 +3167,7 @@ advertise it (A.3 0x0007).
 - 3 named hypothetical
 - 4 elements
 - 5 designation
+- 6 house point
 
 **A.13 Orbit points:** 0 ascending node, 1 descending node, 2 perihelion
 (perigee), 3 aphelion (apogee).
@@ -3077,6 +3215,7 @@ T = (t_TT − epoch) / 36525 Julian centuries, as in `seorbel.txt`.
 - 6 ambiguous name
 - 7 numerical failure
 - 8 internal
+- 9 undefined here (a house point at a latitude or instant where the system is not defined, §3.5b)
 
 **A.18 META flags:**
 - bit 0 approximated (resolvedNaif differs from the request, e.g. 499 answered
@@ -3107,6 +3246,37 @@ T = (t_TT − epoch) / 36525 Julian centuries, as in `seorbel.txt`.
 **A.20 Precession model tokens** (REQUEST TLV 0x0003, WELCOME TLV 0x000D):
 - `iau2006` — Capitaine et al. 2003, IAU 2006
 - `vondrak2011` — Vondrák, Capitaine & Wallace 2011, long-term (the default)
+
+**A.22 House systems** (kind 6 `system`):
+- 0 placidus
+- 1 koch
+- 2 porphyry
+- 3 regiomontanus
+- 4 campanus
+- 5 equal
+- 6 whole-sign
+- 7 alcabitius
+- 8 morinus
+- 9 meridian
+- 10 topocentric
+
+**A.23 House points** (kind 6 `point`):
+- 1 cusp 1
+- 2 cusp 2
+- 3 cusp 3
+- 4 cusp 4
+- 5 cusp 5
+- 6 cusp 6
+- 7 cusp 7
+- 8 cusp 8
+- 9 cusp 9
+- 10 cusp 10
+- 11 cusp 11
+- 12 cusp 12
+- 13 Ascendant
+- 14 Midheaven
+- 15 Vertex
+- 16 equatorial Ascendant
 
 ## 6B. Appendix B — mapping to the Swiss Ephemeris
 
@@ -3413,6 +3583,62 @@ instructions for a human to copy is the thing this direction exists to stop.
      bug into their own `corrapplied.py` and caught it by fault
      injection rather than by trusting the green. The symptom to grep
      for in any existing leg is a column of suspiciously exact zeros.
+
+40. **Houses in protocol v4: object kind 6 (2026-09-30).** Proposed by the
+   Prometheia project for its pyswisseph-shaped client; agreed as an additive
+   extension of v4 after six holes were closed in review (their list, my
+   amendments below). No message type and no capability bit: a house point is
+   a new OBJECT kind (6: `u8 system`, `u8 point`), so a series of instants, rates,
+   chunking, cancellation, limits, the cache key and per-object errors are the
+   mechanisms already written and tested on both sides. Appendix A gained kind 6,
+   extra columns 4 (ARMC) and 5 (true obliquity), per-object error 9 (undefined
+   here), A.22 (eleven house systems, a fixed registry) and A.23 (twelve cusps
+   and four angles), and WELCOME TLVs 0x0015 (systems served) and 0x0016 (the
+   sidereal-time model behind them). Normative text: §3.4, §3.5 "House points"
+   and §3.5b, whose definitions are executable in `tools/houses_ref.py`.
+
+   *The design decisions worth keeping.* (1) Registry numbers, not indexes into a
+   server's own list, so the same bytes mean the same system everywhere. (2)
+   Every point is a function of the row's reported ARMC and true obliquity and
+   the latitude, and is graded AT those two numbers: sidereal time differs
+   between Swiss's long-term model and IAU 2006 by +1.22" at 1600 and -1.79" at
+   2100 (reproduced with pyerfa), which is not this specification's business,
+   and cusps take ARMC one for one. (3) The Ascendant and Vertex are defined by
+   SIDE (east, west), not by a formula, because the closed form returns the
+   western intersection inside the polar circle. (4) Placidus and Koch are
+   refused beyond |phi| > 90 - eps for the row's own eps, per row, never
+   substituted; the boundary carries a +-1" band. (5) Rates are the stencil
+   derivative; across a jump (a refused stencil point, or more than 90 degrees
+   between adjacent points) they are 0 with `ratesApprox`, and Whole Sign's are
+   0. (6) The correction mask and the site height are carried, not pinned: two
+   spellings of one question are two cache keys, a cost and not an error
+   (the first draft pinned the mask through 0x0014 and that was withdrawn
+   when it turned out to need 0x0004 rewritten for every kind).
+
+   *What checking found.* All eleven systems and four angles agree with the
+   fork's Swiss to 2e-6" (Placidus 3e-4") at |phi| <= 60, and at |phi| >= 70
+   every system but Topocentric does; Topocentric differs by 180 degrees on
+   some cusps at some hours (Swiss reorders inside the circle, the definition
+   does not). Swiss's MC for Regiomontanus, Campanus and Topocentric inside the
+   polar circle is the cusp-10 point, not the culminating point. The
+   Prometheia project's boundary rows (Placidus and Koch at 90 - eps
+   -0.001 and +0.001 in both hemispheres, including Koch's cusps 11 and 12
+   falling 8 degrees before the MC) reproduce to 1.8e-4" from the reference.
+   A codec defect surfaced too: the object-list precheck assumed 8 bytes per
+   object and the smallest is 6 (a house point, or a one-character star name),
+   so a request of several such objects was refused as malformed; fixed, with a
+   fixture (`request_small_objects`).
+
+   *The server.* `astrolog-ephd` serves kind 6 from `swe_houses_armc_ex2_r` with
+   three overrides where Swiss and the definitions part (the MC by formula,
+   Topocentric inside the polar circle from its definition, Placidus and Koch
+   refused by |phi| before the call, Swiss's own -1 being the second guard).
+   `tools/ephsrv-houses.sh` (selftest in `ci-selftest.sh`) grades 10,912 answered
+   rows over 12 latitudes, 3 epochs, the tropical zodiac and Lahiri, and the rate
+   stencil, against the reference; each override sabotaged fails it.
+
+   *What Astrolog does not do.* It has no consumer of kind 6 (it computes houses
+   locally, 40 systems). TIME/TIME_RESULT follow houses, narrow, as agreed.
 
 39. **Fixed-star rates are differenced, and the application's stars were
    delta T early (2026-09-30).**

@@ -1,6 +1,6 @@
 # file	direction	type	expect	note
 # set-sha256 is sha256 over each .hex file's bytes, in the order of the rows below
-# set-sha256 1df64f69af50b3ab8dfcc9fd90bbab6dfcd4e247f7626fe2be8fc0321c1f1c73
+# set-sha256 38f7e09d4b25fc2c12c05ac0bab0d2716e30feec111157137cc6bcbbdbc6ecab
 hello_min.hex	c2s	1	ok	no token, no caps
 hello_token_caps.hex	c2s	1	ok	token and f32|cancel|lookup|segments caps
 hello_future_client.hex	c2s	1	ok	a version-9 client: envelope 9, protoMax 9, protoMin 4; the server answers v4
@@ -105,9 +105,23 @@ lookup_match_profile.hex	s2c	10	malformed	a LOOKUP_RESULT match whose object nam
 unknown_critical_tag.hex	c2s	3	unsupported	critical REQUEST tag 0x8FFF
 observer_unregistered.hex	c2s	3	unsupported	observer 9
 correction_bit_unregistered.hex	c2s	3	unsupported	corrections bit 8
-kind_unregistered.hex	c2s	3	unsupported	object kind 6
+kind_unregistered.hex	c2s	3	unsupported	object kind 7 (A.12 ends at 6)
 segments_spherical.hex	c2s	3	unsupported	segments with form 0
 segments_list.hex	c2s	3	unsupported	segments over an instant list
 segments_columns.hex	c2s	3	unsupported	segments with the ayanamsa column
 elements_centre_unregistered.hex	c2s	3	unsupported	elements centre 2 (A.21 has 0 and 1)
 zodiac_unregistered.hex	c2s	3	unsupported	zodiac token "martian"
+request_houses_grid.hex	c2s	3	ok	kind 6: Placidus cusp 11, Koch Ascendant, Regiomontanus MC, Whole Sign Ascendant, Topocentric cusp 10, Equal equatorial Ascendant; TT hourly grid; topocentric profile, mask 0, ayanamsa+dT+ARMC+obliquity columns
+request_houses_sidereal.hex	c2s	3	ok	kind 6 in a sidereal zodiac: Vertex and a Whole Sign cusp, Lahiri
+request_houses_mask7.hex	c2s	3	ok	kind 6 with correction mask 7: well-formed, and the same answer as mask 0 (no correction applies to a house point), a different cache key
+request_houses_list.hex	c2s	3	ok	kind 6 over an instant list, one profile shared with nothing else
+request_houses_and_body.hex	c2s	3	ok	a body and a house point in one request, each on its own profile (the columns of one are refused for the other, per object)
+request_small_objects.hex	c2s	3	ok	three one-character star names, 6 bytes each: the smallest legal object. The codec's object-list precheck once assumed 8 and refused this (found when kind 6, also 6 bytes, arrived)
+house_system_unregistered.hex	c2s	3	unsupported	house system 11 (A.22 has 0..10)
+house_point_zero.hex	c2s	3	unsupported	house point 0 (A.23 starts at 1)
+house_point_seventeen.hex	c2s	3	unsupported	house point 17 (A.23 ends at 16)
+house_reserved_nonzero.hex	c2s	3	malformed	kind 6 with the object head's reserved field set
+house_column_bit_unregistered.hex	c2s	3	unsupported	column bit 6 (A.10 ends at bit 5)
+welcome_houses.hex	s2c	2	ok	a server that serves kind 6: all eleven systems and the reference sidereal-time model
+welcome_houses_short.hex	s2c	2	malformed	0x0015 says three systems and two follow
+data_houses.hex	s2c	4	ok	kind 6 answer: the ARMC and obliquity columns, noDistance, and a Koch row refused (error 9) so the object is partial

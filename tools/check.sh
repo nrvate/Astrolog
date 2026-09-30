@@ -84,6 +84,7 @@ gen  "stock seorbel elements"    ephpromelem.h python3 tools/seorbel2prom.py seo
 # directory, not one file, so the generator checks itself -- contents and the
 # set's own checksum.
 step "protocol v4 fixtures"      python3 tools/ephproto4-fixtures.py --check
+step "houses reference rows"     python3 tools/houses_ref.py --check-rows
 step "protocol v4 codec"         sh -c 'make -s ephproto_test && ASAN_OPTIONS=detect_leaks=0 ./ephproto_test ephsrv/conformance'
 # The protocol header is vendored and compiled by the other implementation,
 # so it has to stand on its own: no Astrolog header, C++20, -Werror.

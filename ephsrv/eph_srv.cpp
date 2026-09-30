@@ -103,7 +103,8 @@ static const uint16_t kLookupMax = 32;
 static const int kErrMax = eph::kErrDraining;   // the highest A.19 code
 // The extra columns (A.10) served: the ayanamsa applied and the delta T
 // used. Not sigma (Swiss has none) nor light time.
-static const uint32_t kColumnsServed = eph::kColAyanamsa | eph::kColDeltaT;
+static const uint32_t kColumnsServed = eph::kColAyanamsa | eph::kColDeltaT |
+                                       eph::kColArmc | eph::kColObliquity;
 
 // Log levels, most severe first: a line is written when its level is at or
 // above --log-level's.
@@ -1003,6 +1004,146 @@ static uint16_t ResolveDesignation(swe_ctx *ctx, const eph::Object &o, eph::Obje
   return eph::kOErrNone;
 }
 
+// ---- 3.5b houses (object kind 6) ------------------------------------------
+//
+// One house point at one instant. The cusps and angles come from Swiss's
+// swe_houses_armc_ex2, handed the ARMC and the true obliquity that are then
+// REPORTED with the row, so a cusp is a function of the two numbers beside it
+// (3.5b grades it at them). Three places where Swiss and the definitions part,
+// each measured with tools/houses_ref.py --compare: the MC is computed by
+// formula (Swiss's is the cusp-10 point for R, C and T inside the polar
+// circle); Topocentric inside the polar circle is computed from its
+// definition (Swiss reorders); and Placidus and Koch are refused by |phi|
+// against the row's obliquity before the call, since Swiss otherwise
+// substitutes Porphyry.
+struct HouseQ {
+  double jd = 0.0;          // the row's numeric instant, in the request's scale
+  bool fUt = false;         // that scale is UT1
+  bool fDtGiven = false;    // deltaTSec / the table gave this row's delta T
+  double dtRow = 0.0;       // ... in seconds
+  double lonE = 0.0, lat = 0.0;
+  int hsys = 0, hpoint = 0;
+  bool fSid = false;
+  int32_t flAyan = 0;       // the flags the ayanamsa column is asked with
+};
+
+static double HsN360(double x) {
+  x = fmod(x, 360.0);
+  return x < 0.0 ? x + 360.0 : x;
+}
+
+// The ecliptic point of right ascension armc (3.5b's E), and the intersection
+// of the ecliptic with the horizon EAST of the meridian, for the polar
+// Topocentric definition.
+static double HsEclOfRa(double a, double eps) {
+  const double r = M_PI / 180.0;
+  return HsN360(atan2(sin(a * r), cos(a * r) * cos(eps * r)) / r);
+}
+
+static double HsAscEast(double theta, double phi, double eps) {
+  const double r = M_PI / 180.0;
+  // zenith Z = (cos phi, 0, sin phi); ecliptic pole in the local frame at hour
+  // angle theta - 270, declination 90 - eps; d = Z x pole, the east side.
+  const double zx = cos(phi * r), zz = sin(phi * r);
+  const double h = (theta - 270.0) * r, dec = (90.0 - eps) * r;
+  const double px = cos(dec) * cos(h), py = cos(dec) * sin(h), pz = sin(dec);
+  double dx = 0.0 * pz - zz * py, dy = zz * px - zx * pz, dz = zx * py - 0.0 * px;
+  if (-dy < 0.0) { dx = -dx; dy = -dy; dz = -dz; }   // east is (0, -1, 0)
+  const double n = sqrt(dx * dx + dy * dy + dz * dz);
+  dx /= n; dy /= n; dz /= n;
+  const double hh = atan2(dy, dx) / r, dd = asin(dz) / r;
+  const double ra = (theta - hh) * r, de = dd * r, e = eps * r;
+  return HsN360(atan2(sin(ra) * cos(e) + tan(de) * sin(e), cos(ra)) / r);
+}
+
+// Topocentric cusp k (1..12) from the definition, for |phi| inside the polar
+// circle where Swiss reorders.
+static double HsTopoCusp(int k, double armc, double phi, double eps) {
+  const double t = tan(phi * M_PI / 180.0);
+  const double p1 = atan(t / 3.0) * 180.0 / M_PI, p2 = atan(2.0 * t / 3.0) * 180.0 / M_PI;
+  const double mc = HsEclOfRa(armc, eps), asc = HsAscEast(armc, phi, eps);
+  switch (k) {
+    case 1: return asc;
+    case 10: return mc;
+    case 4: return HsN360(mc + 180.0);
+    case 7: return HsN360(asc + 180.0);
+    case 11: return HsAscEast(armc - 60.0, p1, eps);
+    case 12: return HsAscEast(armc - 30.0, p2, eps);
+    case 2: return HsAscEast(armc + 30.0, p2, eps);
+    case 3: return HsAscEast(armc + 60.0, p1, eps);
+    default: return HsN360(HsTopoCusp(k > 6 ? k - 6 : k + 6, armc, phi, eps) + 180.0);
+  }
+}
+
+static const char kHouseLetter[] = "PKORCAWBMXT";      // A.22 order
+static const char *const kHouseSystemName[] = {
+  "Placidus", "Koch", "Porphyry", "Regiomontanus", "Campanus", "Equal",
+  "Whole Sign", "Alcabitius", "Morinus", "Meridian", "Topocentric"};
+
+static std::string HousePointName(int system, int point) {
+  char sz[64];
+  const char *sys = system >= 0 && system <= eph::kHouseSystemMax ? kHouseSystemName[system] : "?";
+  if (point >= 1 && point <= 12) snprintf(sz, sizeof(sz), "%s cusp %d", sys, point);
+  else {
+    const char *p = point == eph::kHpAsc ? "Ascendant" : point == eph::kHpMc ? "Midheaven" :
+                    point == eph::kHpVertex ? "Vertex" : "equatorial Ascendant";
+    snprintf(sz, sizeof(sz), "%s %s", sys, p);
+  }
+  return sz;
+}
+
+// Returns 0, or -1 with the reason in serr (the point is undefined here,
+// A.17 code 9). *plon is in the requested zodiac.
+static int HouseValue(swe_ctx *ctx, const HouseQ &q, double dj, double *plon,
+                      double *parmc, double *peps, double *payan, char *serr) {
+  const double jd = q.jd + dj;
+  const double dt = q.fDtGiven ? q.dtRow / 86400.0 : swe_deltat_ex_r(ctx, jd, SEFLG_SWIEPH, nullptr);
+  const double jdUt = q.fUt ? jd : jd - dt, jdTt = q.fUt ? jd + dt : jd;
+  double nut[6], cusp[37], asc[10], ayan = 0.0;
+  serr[0] = '\0';
+  if (fabs(q.lat) >= 90.0) {
+    snprintf(serr, AS_MAXCH, "a house point is undefined at a pole: there is no meridian");
+    return -1;
+  }
+  if (swe_calc_ut_r(ctx, jdUt, SE_ECL_NUT, 0, nut, serr) < 0) return -1;
+  const double eps = nut[0];
+  const bool fPolar = fabs(q.lat) > 90.0 - eps;
+  if (fPolar && (q.hsys == eph::kHsPlacidus || q.hsys == eph::kHsKoch)) {
+    snprintf(serr, AS_MAXCH, "this house system is undefined inside the polar circle");
+    return -1;
+  }
+  // The ARMC is Swiss's own sidereal time plus the east longitude; any system
+  // gives it, Porphyry being defined everywhere.
+  if (swe_houses_ex2_r(ctx, jdUt, 0, q.lat, q.lonE, 'O', cusp, asc, nullptr, nullptr, serr) < 0)
+    return -1;
+  const double armc = asc[2];
+  if (swe_houses_armc_ex2_r(ctx, armc, q.lat, eps, kHouseLetter[q.hsys], cusp, asc,
+                            nullptr, nullptr, serr) < 0) {
+    snprintf(serr, AS_MAXCH, "this house system is undefined here");
+    return -1;
+  }
+  if (q.fSid && swe_get_ayanamsa_ex_r(ctx, jdTt, q.flAyan, &ayan, serr) < 0) return -1;
+  double v;
+  switch (q.hpoint) {
+    case eph::kHpAsc: v = asc[0]; break;
+    case eph::kHpMc: v = HsEclOfRa(armc, eps); break;
+    case eph::kHpVertex: v = asc[3]; break;
+    case eph::kHpEquAsc: v = asc[4]; break;
+    default:
+      if (q.hsys == eph::kHsTopocentric && fPolar) v = HsTopoCusp(q.hpoint, armc, q.lat, eps);
+      else if (q.hsys == eph::kHsWholeSign)
+        v = 30.0 * floor(HsN360(asc[0] - ayan) / 30.0) + 30.0 * (q.hpoint - 1) + ayan;
+      else v = cusp[q.hpoint];
+  }
+  v = HsN360(v - ayan);
+  if (!std::isfinite(v) || !std::isfinite(armc) || !std::isfinite(eps)) {
+    snprintf(serr, AS_MAXCH, "this house point is undefined here");
+    return -1;
+  }
+  *plon = v; *parmc = HsN360(armc); *peps = eps; *payan = ayan;
+  return 0;
+}
+
 // What one object of a request resolved to, kept between the blocks of rows
 // it is computed in: a request is answered across loop turns, so an object's
 // setup happens once and the row loop is re-entered many times.
@@ -1047,6 +1188,15 @@ static void PrepareObject(swe_ctx *ctx, const eph::Request &req, uint32_t iObj,
     return;
   }
   m.resolvedNaif = prep->c.resolvedNaif;
+  if (prep->c.kind == eph::swiss::kCallHouse) {
+    // 3.5: a house point has no distance, and no correction applies to it.
+    m.flags |= eph::kMetaNoDistance;
+    if (!pf.speeds) m.flags |= eph::kMetaNoSpeeds;
+    m.corrApplied = 0;
+    m.name = WireText(HousePointName(prep->c.hsys, prep->c.hpoint).c_str());
+    prep->fNamed = true;
+    return;
+  }
   // 3.4 META corrApplied: the terms this call can apply to this object for
   // this observer -- the capability set, independent of the mask the
   // request asked for (a request for true positions still reports them;
@@ -1428,8 +1578,45 @@ static void ComputeObjectRows(swe_ctx *ctx, const eph::Request &req, uint32_t iO
     // forced a site change here until SWISSEPH_PIN moved to that release.
     double xx[6];
     int32_t ret = -1;
+    double hArmc = 0.0, hEps = 0.0;   // kind 6: reported with the row
     serr[0] = '\0';
     switch (c.kind) {
+      case eph::swiss::kCallHouse: {
+        HouseQ q;
+        double lon = 0.0, ayan = 0.0;
+        q.jd = jd; q.fUt = req.timeScale == eph::kTimeUT1;
+        q.fDtGiven = fDtGiven; q.dtRow = dtRow;
+        q.lonE = pf.siteLonEastDeg; q.lat = pf.siteLatDeg;
+        q.hsys = c.hsys; q.hpoint = c.hpoint;
+        q.fSid = c.fSidereal;
+        q.flAyan = sid.fTrueAnchor ? (c.iflag | SEFLG_NOABERR | SEFLG_NOGDEFL) : c.iflag;
+        ret = HouseValue(ctx, q, 0.0, &lon, &hArmc, &hEps, &ayan, serr);
+        if (ret >= 0) {
+          xx[0] = lon; xx[1] = xx[2] = xx[3] = xx[4] = xx[5] = 0.0;
+          // 3.5: the five-point stencil derivative, except that a refused
+          // stencil point, or a jump of more than 90 degrees between two
+          // adjacent points, leaves the rates 0 and sets ratesApprox for
+          // the object; Whole Sign's rates are 0 always.
+          if (pf.speeds && c.hsys != eph::kHsWholeSign) {
+            const double h = 1.0 / 1024.0, dj[4] = {-2.0 * h, -h, h, 2.0 * h};
+            double v[4], a0, a1, a2;
+            char serrD[AS_MAXCH];
+            bool fOk = true;
+            for (int k = 0; k < 4 && fOk; k++)
+              fOk = HouseValue(ctx, q, dj[k], &v[k], &a0, &a1, &a2, serrD) >= 0;
+            for (int k = 1; k < 4 && fOk; k++) {
+              while (v[k] - v[k - 1] > 180.0) v[k] -= 360.0;
+              while (v[k] - v[k - 1] < -180.0) v[k] += 360.0;
+              if (fabs(v[k] - v[k - 1]) > 90.0) fOk = false;
+            }
+            if (fOk)
+              xx[3] = (v[0] - 8.0 * v[1] + 8.0 * v[2] - v[3]) / (12.0 * h);
+            else
+              e->meta[iObj].flags |= eph::kMetaRatesApprox;
+          }
+        }
+        break;
+      }
       case eph::swiss::kCallCalc:
       case eph::swiss::kCallPctr: {
         const bool fPctr = c.kind == eph::swiss::kCallPctr;
@@ -1600,6 +1787,10 @@ static void ComputeObjectRows(swe_ctx *ctx, const eph::Request &req, uint32_t iO
         std::string text;
         m.firstFailedRow = r;
         m.errCode = ObjErrOf(serr, c.kind == eph::swiss::kCallFixstar, &text);
+        if (c.kind == eph::swiss::kCallHouse) {
+          m.errCode = eph::kOErrUndefinedHere;   // A.17 code 9
+          text = serr;
+        }
         // "The file is missing" and "this instant needs data from outside
         // the span" are the same Swiss message, and they meant the same
         // A.17 code here: 4. They are not the same thing, and the
@@ -1748,7 +1939,7 @@ static void ComputeObjectRows(swe_ctx *ctx, const eph::Request &req, uint32_t iO
     // rotation about the ecliptic pole, so no latitude moves, which is also
     // what the cross-test measured (the other engine's rows differ from ours
     // in longitude alone, by each anchor's own aberration).
-    if (sid.fTrueAnchor && !sid.fActive && !fRect) {
+    if (sid.fTrueAnchor && !sid.fActive && !fRect && c.kind != eph::swiss::kCallHouse) {
       char serrA[AS_MAXCH];
       double aApp = 0.0, aTrue = 0.0;
       if (swe_get_ayanamsa_ex_r(ctx, jdEt(), c.iflag, &aApp, serrA) >= 0 &&
@@ -1841,6 +2032,11 @@ static void ComputeObjectRows(swe_ctx *ctx, const eph::Request &req, uint32_t iO
     }
     if (e->columnsPresent & eph::kColDeltaT)
       dst[k++] = fDtGiven ? dtRow : swe_deltat_ex_r(ctx, jd, SEFLG_SWIEPH, nullptr) * 86400.0;
+    // 3.5: the ARMC and the obliquity the row's house point was computed at;
+    // 0 in any object that is not one (a body that asked for them was refused
+    // per object, and a column another profile asked for is 0 here).
+    if (e->columnsPresent & eph::kColArmc) dst[k++] = hArmc;
+    if (e->columnsPresent & eph::kColObliquity) dst[k++] = hEps;
     m.rowsOk++;
     if (!fNamed) {
       fNamed = true;
@@ -3685,7 +3881,8 @@ static void BuildWelcome(const EphDiscovery &disc, const char *szSwe) {
   gSource = std::string(kServerVersion) + " | Swiss Ephemeris " + szSwe + " | files";
   eph::Capabilities &c = gCaps;
   c.kinds = (1u << eph::kObjBody) | (1u << eph::kObjOrbitPoint) | (1u << eph::kObjStar) |
-            (1u << eph::kObjHypothetical) | (1u << eph::kObjDesignation);
+            (1u << eph::kObjHypothetical) | (1u << eph::kObjDesignation) |
+            (1u << eph::kObjHouse);
   c.observers = 0x1F;
   c.planes = 0x3;
   c.forms = 0x3;
@@ -3764,6 +3961,11 @@ static void BuildWelcome(const EphDiscovery &disc, const char *szSwe) {
   c.orbitMethods = (1u << eph::kMethMean) | (1u << eph::kMethOsculating) |
                    (1u << eph::kMethInterpolated) | (1u << eph::kMethFocal);
   c.columns = kColumnsServed;
+  // 3.5b: houses, from Swiss's swe_houses_armc_ex2. Swiss's long-term sidereal
+  // time deviates from the reference model outside 1850-2050 (by up to 1.8" over
+  // 1600-2200), which is what the name says.
+  for (int i = 0; i <= eph::kHouseSystemMax; i++) c.houseSystems.push_back((uint8_t)i);
+  c.siderealTime = "swiss-long-term";
   for (int i = 0; i < eph::kZodiacTokenCount; i++) c.zodiacs.push_back(eph::kZodiacTokens[i]);
   c.siderealPlanes = 0x7;
   c.timeScales = (1u << eph::kTimeUT1) | (1u << eph::kTimeTT);

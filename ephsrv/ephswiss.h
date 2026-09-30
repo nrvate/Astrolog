@@ -42,6 +42,7 @@ enum CallKind {
   kCallNodAps = 2,   // swe_nod_aps / swe_nod_aps_ut
   kCallFixstar = 3,  // swe_fixstar2 / swe_fixstar2_ut
   kCallElements = 4, // the fork's orbital-elements entry point
+  kCallHouse = 5,    // swe_houses_armc_ex2, one point of one system (3.5b)
 };
 
 struct SwissCall {
@@ -64,6 +65,7 @@ struct SwissCall {
   bool fUT = false;            // call the _ut entry point with UT1 instants
   bool fAddDeltaT = false;     // UT1 instants plus deltaTSec, then ET entry point
   std::string star;            // fixstar name
+  int hsys = 0, hpoint = 0;    // kCallHouse: A.22 system, A.23 point
   int32_t resolvedNaif = kNaifNone;
   bool fApproximated = false;
 };
@@ -188,6 +190,37 @@ inline uint16_t MapObject(const Object &o, int32_t nNative, const Profile &pf,
                           uint8_t timeScale, double deltaTSec, EphFlag eph, SwissCall *c,
                           std::string *why) {
   *c = SwissCall();
+  // 3.5: ARMC and true obliquity are answered for house points only.
+  if (o.kind != kObjHouse && (pf.columns & (kColArmc | kColObliquity))) {
+    *why = "the ARMC and obliquity columns belong to house points";
+    return kOErrUnsupported;
+  }
+  if (o.kind == kObjHouse) {
+    // 3.5: no correction applies to a house point, so the correction mask
+    // does not enter; ApplyProfile is handed the one mask it always accepts.
+    Profile p = pf;
+    p.corrections = kCorrMask;
+    uint16_t e = ApplyProfile(p, timeScale, deltaTSec, c, why);
+    if (e) return e;
+    if (pf.observer != kObsTopo) {
+      *why = "a house point needs a topocentric profile: it supplies the site";
+      return kOErrUnsupported;
+    }
+    if (pf.plane != kPlaneEcliptic || pf.form != kFormSpherical ||
+        pf.frame != kFrameTrueOfDate || pf.siderealPlane != kSidPlaneDate) {
+      *why = "a house point is an ecliptic longitude of the true equinox of date";
+      return kOErrUnsupported;
+    }
+    if (pf.columns & (kColSigma | kColLightTime)) {
+      *why = "the sigma and light time columns do not apply to a house point";
+      return kOErrUnsupported;
+    }
+    c->kind = kCallHouse;
+    c->hsys = o.system;
+    c->hpoint = o.point;
+    c->iflag |= eph;
+    return kOErrNone;
+  }
   uint16_t err = ApplyProfile(pf, timeScale, deltaTSec, c, why);
   if (err) return err;
   c->iflag |= eph;
@@ -411,6 +444,8 @@ inline uint16_t MapObject(const Object &o, int32_t nNative, const Profile &pf,
 // value IS the field's contents.
 inline uint8_t CorrectionsLive(const SwissCall &c, uint8_t observer) {
   switch (c.kind) {
+    case kCallHouse:
+      return 0;   // no correction applies to a house point (3.5)
     case kCallPctr:
       // Light time and aberration, and NOT deflection.
       //
