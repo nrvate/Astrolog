@@ -1890,6 +1890,16 @@ older vintage**, as Vega's always was (4.4). Ours were re-queried and
   agreeing to 1.2e-10 relative** in distance rate, with its list of catalogue
   disagreements empty.
 
+**The machine's own `/swe/sefstars.txt` was the stock 2018 file** ("last modified
+26-oct-2018"), in which alpha Cen is ONE star, `alCen`, and Toliman an alias of
+it -- so a run under `-i nrvate.as`, whose `-Yi1` is `/swe`, never saw the
+refreshed catalogue and never got alpha Cen B or its orbit correction, and the
+new Toliman leg of the live-parity suite group failed there by 11.6" while
+passing under `-Yi1 ephem`. Backed up as `/swe/sefstars.txt.2018-orig` and
+replaced by the repo's file (a superset: the only names it lacks are the old
+`alCen` aliases). A user whose path finds an old stock file first gets the same
+silent loss; that is the data directory's, not a defect to detect here.
+
 **Alpha Centauri's parallax** was the other difference, and it is now the
 system value of **Akeson et al. 2021 (AJ 162, 14): 750.81 ± 0.38 mas** for
 both components, from SIMBAD's record for the system and the same paper the
