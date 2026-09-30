@@ -1,11 +1,12 @@
 # The thread-safe Swiss Ephemeris fork astrolog-ephd is built against, by
 # commit: tools/ephsrv-fork.sh and the container image fetch exactly this,
 # so a server binary is reproducible from one commit of this repository.
-# nrvate/swisseph, tag v2.10.03-ts.18 (2026-09-29): a sidereal node or
-# apsis from swe_nod_aps carries no nutation (G30), on top of ts.17's
+# nrvate/swisseph, tag v2.10.03-ts.19 (2026-09-30): the built-in Spica record
+# carries SIMBAD's radial velocity (G31), on top of ts.18's sidereal node or
+# apsis from swe_nod_aps carrying no nutation (G30), ts.17's
 # Vondrak mean obliquity as the pole angle (G28) and full IAU 2000A nutation
 # by default (G29), ts.16's fictitious-body fixes (G27) and ts.15's delta T
 # observer invalidation (G26). Move it
 # deliberately, after the server gates pass against the new commit.
 SWE_REPO=https://github.com/nrvate/swisseph.git
-SWE_COMMIT=ba1b1ecc4487f72fcdd1e33f38c8b9d22ace7ed8
+SWE_COMMIT=14462bf6a05c5ad3341797c98e984ba40703fb00

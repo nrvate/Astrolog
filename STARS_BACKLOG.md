@@ -38,10 +38,11 @@ with Prometheia for every object and stays in flight.
 3. **Registry §2.10**, a measurement trap: a star's distance rate is unstable
    within about five days of an ephemeris file's start. Nothing to fix; any
    future star sweep must avoid file edges.
-4. **Registry §4.4, Vega's radial velocity:** ours is −20.6 km/s from
-   `sefstars.txt`, Prometheia's −13.5 km/s from current SIMBAD. Editing the
-   shipped `sefstars.txt` is the maintainer's call. Prometheia keeps −13.5 and
-   records −20.6 as the 2018 value.
+4. **DONE 2026-09-30, at the maintainer's word: the radial velocities.**
+   `sefstars.txt` refreshed against SIMBAD (Regulus, Spica, Procyon, Vega;
+   Toliman's own line was already right and its problem was the placement
+   from A, now fixed); Spica also needed the fork's built-in record
+   (ts.19, G31). Registry §4.4, §4.4b.
 5. **Registry §2.4, α Cen's mass ratio:** 185 mas at 1900 on α Cen A between
    Akeson 2021's own masses (ours) and Pourbaix & Boffin 2016 (theirs).
    `tools/star-orbit-check.sh` prints it without grading it. Needs the two
@@ -72,13 +73,10 @@ with Prometheia for every object and stays in flight.
 10. **Performance, deferred:** a fixed star redoes its per-position work on
     every row; the side-call path's star brightness pass was never moved onto
     the registry.
-11. **Alpha Centauri's parallax and four radial velocities differ between the
-    engines** (registry §4.4b, 2026-09-30): Prometheia serves Rigil Kentaurus
-    at 754.9 mas and Toliman at 797.1 mas (Gaia DR3 single-star values for a
-    bright binary), ours 742.12 for both (Hipparcos 2007), and the orbit-derived
-    system value is about 747.2. Regulus, Spica, Procyon and Toliman radial
-    velocities differ by 1.3-7.3 km/s. Data, and the maintainer's call as for
-    Vega (item 4); nothing was re-queried.
+11. **DONE 2026-09-30, at the maintainer's word: alpha Centauri's parallax**
+    is 750.81 mas (Akeson et al. 2021, the paper the orbit correction takes
+    its masses from) for both components. Prometheia's 754.9 and 797.1 mas
+    are theirs (closed on their side; registry §4.4b).
 12. **Kind-4 Uranians are not stars,** but came up alongside them. Prometheia
     serves orbital elements (`prometheia_calc_elements`); routing the
     Uranians there with the user's own `seorbel.txt` elements is a follow-up

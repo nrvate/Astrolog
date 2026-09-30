@@ -330,11 +330,20 @@ static void StarOrbDirection(EPHSID_CTXDECL const EPHSTARORB *ps, double jdEt,
   for (i = 0; i < 3; i++) w[i] /= s;
 }
 
+// The distance a row carries, in AU, whatever form it is in.
+static double RStarOrbDist(int32 iflag, const double *xx)
+{
+  if (iflag & SEFLG_XYZ)
+    return sqrt(xx[0]*xx[0] + xx[1]*xx[1] + xx[2]*xx[2]);
+  return xx[2];
+}
+
 // Move a star position onto its orbit. xx is in the frame iflag names, as
 // Swiss answered it; for the star placed from another's line it is that other
 // star's position, so the whole excursion including the separation is applied
 // here. The distance is untouched -- these are angular offsets of a companion
-// at the same distance, and the components share a parallax in the catalogue.
+// at the same distance, and the components share a parallax in the catalogue --
+// except that rOwn, when given, replaces it (see the parameter below).
 //
 // The SPEED gets the offset's own rate, differenced over a day. Leaving it out
 // would make a client that differences two positions disagree with the speed
@@ -345,8 +354,16 @@ static void StarOrbDirection(EPHSID_CTXDECL const EPHSTARORB *ps, double jdEt,
 // is tropical. The caller reads it back from Swiss with the request's own
 // flags rather than computing one, so a true ayanamsa stays true and a mean
 // one stays mean.
+// rOwn is the distance to put on the row, or zero to leave the one it has.
+// alpha Cen B is placed from A's line, so the row arrives at A's distance and
+// A's radial velocity -- and B's own radial velocity is 7.3 km/s away from
+// A's, which is 4e-3 AU/day of distance rate that the placement would erase.
+// B's own answer is asked for first anyway (it resolves the name), so its
+// distance is on hand: the caller passes it here and the row keeps B's. The
+// parallax is one number for both since the catalogue's 2026-09-30 refresh,
+// so the two distances differ only by the radial drift.
 static void EphStarOrbApply(EPHSID_CTXDECL int iStar, double jdEt, int32 iflag,
-  double ayan, double *xx)
+  double ayan, double *xx, double rOwn)
 {
   const EPHSTARORB *ps;
   double u[3], w[3], wm[3], wp[3], r, f, lon, lat, dlon;
@@ -361,7 +378,7 @@ static void EphStarOrbApply(EPHSID_CTXDECL int iStar, double jdEt, int32 iflag,
   StarOrbDirection(EPHSID_CTXARG ps, jdEt - h, iflag, ayan, u, wm);
   StarOrbDirection(EPHSID_CTXARG ps, jdEt + h, iflag, ayan, u, wp);
   if (iflag & SEFLG_XYZ) {
-    r = sqrt(xx[0]*xx[0] + xx[1]*xx[1] + xx[2]*xx[2]);
+    r = rOwn > 0.0 ? rOwn : sqrt(xx[0]*xx[0] + xx[1]*xx[1] + xx[2]*xx[2]);
     for (i = 0; i < 3; i++) {
       xx[i] = w[i] * r;
       xx[i + 3] += (wp[i] - wm[i]) / (2.0 * h) * r;
@@ -373,6 +390,8 @@ static void EphStarOrbApply(EPHSID_CTXDECL int iStar, double jdEt, int32 iflag,
   if (lon < 0.0) lon += 2.0 * PI;
   xx[0] = lon * f;
   xx[1] = lat * f;
+  if (rOwn > 0.0)
+    xx[2] = rOwn;
   // The rate of the CORRECTION only: the star's own motion is already in the
   // speed columns, and the two endpoints here share one input direction. The
   // wrap matters -- a star a hair either side of zero longitude would
@@ -399,7 +418,7 @@ static int FEphStarOrbCall(EPHSID_CTXDECL const char *szResolved, double jdEt,
   int32 iflag, double *xx)
 {
   char serr[AS_MAXCH], szLine[SE_MAX_STNAME * 2];
-  double ayan = 0.0;
+  double ayan = 0.0, rOwn = 0.0;
   const int iStar = IStarOrbFind(szResolved);
   const char *szFrom;
 
@@ -407,6 +426,8 @@ static int FEphStarOrbCall(EPHSID_CTXDECL const char *szResolved, double jdEt,
     return 1;
   szFrom = SzStarOrbLine(iStar);
   if (szFrom != NULL) {
+    // xx holds the star's OWN answer on entry; its distance is kept.
+    rOwn = RStarOrbDist(iflag, xx);
     snprintf(szLine, sizeof(szLine), "%s", szFrom);
     if (EPHSTARORB_FIXSTAR(szLine, jdEt, iflag, xx, serr) < 0)
       return 0;
@@ -417,7 +438,7 @@ static int FEphStarOrbCall(EPHSID_CTXDECL const char *szResolved, double jdEt,
   if ((iflag & SEFLG_SIDEREAL) &&
       EPHSTARORB_AYANAMSA(jdEt, iflag, &ayan, serr) < 0)
     return 0;
-  EphStarOrbApply(EPHSID_CTXARG iStar, jdEt, iflag, ayan, xx);
+  EphStarOrbApply(EPHSID_CTXARG iStar, jdEt, iflag, ayan, xx, rOwn);
   return 1;
 }
 

@@ -3438,9 +3438,16 @@ instructions for a human to copy is the thing this direction exists to stop.
    P1 leg now uses `RSepArcsecQt()` at 1e-6", compares Sirius and Aldebaran in
    both zodiacs, and grades the rates; shown to fail with either half reverted.
 
-   *Also.* Prometheia's Toliman is 797.1 mas and its Rigil Kentaurus 754.9 mas
-   (two stars of one binary), ours 742.12 for both; the orbit value is about
-   747.2 (registry 4.4b).
+   *The catalogue, at the maintainer's word.* SIMBAD (queried that day)
+   confirmed Prometheia's radial velocities and showed ours to be the older
+   vintage: `sefstars.txt` now has Regulus +0.72, Spica -3.31, Procyon -4.51 and
+   Vega -13.5, and alpha Cen's parallax is 750.81 mas (Akeson et al. 2021) for
+   both components. Spica is answered from a record built into `sweph.c`, not
+   the file, so the fork moved too (**ts.19**, `14462bf`, G31, UPSTREAM-BUGS
+   22, `SWISSEPH_PIN` moved), and alpha Cen B now keeps its own distance through
+   the orbit placement (it had A's radial velocity, 7.3 km/s away). Every star
+   agrees with Prometheia's distance rate to 1.2e-10 relative; the instrument's
+   list of catalogue disagreements is empty. Registry 4.4b.
 
 38. **Coverage on the wire, a cross-engine gate, the sidereal-node defect
    it found, and v8.00-qt.25 (2026-09-29, later).**

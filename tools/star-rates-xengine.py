@@ -47,17 +47,13 @@ PROFILES = {
 BOUND_ANG = 3e-5     # deg/day, A.3 0x0013
 BOUND_DIST = 1e-9    # AU/day per max(1 AU, r)
 AU_PER_DAY_TO_KMS = 1.495978707e8 / 86400.0
-# Stars whose radial velocity the two catalogues give differently (measured
-# 2026-09-30 at J2000, geocentric; ours from sefstars.txt): the distance-rate
-# difference in km/s is the catalogue difference.
-CATALOGUE_RV = {
-    "Vega": "-20.6 (sefstars, 2018 vintage) against -13.5 (SIMBAD): registry 4.4",
-    "Regulus": "+5.9 against a value 5.2 km/s more negative on their side",
-    "Spica": "+1 against a value 4.3 km/s more negative on their side",
-    "Procyon": "-3.2 against a value 1.3 km/s more negative on their side",
-    "Toliman": "alpha Cen B: ours is placed from A, so it shares A's distance and "
-               "rate; theirs has its own parallax and RV (7.3 km/s apart)",
-}
+# Stars whose radial velocity the two catalogues give differently. EMPTY since
+# 2026-09-30, when sefstars.txt was refreshed against SIMBAD (registry 4.4b) and
+# alpha Cen B was given its own distance; it stays as the mechanism, because
+# the next disagreement is a catalogue line and not a rate. An entry maps the
+# star to the reason, and the ratchet in verdict() fails an entry that no
+# longer differs (measured at J2000, geocentric, in km/s).
+CATALOGUE_RV = {}
 
 
 def ask(port, jd, profile, star, out):
@@ -155,10 +151,11 @@ def selftest():
     ok = ang > BOUND_ANG
     print("  %s: the latitude rate is graded, not only the longitude rate" % ("ok" if ok else "FAIL"))
     bad |= not ok
-    bad |= verdict(1, {p: (0.0, "") for p in PROFILES}, {p: (0.0, "") for p in PROFILES},
-                   {s: 3.0 for s in CATALOGUE_RV}, True) != 0
-    ok = verdict(1, {p: (0.0, "") for p in PROFILES}, {p: (0.0, "") for p in PROFILES},
-                 {s: 0.0 for s in CATALOGUE_RV}, True) > 0
+    CATALOGUE_RV["Test"] = "a listed disagreement"
+    z = {p: (0.0, "") for p in PROFILES}
+    bad |= verdict(1, z, z, {"Test": 3.0}, True) != 0
+    ok = verdict(1, z, z, {"Test": 0.0}, True) > 0
+    del CATALOGUE_RV["Test"]
     print("  %s: a catalogue entry that no longer differs is flagged stale" % ("ok" if ok else "FAIL"))
     bad |= not ok
     return bad

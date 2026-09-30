@@ -1842,54 +1842,67 @@ having no instrument looks like when someone happens to look.
 *See also* [§2.12](#212), where the same Vega row sits above its
 quantisation floor on this side, so it is model rather than noise.
 
-### 4.4b More catalogue lines the two engines read differently — measured 2026-09-30
+### 4.4b More catalogue lines the two engines read differently — measured 2026-09-30, CLOSED the same day
 
 Found by the star-rate instrument (4.4a), which grades distance rates only
 for the stars whose catalogues agree. The distance rate is the radial
 velocity plus the observer's motion, so a disagreement of a few km/s in the
 column is a disagreement in the catalogue line. Geocentric, J2000, ours minus
-theirs, in km/s:
+theirs, in km/s, before the refresh:
 
-| star | difference | ours (`sefstars.txt`) |
-|---|---|---|
-| Vega | −7.10 | −20.6 (4.4) |
-| Toliman | +7.29 | −22.6, but placed from Rigil Kentaurus (−15.3) |
-| Regulus | +5.18 | +5.9 |
-| Spica | +4.31 | +1 |
-| Procyon | +1.31 | −3.2 |
+| star | difference | ours then | SIMBAD, queried 2026-09-30 |
+|---|---|---|---|
+| Vega | −7.10 | −20.6 | −13.5 (quality C, 2004A&A...420..183A) |
+| Toliman | +7.29 | −22.6, but placed from Rigil Kentaurus (−15.3) | −22.586 (its own line) |
+| Regulus | +5.18 | +5.9 | +0.72 (2020AJ....160..120J) |
+| Spica | +4.31 | +1 | −3.31 (2023ApJS..266...11B) |
+| Procyon | +1.31 | −3.2 | −4.51 (2020AJ....160..120J) |
 
-The projection is not in question: Sirius, Antares, Polaris, Canopus and
-Arcturus agree to 0.001–0.03 km/s (Aldebaran to 0.14). Ours for Regulus
-(+5.9), Spica (+1) and Procyon (−3.2) are the values this author remembers
-SIMBAD giving, but **none of the five was re-queried here**, so which side is
-current is not established -- the resolution is a re-query, as for Vega, and
-the other project's catalogue is theirs to re-query.
+**Their answer, the same day:** every difference equals the difference between
+the catalogues' radial velocities; theirs are SIMBAD, quality A-C, pinned
+2026-09-17; the projection agrees. **SIMBAD confirms them, and ours were the
+older vintage**, as Vega's always was (4.4). Ours were re-queried and
+**refreshed at the maintainer's word**:
 
-**Alpha Centauri is a different kind of finding, and it is a parallax.** The
-distances Prometheia serves at J2000 are 273,240 AU for Rigil Kentaurus (a
-parallax of 754.9 mas) and **258,786 AU for Toliman (797.1 mas)**, and ours
-are 277,940 AU (742.12 mas, Hipparcos 2007) for both. The two components of
-one binary, 35 AU apart at most, cannot be 14,000 AU from each other; 755 and
-797 mas are the Gaia DR3 values for a pair of bright stars whose single-star
-astrometry is known to be poor, and the system's parallax from its orbit and
-radial velocities is **747.17 ± 0.61 mas** (Kervella et al. 2016, A&A 594,
-A107 -- quoted from memory and not re-checked against the paper). So neither side is at the best value: ours is 0.7% far, theirs 1% far
-for A and 6.7% near for B. It moves an apparent position by at most the
-annual parallax times the error, 0.75" x 6.7% = 0.05" for Toliman. This
-server places B from A (2.4), so it shares A's distance, which is the
-physically right structure; the value is `sefstars.txt`'s, the maintainer's
-call as for Vega.
+* `sefstars.txt`: Regulus, Spica, Procyon and Vega radial velocities as above,
+  in every one of their lines (Regulus, Spica and Vega each appear under two
+  names), with a dated note in the file's header. **The header note once had
+  a blank line in it, which the fork's parser accepts and upstream's `swetest`
+  rejects as "damaged at line 72"** -- caught by the swetest oracle's star legs
+  (`tools/swetest-oracle.sh`), which is what they are for.
+* **Spica cannot be corrected by the file at all.** `swe_fixstar2()` answers
+  the name "Spica" from a record built into `sweph.c` (it serves
+  `SE_SIDM_TRUE_CITRA`) and never reads the catalogue for it, so the file edit
+  changed nothing and the difference stayed at +4.31 km/s until the fork's
+  record was corrected (fork ts.19, G31, `UPSTREAM-BUGS.md` 22; also the
+  vendored `sweph.cpp`). It moves the true-Citra ayanamsa by up to 0.014
+  arcsec in the golden baseline: a radial velocity reaches a position only
+  through perspective acceleration, which is second order in time. The other
+  built-in records were compared: Pushya and Mula are current.
+* **Toliman was not a catalogue line at all.** Its own line (−22.6) was
+  right and is what SIMBAD gives; the server and the application place alpha
+  Cen B from A's line plus the relative orbit, so B arrived with A's distance
+  and A's radial velocity, 7.3 km/s away. B now keeps its OWN distance through
+  the placement (`EphStarOrbApply()`'s `rOwn`, in the shared header, the
+  server's row and its stencil), so its distance rate is B's own. The two
+  distances differ only by the radial drift, since the parallax is one number.
+* After all of it, `tools/star-rates-xengine.py` reports **every star
+  agreeing to 1.2e-10 relative** in distance rate, with its list of catalogue
+  disagreements empty.
 
-**Their answer, 2026-09-30:** every difference above equals the difference
-between the two catalogues' radial velocities, to the precision quoted. Theirs
-are SIMBAD, quality A-C, pinned 2026-09-17: Regulus +0.72 (ours +5.9),
-Spica −3.31 (ours +1), Procyon −4.51 (ours −3.2), Vega −13.5 (ours −20.6, the
-maintainer's recorded decision), Toliman −22.59 from its own HR 5460 line
-(ours −15.3, A's). So the projection agrees and only the catalogue values
-differ; **they keep theirs as a data choice**, and for alpha Cen they place B
-from A with a known limit of about 0.7" per century and a distance effect of at
-most 0.05", and do not change it. Which side's radial velocities are current
-is still not established here -- `sefstars.txt` is the maintainer's call.
+**Alpha Centauri's parallax** was the other difference, and it is now the
+system value of **Akeson et al. 2021 (AJ 162, 14): 750.81 ± 0.38 mas** for
+both components, from SIMBAD's record for the system and the same paper the
+orbit correction takes its masses from (2.4). It replaces Hipparcos 1997's
+742.12. This entry once said the orbit-derived value was 747.17 mas (Kervella
+et al. 2016), quoted from memory; **that was not checked and SIMBAD's
+current system value is 750.81**, so the reference changed. Prometheia serves
+754.9 mas for Rigil Kentaurus and **797.1 mas for Toliman** (Gaia DR3
+single-star values for a bright binary, two stars of one system 14,000 AU
+apart in their distances); they consider it closed, with a model limit of
+about 0.7" per century and a distance effect of at most 0.05" on Toliman.
+Moved by the refresh: the apparent position of a component by up to the annual
+parallax times 1.2%, 9 mas.
 
 ### 4.5 Nessus — two orbit solutions 6.7″ apart, inside JPL's own 3σ
 

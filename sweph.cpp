@@ -6782,8 +6782,11 @@ static AS_BOOL get_builtin_star(char *star, char *sstar, char *srecord)
   /* some stars are built-in, because they are required for Hindu
    * sidereal ephemerides */
   /* Ayanamsha SE_SIDM_TRUE_CITRA */
+  /* Radial velocity -3.31 km/s (SIMBAD, 2023ApJS..266...11B), where the record
+   * carried +1: nothing reads a catalogue file for this name, so this line is
+   * the only place it can be corrected. Fork G31. */
   if (strncmp(star, "spica", 5) == 0 || strncmp(star, "Spica", 5) == 0) {
-    strcpy(srecord, "Spica,alVir,ICRS,13,25,11.57937,-11,09,40.7501,-42.35,-30.67,1,13.06,0.97,-10,3672");
+    strcpy(srecord, "Spica,alVir,ICRS,13,25,11.57937,-11,09,40.7501,-42.35,-30.67,-3.31,13.06,0.97,-10,3672");
     strcpy(sstar, "spica");
     return TRUE;
   /* Ayanamsha SE_SIDM_TRUE_REVATI */

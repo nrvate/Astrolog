@@ -21625,7 +21625,7 @@ static void TestEphSrvLiveQt()
     char szStarT[cchSzMax];
     real p1, p2, p3, p4, p5, p6, s1, s2, s3, s4, s5, s6, rD, jdT;
     int rgisrcSrv[1], rgisrcSw[1], iZod, iSt;
-    static CONST char *rgszP1[] = {"Sirius", "Aldebaran"};
+    static CONST char *rgszP1[] = {"Sirius", "Aldebaran", "Toliman"};
 
     rgisrcSrv[0] = IEphSrcFromKey("server");
     rgisrcSw[0] = IEphSrcFromKey("swiss");
@@ -21642,7 +21642,7 @@ static void TestEphSrvLiveQt()
       Check(!us.fSidereal || is.rSid != 0.0,
         "the sidereal star leg really has an ayanamsa (%.6f)", is.rSid);
 
-      for (iSt = 0; iSt < 2; iSt++) {
+      for (iSt = 0; iSt < 3; iSt++) {
         EphQueryInit(&eqp, jdT);
         sprintf2(S(szStarT), "%s", rgszP1[iSt]);
         FEphQueryAdd(&eqp, 1, 0, 0, szStarT);
@@ -21689,7 +21689,10 @@ static void TestEphSrvLiveQt()
         // changing without the other is exactly what this catches: the local
         // path alone reverted left every other check here green. Sirius is
         // an orbit star and Aldebaran is not, so the correction's rate is
-        // graded too. Same engine: the difference of two identical
+        // graded too; Toliman (alpha Cen B) is placed from A's line but keeps
+        // its own distance, so its distance rate is B's own, and it is the
+        // one where the server's inline path and the shared header's can
+        // part. Same engine: the difference of two identical
         // computations; a foreign one: the cross-engine bounds.
         {
           CONST flag fSame = strUrlEnv.isEmpty();

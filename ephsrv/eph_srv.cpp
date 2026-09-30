@@ -1308,6 +1308,7 @@ struct SrvStarRate {
   bool fUt;
   int iStar;
   char szAsk[SE_MAX_STNAME * 2];
+  char szOwn[SE_MAX_STNAME * 2];   // the star's own name, when szAsk is another's line
 };
 
 static int FSrvStarRatePoint(void *pv, double dj, double *xx) {
@@ -1322,11 +1323,21 @@ static int FSrvStarRatePoint(void *pv, double dj, double *xx) {
     : swe_fixstar2_r(p->ctx, nm, p->jdEt + dj, iflag, xx, serrD);
   if (r < 0) return 0;
   if (p->iStar >= 0) {
-    double ayan = 0.0;
+    double ayan = 0.0, rOwn = 0.0;
+    // alpha Cen B keeps its own distance: see EphStarOrbApply().
+    if (p->szOwn[0]) {
+      double xo[6];
+      snprintf(nm, sizeof(nm), "%s", p->szOwn);
+      if ((p->fUt
+            ? swe_fixstar2_ut_r(p->ctx, nm, p->jdUt + dj, iflag, xo, serrD)
+            : swe_fixstar2_r(p->ctx, nm, p->jdEt + dj, iflag, xo, serrD)) < 0)
+        return 0;
+      rOwn = RStarOrbDist(iflag, xo);
+    }
     if ((iflag & SEFLG_SIDEREAL) &&
         swe_get_ayanamsa_ex_r(p->ctx, p->jdEt + dj, iflag, &ayan, serrD) < 0)
       return 0;
-    EphStarOrbApply(p->ctx, p->iStar, p->jdEt + dj, iflag, ayan, xx);
+    EphStarOrbApply(p->ctx, p->iStar, p->jdEt + dj, iflag, ayan, xx, rOwn);
   }
   return 1;
 }
@@ -1529,6 +1540,7 @@ static void ComputeObjectRows(swe_ctx *ctx, const eph::Request &req, uint32_t iO
         // HANDS BACK -- it rewrites the buffer to "traditional,nomenclature"
         // on success -- so every alias of a star arrives as one key.
         const int iStar = ret >= 0 ? IStarOrbFind(star) : -1;
+        double rOwn = 0.0;
         if (iStar >= 0) {
           // alpha Cen B is placed from A plus the relative orbit, because B's
           // own solution is poor (+/-20-26 mas/yr). Its own line is asked for
@@ -1537,6 +1549,8 @@ static void ComputeObjectRows(swe_ctx *ctx, const eph::Request &req, uint32_t iO
           const char *szLine = SzStarOrbLine(iStar);
           if (szLine != NULL) {
             char starLine[SE_MAX_STNAME * 2];
+            // The star's own distance, kept across the placement below.
+            rOwn = RStarOrbDist(iflagBody, xx);
             snprintf(starLine, sizeof(starLine), "%s", szLine);
             ret = c.fUT && !fDtGiven
               ? swe_fixstar2_ut_r(ctx, starLine, jd, iflagBody, xx, serr)
@@ -1552,7 +1566,7 @@ static void ComputeObjectRows(swe_ctx *ctx, const eph::Request &req, uint32_t iO
               swe_get_ayanamsa_ex_r(ctx, jdEt(), iflagBody, &ayan, serr) < 0)
             ret = -1;
           if (ret >= 0)
-            EphStarOrbApply(ctx, iStar, jdEt(), iflagBody, ayan, xx);
+            EphStarOrbApply(ctx, iStar, jdEt(), iflagBody, ayan, xx, rOwn);
         }
         // Rates differenced from the positions answered, as for a body: the
         // row's own call, orbit included, at four offsets (registry 2.11a,
@@ -1566,6 +1580,7 @@ static void ComputeObjectRows(swe_ctx *ctx, const eph::Request &req, uint32_t iO
           ssr.iStar = iStar;
           const char *szLine = iStar >= 0 ? SzStarOrbLine(iStar) : NULL;
           snprintf(ssr.szAsk, sizeof(ssr.szAsk), "%s", szLine != NULL ? szLine : star);
+          snprintf(ssr.szOwn, sizeof(ssr.szOwn), "%s", szLine != NULL ? star : "");
           if (!EphNodRateDiff(&FSrvStarRatePoint, &ssr, xx,
                 (iflagBody & SEFLG_RADIANS) != 0, (iflagBody & SEFLG_XYZ) != 0))
             e->meta[iObj].flags |= eph::kMetaRatesApprox;
@@ -3033,7 +3048,7 @@ static std::string MetricsText() {
     refused += lc.m.refusedConns; helloTimeouts += lc.m.helloTimeouts;
     for (int b = 0; b < kComputeBuckets; b++) buckets[b] += lc.m.computeBucket[b];
   }
-  char sz[256];
+  char sz[512];
   std::string out;
   auto line = [&](const char *help, const char *type, const char *name,
                   uint64_t v) {
