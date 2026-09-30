@@ -3449,6 +3449,14 @@ instructions for a human to copy is the thing this direction exists to stop.
    agrees with Prometheia's distance rate to 1.2e-10 relative; the instrument's
    list of catalogue disagreements is empty. Registry 4.4b.
 
+   *The release.* v8.00-qt.26 published from `edd508c` and verified as
+   downloaded. The first dry run failed on macOS alone: Apple's clang marks bare
+   `sprintf` deprecated, two had been written in the star-rate code, and no
+   Linux net could see it. `tools/raw-sprintf-check.sh` (in `make check`, its
+   selftest in `ci-selftest.sh`) now refuses one. The machine's
+   `/swe/sefstars.txt` (the stock 2018 file) was replaced by the repo's, backup
+   `/swe/sefstars.txt.2018-orig`.
+
 38. **Coverage on the wire, a cross-engine gate, the sidereal-node defect
    it found, and v8.00-qt.25 (2026-09-29, later).**
 
