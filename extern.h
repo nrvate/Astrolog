@@ -641,6 +641,7 @@ extern void SwissHouse P((real, real, real, int,
   real *, real *, real *, real *, real *, real *, real *, real *));
 extern real RObliquityTrue P((real));
 extern void SwissEnsurePath P((void));
+extern CONST char *SzSwissPathSet P((void));
 extern void SwissComputeStars P((real, flag));
 extern flag SwissComputeStar P((real, ES *));
 extern flag SwissComputeStarSort P((real, ES *));

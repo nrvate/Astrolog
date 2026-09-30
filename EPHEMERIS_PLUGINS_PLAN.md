@@ -3449,6 +3449,19 @@ instructions for a human to copy is the thing this direction exists to stop.
    agrees with Prometheia's distance rate to 1.2e-10 relative; the instrument's
    list of catalogue disagreements is empty. Registry 4.4b.
 
+   *The Uranians follow the user's seorbel.txt (after qt.26).* The Prometheia
+   source computed every fictitious body from the stock elements compiled into
+   it, so an edited `seorbel.txt` changed Cupido for the Swiss source and the
+   server and not for this one: the same chart, a different body by source. It
+   now reads the first `seorbel.txt` on the search path Swiss was handed
+   (`SzSwissPathSet()`), re-reading when the file changes as Swiss does, and
+   keeps the compiled set as the fallback for no file or one it cannot follow
+   (a warning says so). Its grammar is `tools/seorbel2prom.py`'s; the suite
+   requires the two to agree exactly on the stock file (0), and an edited file
+   moves the source's Cupido 59,010" and lands 0.0000" from Swiss's; each
+   sabotaged. The machine's `/swe/seorbel.txt` is an older 20-set file, which
+   Swiss and now this source both follow.
+
    *The release.* v8.00-qt.26 published from `edd508c` and verified as
    downloaded. The first dry run failed on macOS alone: Apple's clang marks bare
    `sprintf` deprecated, two had been written in the star-rate code, and no

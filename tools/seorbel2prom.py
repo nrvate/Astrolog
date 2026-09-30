@@ -7,9 +7,12 @@ prometheia_calc_elements().
     python3 tools/seorbel2prom.py seorbel.txt | diff - ephpromelem.h   # check
 
 The input is upstream's file (aloistr/swisseph master, ephe/seorbel.txt),
-byte-identical to this tree's copy since 2026-09-29, so every fictitious
-body Astrolog asks the Prometheia source for is computed from the stock
-elements whatever seorbel.txt sits on a user's -Yi path.
+byte-identical to this tree's copy since 2026-09-29. Since 2026-09-30 this
+table is only the FALLBACK: the Prometheia source reads the first seorbel.txt
+on the search path Swiss was handed, as Swiss does (ephprom.cpp,
+PeEphPromElem), and uses these stock sets where there is none or the file
+cannot be followed. The reader's grammar is this file's, and the suite
+requires the two to agree exactly on the stock file.
 
 A set is one non-comment line: epoch, equinox, mean anomaly, semi-major
 axis, eccentricity, argument of perihelion, ascending node, inclination,

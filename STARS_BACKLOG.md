@@ -77,15 +77,19 @@ with Prometheia for every object and stays in flight.
     is 750.81 mas (Akeson et al. 2021, the paper the orbit correction takes
     its masses from) for both components. Prometheia's 754.9 and 797.1 mas
     are theirs (closed on their side; registry §4.4b).
-12. **Kind-4 Uranians are not stars,** but came up alongside them. Prometheia
-    serves orbital elements (`prometheia_calc_elements`); routing the
-    Uranians there with the user's own `seorbel.txt` elements is a follow-up
-    decision for the maintainer. Not parked here, just noted.
+12. **DONE 2026-09-30, at the maintainer's word: the Uranians follow the
+    user's `seorbel.txt`** in the Prometheia source, as they do in Swiss and the
+    server. Not a star item; it sat here because it came up beside them.
+    `ephprom.cpp` reads the first `seorbel.txt` on the search path Swiss was
+    handed and sends its elements as kind 4; the stock set compiled in
+    (`ephpromelem.h`) is the fallback. Nets: the reader agrees exactly with the
+    generator on the stock file, and an edited file moves the source's Cupido by
+    59,000" and lands 0.0000" from Swiss's (both sabotaged).
 
 ## Where the evidence lives
 
 - `EPHEMERIS_ACCURACY_REGISTRY.md`: §1.4, §2.4, §2.5, §2.10, §2.11a, §2.12,
-  §4.4, §4.4a.
+  §4.4, §4.4a, §4.4b.
 - `CLIENT_SERVER_REVIEW.md`: T1, and P3 (Prometheia's analytic star rate,
   confirmed from this side).
 - `EPHEMERIS_PLUGINS_PLAN.md` work log items 30–36.

@@ -29,6 +29,7 @@
 #include <prometheia/prometheia.h>
 #include <math.h>
 #include <string.h>
+#include <sys/stat.h>
 
 // --------------------------------------------------------------------------
 // Parameters (4.2/4.3). The DECLARATIONS are rows of the generated table
@@ -162,6 +163,288 @@ flag FEphPromFindFile(CONST char *szFile, char *szPath, int cch)
     return fTrue;
   }
   return fFalse;
+}
+
+// --------------------------------------------------------------------------
+// The fictitious bodies' elements: Swiss's seorbel.txt, read here.
+//
+// Swiss computes Cupido, Vulcanus and the rest from the elements in the
+// FIRST seorbel.txt on its search path, so a user who edits that file has
+// changed those bodies. This source used to compute them from the stock
+// file compiled in (ephpromelem.h), and so gave the user's chart a
+// different Cupido than the Swiss source, the server and every other build
+// gave it -- silently, on a change of source. It now reads the same file
+// the same way and keeps the compiled set only as the fallback, for a
+// search path that holds none or a file it cannot follow.
+//
+// The grammar is tools/seorbel2prom.py's, which generated the compiled set,
+// and the suite requires the two to agree on the stock file (REphPromElemDiff).
+// A set is one non-comment line: epoch, equinox, the six elements, name, and
+// an optional "geo". Each element is a polynomial in T, "c0 + c1 * T + c2 * T2".
+
+#define cElemUserMax 128
+static EPHPROMELEM rgElemUser[cElemUserMax];
+static char rgszElemUser[cElemUserMax][cchSzDef];
+static int cElemUser = 0;
+static char szElemFile[cchSzMax + 16] = "";    // the file the sets came from
+static long lElemSize = -1;
+static time_t tElemMod = 0;
+static flag fElemUser = fFalse;           // the sets in use are the file's
+
+// One polynomial, "252.89 + 707550.7 * T + 0.1 * T2", into five
+// coefficients. fFalse if any character is not part of one.
+static flag FElemPoly(CONST char *szIn, double *rg)
+{
+  char sz[cchSzMax], *pch;
+  CONST char *p;
+  int i, c = 0;
+
+  for (p = szIn; *p && c < (int)sizeof(sz) - 1; p++)
+    if (*p != ' ' && *p != '\t' && *p != '\r')
+      sz[c++] = *p;
+  sz[c] = chNull;
+  for (i = 0; i < 5; i++)
+    rg[i] = 0.0;
+  p = sz;
+  if (*p == chNull)
+    return fFalse;
+  while (*p) {
+    double v;
+    int n = 0;
+
+    i = 1;
+    if (*p == '+' || *p == '-') {
+      if (*p == '-')
+        i = -1;
+      p++;
+    }
+    if (!((*p >= '0' && *p <= '9') || *p == '.'))
+      return fFalse;
+    v = strtod(p, &pch);
+    if (pch == p)
+      return fFalse;
+    p = pch;
+    if (p[0] == '*' && p[1] == 'T') {
+      n = 1;
+      p += 2;
+      if (*p >= '0' && *p <= '9') {
+        n = *p - '0';
+        p++;
+      }
+    }
+    if (n > 4)
+      return fFalse;
+    rg[n] += i * v;
+  }
+  return fTrue;
+}
+
+// Julian Day of an epoch or equinox field: J1900, B1950, J2000 or a number.
+static flag FElemEpoch(CONST char *sz, double *pjd)
+{
+  char *pch;
+
+  if (FEqSz(sz, "J1900")) { *pjd = 2415020.0; return fTrue; }
+  if (FEqSz(sz, "B1950")) { *pjd = 2433282.42345905; return fTrue; }
+  if (FEqSz(sz, "J2000")) { *pjd = 2451545.0; return fTrue; }
+  *pjd = strtod(sz, &pch);
+  return pch != sz && *pch == chNull;
+}
+
+// The trimmed copy of a comma-separated field.
+static void ElemField(char *pchIn, char *szOut, int cch)
+{
+  char *pchEnd;
+
+  while (*pchIn == ' ' || *pchIn == '\t')
+    pchIn++;
+  pchEnd = pchIn + CchSz(pchIn);
+  while (pchEnd > pchIn && (pchEnd[-1] == ' ' || pchEnd[-1] == '\t' ||
+    pchEnd[-1] == '\r' || pchEnd[-1] == '\n'))
+    pchEnd--;
+  cch = Min(cch - 1, (int)(pchEnd - pchIn));
+  memcpy(szOut, pchIn, cch);
+  szOut[cch] = chNull;
+}
+
+// Parse a whole seorbel.txt into prgel[]/prgsz[], up to cMax sets. Returns
+// the number of sets, or -1 if any line is not one Swiss's grammar and this
+// one both accept.
+static int CElemParse(CONST char *szFile, EPHPROMELEM *prgel,
+  char (*prgsz)[cchSzDef], int cMax)
+{
+  FILE *file = fopen(szFile, "r");
+  char szLine[1024], rgsz[10][cchSzDef], *pch, *pchNext;
+  int c = 0, k, ie, it;
+  double jd, rgc[5];
+  flag fBad = fFalse;
+
+  if (file == NULL)
+    return -1;
+  while (!fBad && fgets(szLine, sizeof(szLine), file) != NULL) {
+    for (pch = szLine; *pch == ' ' || *pch == '\t'; pch++)
+      ;
+    if (*pch == chNull || *pch == '#' || *pch == '\r' || *pch == '\n')
+      continue;
+    pchNext = strchr(pch, '#');
+    if (pchNext != NULL)
+      *pchNext = chNull;
+    for (k = 0; k < 10; k++)
+      rgsz[k][0] = chNull;
+    for (k = 0; k < 10 && pch != NULL; k++) {
+      pchNext = strchr(pch, ',');
+      if (pchNext != NULL)
+        *pchNext++ = chNull;
+      ElemField(pch, rgsz[k], cchSzDef);
+      pch = pchNext;
+    }
+    if (k < 9 || c >= cMax) {
+      fBad = fTrue;
+      break;
+    }
+    ClearB((pbyte)&prgel[c], sizeof(EPHPROMELEM));
+    if (!FElemEpoch(rgsz[0], &jd)) { fBad = fTrue; break; }
+    prgel[c].epoch = jd;
+    if (FEqSz(rgsz[1], "JDATE")) {
+      prgel[c].equinox = 3;
+    } else if (FEqSz(rgsz[1], "J2000")) {
+      prgel[c].equinox = 0;
+    } else if (FEqSz(rgsz[1], "B1950")) {
+      prgel[c].equinox = 1;
+    } else if (FEqSz(rgsz[1], "J1900")) {
+      prgel[c].equinox = 2;
+    } else {
+      prgel[c].equinox = 4;
+      if (!FElemEpoch(rgsz[1], &jd)) { fBad = fTrue; break; }
+      prgel[c].equinoxJd = jd;
+    }
+    for (ie = 0; ie < 6 && !fBad; ie++) {
+      if (!FElemPoly(rgsz[2 + ie], rgc)) { fBad = fTrue; break; }
+      for (it = 0; it < 5; it++)
+        prgel[c].el[ie][it] = rgc[it];
+    }
+    if (fBad)
+      break;
+    prgel[c].centre = k > 9 && FEqSz(rgsz[9], "geo") ? 1 : 0;
+    sprintf2(prgsz[c], cchSzDef, "%s", rgsz[8]);
+    prgel[c].szName = prgsz[c];
+    c++;
+  }
+  fclose(file);
+  return fBad ? -1 : c;
+}
+
+// The first seorbel.txt on the path Swiss was handed.
+static flag FElemFind(char *szOut, int cch)
+{
+  CONST char *szPath = SzSwissPathSet();
+  char szDir[cchSzMax], szTry[cchSzMax + 16];
+  int cchDir;
+
+  while (szPath != NULL && *szPath) {
+    for (cchDir = 0; szPath[cchDir] && szPath[cchDir] != (PATH_SEPARATOR[0]); cchDir++)
+      ;
+    cchDir = Min(cchDir, cchSzMax - 1);
+    memcpy(szDir, szPath, cchDir);
+    szDir[cchDir] = chNull;
+    if (cchDir > 0) {
+      sprintf2(S(szTry), "%s%c%s", szDir, chDirSep, "seorbel.txt");
+      if (FFileExists(szTry)) {
+        sprintf2(szOut, cch, "%s", szTry);
+        return fTrue;
+      }
+    }
+    szPath += cchDir;
+    if (*szPath == (PATH_SEPARATOR[0]))
+      szPath++;
+  }
+  return fFalse;
+}
+
+// Element set i of Swiss's fictitious body SE_FICT_OFFSET + i, or NULL if
+// there is no such set. Reloads when the file on the path, its size or its
+// modification time is not the one the sets came from.
+static CONST EPHPROMELEM *PeEphPromElem(int i)
+{
+  char szFile[cchSzMax + 16];
+  struct stat st;
+  int c;
+
+  if (i < 0)
+    return NULL;
+  if (FElemFind(szFile, sizeof(szFile)) && stat(szFile, &st) == 0) {
+    if (!FEqSz(szFile, szElemFile) || (long)st.st_size != lElemSize ||
+      st.st_mtime != tElemMod) {
+      c = CElemParse(szFile, rgElemUser, rgszElemUser, cElemUserMax);
+      sprintf2(S(szElemFile), "%s", szFile);
+      lElemSize = (long)st.st_size;
+      tElemMod = st.st_mtime;
+      cElemUser = c;
+      fElemUser = c >= 0;
+      if (c < 0) {
+        char szT[cchSzMax + 16 + 120];
+
+        sprintf2(S(szT), "%s has a line the Prometheia source cannot read; "
+          "the fictitious bodies use the stock elements instead.", szFile);
+        PrintWarning(szT);
+      }
+    }
+  } else {
+    szElemFile[0] = chNull;
+    lElemSize = -1;
+    tElemMod = 0;
+    fElemUser = fFalse;
+  }
+  if (fElemUser)
+    return i < cElemUser ? &rgElemUser[i] : NULL;
+  return i < cEphPromElem ? &rgEphPromElem[i] : NULL;
+}
+
+int CEphPromElemSets(char *szFile, int cch)
+{
+  CONST EPHPROMELEM *pe = PeEphPromElem(0);
+
+  sprintf2(szFile, cch, "%s", fElemUser ? szElemFile : "");
+  return pe == NULL ? 0 : fElemUser ? cElemUser : cEphPromElem;
+}
+
+// Two names are the same if they agree up to the first non-ASCII byte in
+// either: the generator wrote a byte it could not decode (the e-grave of
+// Kore, Latin-1 in the file) as a multi-byte placeholder, and this reads the
+// byte as it is.
+static flag FElemNameSame(CONST char *sz1, CONST char *sz2)
+{
+  for (; *sz1 && *sz2 && (byte)*sz1 < 0x80 && (byte)*sz2 < 0x80; sz1++, sz2++)
+    if (*sz1 != *sz2)
+      return fFalse;
+  return fTrue;
+}
+
+double REphPromElemDiff(CONST char *szFile)
+{
+  static EPHPROMELEM rgel[cElemUserMax];
+  static char rgsz[cElemUserMax][cchSzDef];
+  int c = CElemParse(szFile, rgel, rgsz, cElemUserMax), i, ie, it;
+  double r, rMax = 0.0;
+
+  if (c != cEphPromElem)
+    return -1.0;
+  for (i = 0; i < c; i++) {
+    if (rgel[i].equinox != rgEphPromElem[i].equinox ||
+      rgel[i].centre != rgEphPromElem[i].centre ||
+      !FElemNameSame(rgel[i].szName, rgEphPromElem[i].szName))
+      return -2.0;
+    r = RAbs(rgel[i].epoch - rgEphPromElem[i].epoch);
+    rMax = Max(rMax, r);
+    r = RAbs(rgel[i].equinoxJd - rgEphPromElem[i].equinoxJd);
+    rMax = Max(rMax, r);
+    for (ie = 0; ie < 6; ie++)
+      for (it = 0; it < 5; it++) {
+        r = RAbs(rgel[i].el[ie][it] - rgEphPromElem[i].el[ie][it]);
+        rMax = Max(rMax, r);
+      }
+  }
+  return rMax;
 }
 
 // The ephemeris, catalog and perturbers resolved to paths. An empty
@@ -1025,12 +1308,12 @@ static flag FSubmitProm(EPHQUERY *pq)
       rgobj[i].method = ss.nNodMethod == SE_NODBIT_OSCU ? eph::kMethOsculating :
         eph::kMethMean;
     } else if (ss.iobj >= SE_FICT_OFFSET &&
-      ss.iobj - SE_FICT_OFFSET < cEphPromElem) {
-      // A fictitious body: its elements from the stock seorbel.txt, compiled
-      // in (ephpromelem.h), so it is the same body whatever file sits on a
-      // user's -Yi path, and every set is served -- Vulcan included, which
-      // the engine's shipped token set does not define.
-      CONST EPHPROMELEM *pe = &rgEphPromElem[ss.iobj - SE_FICT_OFFSET];
+      PeEphPromElem(ss.iobj - SE_FICT_OFFSET) != NULL) {
+      // A fictitious body: its elements from the seorbel.txt Swiss would
+      // read, else the stock set compiled in (ephpromelem.h), and every set
+      // is served -- Vulcan included, which the engine's shipped token set
+      // does not define.
+      CONST EPHPROMELEM *pe = PeEphPromElem(ss.iobj - SE_FICT_OFFSET);
       int ie, it;
       rgobj[i].kind = eph::kObjElements;
       rgobj[i].name = pe->szName;

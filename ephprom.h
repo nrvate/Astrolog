@@ -61,6 +61,18 @@ CONST char *SzEphPromParam(int iParam);
 // the program.
 flag FEphPromFindFile(CONST char *szFile, char *szPath, int cch);
 
+// The fictitious bodies' element sets, which are Swiss's own seorbel.txt:
+// the first one on the search path Swiss was handed, exactly as Swiss finds
+// it, and the stock set compiled in (ephpromelem.h) only where none is
+// found or the file cannot be understood. The sets are read again whenever
+// the file changes, as Swiss reads it on every call. These are for the
+// suite: how many sets are in use, and from which file ("" for the compiled
+// ones); and how far a file's parsed sets are from the compiled ones,
+// largest absolute difference over every coefficient, or a negative number
+// when it cannot be parsed or has a different number of sets.
+int CEphPromElemSets(char *szFile, int cch);
+double REphPromElemDiff(CONST char *szFile);
+
 // 4.1's FAvailable: can this source answer at all? The reason names the
 // first thing missing (the ephemeris file, a named catalog). The
 // EPHSRCDEF's own FAvailable is the compiled-in answer; this one adds

@@ -20821,8 +20821,8 @@ static void TestPrometheiaQt()
         real rWorst = 0.0, rLim;
         char szWorst[cchSzDef] = "";
         for (iSel = 0; iSel < cObjSel; iSel++) {
-          // The Uranians, Vulcan included, are the stock seorbel.txt's
-          // elements compiled in (ephpromelem.h) and computed by the
+          // The Uranians, Vulcan included, are the first seorbel.txt's
+          // elements on Swiss's path (the compiled stock set otherwise) and computed by the
           // engine's two-body entry point.
           cNum++;
           rgTypSwiss[0] = rgObjSel[iSel].nTyp;
@@ -20868,6 +20868,100 @@ static void TestPrometheiaQt()
           cNear);
       } else
         printf("  skipped: no catalog, so no Object Selections leg\n");
+
+      // THE USER'S seorbel.txt, which the Prometheia source used to ignore in
+      // favour of the stock elements compiled into it (2026-09-30). Swiss
+      // computes a fictitious body from the FIRST seorbel.txt on its search
+      // path, so an edited file changed Cupido for the Swiss source and the
+      // server and did nothing here: the same chart, a different Cupido by
+      // source. Three things are held. The reader's grammar agrees with the
+      // generator that made the compiled set on the stock file, exactly. An
+      // edited file moves this source's Cupido, by much more than the
+      // tolerance. And it lands where Swiss's does, which is the point.
+      {
+        char szStock[cchSzMax], szTmp[cchSzMax], szUsed[cchSzMax];
+        QTemporaryDir dirEl;
+        QString strCwd = QDir::currentPath();
+        real rDiff, rMoved = 0.0, rAgree = 0.0, rStockH1, rStockH2;
+        int cSets, cStock = 0, iCup = uranLo + 1;
+        flag fPathSav = is.fSwissPathSet;
+
+        sprintf2(S(szStock), "%s/seorbel.txt", QCoreApplication::
+          applicationDirPath().toLocal8Bit().constData());
+        rDiff = REphPromElemDiff(szStock);
+        printf("  elements: the stock file read at run time against the "
+          "compiled set: %.3g\n", rDiff);
+        Check(rDiff >= 0.0 && rDiff < 1e-12, "seorbel.txt parses to the "
+          "compiled elements exactly (%.3g)", rDiff);
+        Check(dirEl.isValid(), "a scratch directory for an edited "
+          "seorbel.txt");
+        if (dirEl.isValid() && FFileExists(szStock)) {
+          QFile fileIn(szStock);
+          QByteArray baEl;
+
+          if (fileIn.open(QIODevice::ReadOnly)) {
+            baEl = fileIn.readAll();
+            fileIn.close();
+          }
+          // The first row's semi-major axis, 40.99837 AU, becomes 45.
+          Check(baEl.contains("40.99837"), "the stock seorbel.txt still has "
+            "the row this leg edits");
+          baEl.replace("40.99837", "45.00000");
+          sprintf2(S(szTmp), "%s/seorbel.txt",
+            dirEl.path().toLocal8Bit().constData());
+          QFile fileOut(szTmp);
+
+          if (fileOut.open(QIODevice::WriteOnly)) {
+            fileOut.write(baEl);
+            fileOut.close();
+          }
+          // Stock first: this source's Cupido, and Swiss's, from the tree.
+          cStock = CEphPromElemSets(szUsed, sizeof(szUsed));
+          OraclePinUtQt(1990, 6, 15, 12.0);
+          ciCore.lon = 122.3; ciCore.lat = 47.6;
+          CastChart(0);
+          jd = JulianDayFromTime(is.T);
+          EphQueryInit(&eqh, jd);
+          FEphQueryAdd(&eqh, iCup, 0, oEar, NULL);
+          FEphSubmitChain(&eqh, rgisrc, 1);
+          fHost = FEphRead(&eqh, iCup, &h1, &h2, &h3, &h4, &h5, &h6);
+          rStockH1 = h1; rStockH2 = h2;
+          Check(fHost && eqh.rgisrc[0] == rgisrc[0], "Cupido is answered by "
+            "this source from the stock file");
+          // Then the edited file first on the path: the working directory
+          // is the first directory Swiss looks in.
+          Check(QDir::setCurrent(dirEl.path()), "the scratch directory "
+            "becomes the working directory");
+          is.fSwissPathSet = fFalse;
+          SwissEnsurePath();
+          cSets = CEphPromElemSets(szUsed, sizeof(szUsed));
+          printf("  elements: %d sets in use, from %s\n", cSets,
+            szUsed[0] ? szUsed : "the compiled set");
+          Check(szUsed[0] != chNull && cSets == cStock,
+            "the edited file is the one in use (%d sets, %d in the stock)",
+            cSets, cStock);
+          EphQueryInit(&eqh, jd);
+          FEphQueryAdd(&eqh, iCup, 0, oEar, NULL);
+          FEphSubmitChain(&eqh, rgisrc, 1);
+          fHost = FEphRead(&eqh, iCup, &h1, &h2, &h3, &h4, &h5, &h6);
+          fDirect = FSwissPlanet(iCup, jd, oEar, &r1, &r2, &r3, &r4, &r5,
+            &r6);
+          if (fHost && fDirect) {
+            rMoved = SphDistance(h1, h2, rStockH1, rStockH2) * 3600.0;
+            rAgree = SphDistance(h1, h2, r1, r2) * 3600.0;
+          }
+          printf("  elements: the edit moved Cupido %.1f\" here and left "
+            "%.4f\" from Swiss\n", rMoved, rAgree);
+          Check(fHost && fDirect && rMoved > 100.0, "the edited seorbel.txt "
+            "moves this source's Cupido (%.1f\")", rMoved);
+          Check(fHost && fDirect && rAgree < 1.0, "and it lands within 1\" "
+            "of Swiss's (%.4f\")", rAgree);
+          QDir::setCurrent(strCwd);
+          is.fSwissPathSet = fFalse;
+          SwissEnsurePath();
+        }
+        is.fSwissPathSet = fPathSav;
+      }
 
       // The long-span file (prometheia.longspan, or DE441 by name on the
       // -Yi paths): an instant outside DE440's 1550-2650 is answered by

@@ -3183,6 +3183,18 @@ static int CDirJoinEphemQ(CONST EDL *pedl, char *szPath, int cchPath,
 }
 
 
+// The search path Swiss was actually handed, for a source that reads one of
+// Swiss's data files itself and must find the file Swiss would. Empty until
+// SwissEnsurePath() has run.
+static char szSwissPathSet[AS_MAXCH];
+
+CONST char *SzSwissPathSet()
+{
+  SwissEnsurePath();
+  return szSwissPathSet;
+}
+
+
 // Set up path for Swiss Ephemeris to search in for ephemeris files.
 
 void SwissEnsurePath()
@@ -3317,6 +3329,7 @@ void SwissEnsurePath()
     PrintWarning(szT);
   }
   swe_set_ephe_path(szPath);
+  sprintf2(S(szSwissPathSet), "%s", szPath);
   is.fSwissPathSet = fTrue;
 
   // Delta-T is a function of WHICH ephemeris answers: the library takes
