@@ -1108,7 +1108,11 @@ static int HouseValue(swe_ctx *ctx, const HouseQ &q, double dj, double *plon,
   if (swe_calc_ut_r(ctx, jdUt, SE_ECL_NUT, 0, nut, serr) < 0) return -1;
   const double eps = nut[0];
   const bool fPolar = fabs(q.lat) > 90.0 - eps;
-  if (fPolar && (q.hsys == eph::kHsPlacidus || q.hsys == eph::kHsKoch)) {
+  // The angles (13..16) are the same in every system (3.5b), so they are asked
+  // of Porphyry, which is defined wherever they are, and only a cusp of
+  // Placidus or Koch is refused inside the polar circle.
+  const int hsys = q.hpoint > 12 ? eph::kHsPorphyry : q.hsys;
+  if (fPolar && q.hpoint <= 12 && (q.hsys == eph::kHsPlacidus || q.hsys == eph::kHsKoch)) {
     snprintf(serr, AS_MAXCH, "this house system is undefined inside the polar circle");
     return -1;
   }
@@ -1117,7 +1121,7 @@ static int HouseValue(swe_ctx *ctx, const HouseQ &q, double dj, double *plon,
   if (swe_houses_ex2_r(ctx, jdUt, 0, q.lat, q.lonE, 'O', cusp, asc, nullptr, nullptr, serr) < 0)
     return -1;
   const double armc = asc[2];
-  if (swe_houses_armc_ex2_r(ctx, armc, q.lat, eps, kHouseLetter[q.hsys], cusp, asc,
+  if (swe_houses_armc_ex2_r(ctx, armc, q.lat, eps, kHouseLetter[hsys], cusp, asc,
                             nullptr, nullptr, serr) < 0) {
     snprintf(serr, AS_MAXCH, "this house system is undefined here");
     return -1;
@@ -1597,7 +1601,7 @@ static void ComputeObjectRows(swe_ctx *ctx, const eph::Request &req, uint32_t iO
           // stencil point, or a jump of more than 90 degrees between two
           // adjacent points, leaves the rates 0 and sets ratesApprox for
           // the object; Whole Sign's rates are 0 always.
-          if (pf.speeds && c.hsys != eph::kHsWholeSign) {
+          if (pf.speeds && !(c.hsys == eph::kHsWholeSign && c.hpoint <= 12)) {
             const double h = 1.0 / 1024.0, dj[4] = {-2.0 * h, -h, h, 2.0 * h};
             double v[4], a0, a1, a2;
             char serrD[AS_MAXCH];

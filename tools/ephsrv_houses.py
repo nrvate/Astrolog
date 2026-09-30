@@ -36,8 +36,11 @@ def grade_row(system, point, lat, ayan, lon, armc, eps, refused):
     name = H.SYSTEMS[system]
     if abs(lat) >= 90.0:
         return [] if refused else ["%s point %d answered at a pole" % (name, point)]
-    beyond = name in ("placidus", "koch") and abs(lat) > 90.0 - eps
-    band = name in ("placidus", "koch") and abs(abs(lat) - (90.0 - eps)) * 3600.0 <= 1.0
+    # only a CUSP of Placidus or Koch is undefined there: the four angles are
+    # the same in every system and answer wherever they are defined
+    pk = name in ("placidus", "koch") and point <= 12
+    beyond = pk and abs(lat) > 90.0 - eps
+    band = pk and abs(abs(lat) - (90.0 - eps)) * 3600.0 <= 1.0
     if refused:
         if beyond or band:
             return []
@@ -63,8 +66,8 @@ def reference_rate(system, point, lat, armc, eps):
     """3.5's rate for a house point: the five-point stencil of the answered
     longitude at h = 1/1024 day, 0 for Whole Sign, None across a jump."""
     name = H.SYSTEMS[system]
-    if name == "whole-sign":
-        return 0.0
+    if name == "whole-sign" and point <= 12:
+        return 0.0                  # its CUSPS are steps; its angles are not
     hh = 1.0 / 1024.0
 
     def val(dj):
@@ -103,6 +106,10 @@ def selftest():
          grade_row(1, 11, 47.6, 0.0, k[10], 280.457 + 0.001, 23.4393, False))
     case("Koch answered beyond 90 - eps is caught", True,
          grade_row(1, 11, 70.0, 0.0, 10.0, 280.457, 23.4393, False))
+    case("a Koch ANGLE answered beyond 90 - eps passes", False,
+         grade_row(1, 13, 70.0, 0.0, H.angles(280.457, 70.0, 23.4393)["asc"], 280.457, 23.4393, False))
+    case("a Koch angle refused beyond 90 - eps is caught", True,
+         grade_row(1, 13, 70.0, 0.0, 0.0, 280.457, 23.4393, True))
     case("Koch refused inside the circle is caught", True,
          grade_row(1, 11, 47.6, 0.0, 0.0, 280.457, 23.4393, True))
     case("Koch refused beyond the circle passes", False,
@@ -120,8 +127,12 @@ def selftest():
          grade_row(5, 3, 47.6, 24.0, e24, 280.457, 23.4393, False))
     case("the same cusp with the ayanamsa left off is caught", True,
          grade_row(5, 3, 47.6, 0.0, e24, 280.457, 23.4393, False))
-    ok = reference_rate(6, 13, 47.6, 280.457, 23.4393) == 0.0
-    print("  %s: Whole Sign rates are 0" % ("ok" if ok else "FAIL"))
+    ok = reference_rate(6, 1, 47.6, 280.457, 23.4393) == 0.0
+    print("  %s: Whole Sign cusp rates are 0" % ("ok" if ok else "FAIL"))
+    bad += not ok
+    r = reference_rate(6, 13, 47.6, 280.457, 23.4393)
+    ok = r is not None and r > 100.0
+    print("  %s: a Whole Sign system's ANGLE still moves (%.1f)" % ("ok" if ok else "FAIL", r or 0))
     bad += not ok
     r = reference_rate(1, 13, 47.6, 280.457, 23.4393)
     ok = r is not None and 100.0 < r < 1000.0
@@ -200,14 +211,14 @@ def gate(port):
                         elif abs(vals[3] - ref) > 2e-3:
                             bad.append("%s point %d lat %.4f: rate %.6f, reference stencil %.6f"
                                        % (H.SYSTEMS[system], point, lat, vals[3], ref))
-    # the boundary, both hemispheres, Placidus and Koch on the Ascendant, at
+    # the boundary, both hemispheres, Placidus and Koch cusp 11, at
     # +-0.001 degree of 90 - eps for the eps the server reports at that instant
     meta, rows, err = ask(port, out, 2451545.0, 0.5, "", "5:13", 0, "0x30")
     epsJ = float.fromhex(rows[0][-1]) if rows else 23.4377
     for sign in (1.0, -1.0):
         for delta, want in ((-0.001, True), (0.001, False)):
             lat = sign * (90.0 - epsJ + delta)
-            meta, rows, err = ask(port, out, 2451545.0, lat, "", "0:13,1:13", 0, "0x0")
+            meta, rows, err = ask(port, out, 2451545.0, lat, "", "0:11,1:11", 0, "0x0")
             got = [r[5] != "nan" for r in rows]
             if got != [want, want]:
                 bad.append("Placidus/Koch at lat %.4f (90 - eps %+.3f) answered %s, expected %s"

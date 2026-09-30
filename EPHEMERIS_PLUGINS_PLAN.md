@@ -2206,9 +2206,10 @@ then their rates. The definitions are §3.5b's.
   When any stencil point is refused (error 9), or two adjacent stencil values
   differ by more than 90° after unwrapping, the three rate columns of that row
   are 0 and META's `ratesApprox` is set for the object (the flag is per object:
-  a client cannot tell which rows). **Whole Sign rates are 0 always**, even when
-  a sign change falls inside the stencil, and set no flag: a step has no
-  derivative and 0 is the one answer that is not an artefact of h.
+  a client cannot tell which rows). **Whole Sign cusp rates are 0 always**, even
+  when a sign change falls inside the stencil, and set no flag: a step has no
+  derivative and 0 is the one answer that is not an artefact of h. (Its angles
+  are the angles of every system and move as they do.)
 - **Failure.** A point that is undefined for a row's instant and site is that
   row failing (below) with errCode 9, decided per row with that row's own
   obliquity: a series can cross the boundary partway, and the object is
@@ -2605,7 +2606,9 @@ Ascendant and cusp 10 the MC except where an entry says otherwise (Equal at cusp
 - **Degenerate instants:** where the ecliptic lies along the horizon or the prime
   vertical the Ascendant or the Vertex has no intersection, which can happen only
   on the boundary; that row is error 9.
-Every other system, and every other angle, answers at every other latitude.
+The **angles** (13–16) are the same in every system: they are refused only at a
+pole, and a Placidus or Koch angle answers inside the polar circle. Every other
+system answers at every other latitude.
 
 The reference implementation is `tools/houses_ref.py`, written from this section
 and nothing else; its Placidus is iterated to full precision, and conformance for
@@ -3609,7 +3612,7 @@ instructions for a human to copy is the thing this direction exists to stop.
    refused beyond |phi| > 90 - eps for the row's own eps, per row, never
    substituted; the boundary carries a +-1" band. (5) Rates are the stencil
    derivative; across a jump (a refused stencil point, or more than 90 degrees
-   between adjacent points) they are 0 with `ratesApprox`, and Whole Sign's are
+   between adjacent points) they are 0 with `ratesApprox`, and Whole Sign cusps' are
    0. (6) The correction mask and the site height are carried, not pinned: two
    spellings of one question are two cache keys, a cost and not an error
    (the first draft pinned the mask through 0x0014 and that was withdrawn

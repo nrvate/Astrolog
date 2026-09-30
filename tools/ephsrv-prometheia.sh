@@ -83,6 +83,20 @@ if [ $RC -ne 0 ]; then
   echo "EPHSRV-PROMETHEIA FAIL: the cross-engine legs did not pass"
   exit 1
 fi
+# The houses leg (2026-09-30): the daemon's house points (object kind 6) graded
+# by the same gate as our own server's, against tools/houses_ref.py at each
+# row's own ARMC and obliquity. A different engine with its own sidereal time
+# and its own house code, so this is the check that a fault the two share
+# cannot hide from -- it found that Whole Sign ANGLES had been given rate 0.
+if [ -x eph_wsclient ]; then
+  python3 tools/ephsrv_houses.py "$PORT" > "$WORK/houses.log" 2>&1
+  RCH=$?
+  tail -3 "$WORK/houses.log"
+  if [ $RCH -ne 0 ]; then
+    echo "EPHSRV-PROMETHEIA FAIL: the houses leg did not pass"
+    exit 1
+  fi
+fi
 if [ $SELFTEST -eq 1 ]; then
   run 0.01; RC=$?
   if [ $RC -eq 0 ]; then
