@@ -190,6 +190,7 @@ step "objects without .d rebuilt"  tools/stale-object-check.sh
 # no "-I ." a machine that installed the fork compiled against ITS header and
 # a fresh clone failed (the qt.25 release dry run). -MMD cannot show it.
 step "vendored Swiss header found" tools/system-header-check.sh
+step "no bare sprintf" tools/raw-sprintf-check.sh
 # The four astrometric binaries (EPHEMERIS_ACCURACY_REGISTRY.md 2.4). It is
 # here rather than among the ephemeris server's hand-run gates because it
 # needs no server and no /shares/swisseph: it compiles a probe against the

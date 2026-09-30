@@ -4549,7 +4549,7 @@ static int FStarRatePointLocal(void *pv, double dj, double *xx)
   const int32 iflag = p->iflag & ~(int32)SEFLG_SPEED;
 
   // swe_fixstar2() rewrites the name it is handed, so each point gets a copy.
-  sprintf(sz, "%s", p->szStar);
+  sprintf2(S(sz), "%s", p->szStar);
   if (swe_fixstar2(sz, p->jd + dj, iflag, xx, serr) < 0)
     return fFalse;
   return FEphStarOrbCall(sz, p->jd + dj, iflag, xx);
@@ -4614,7 +4614,7 @@ flag FSwissStar(char *sz, real jd, real *rg)
   if (iflag & SEFLG_SPEED) {
     STARRATECTX src;
     src.jd = jd; src.iflag = iflag;
-    sprintf(src.szStar, "%s", sz);
+    sprintf2(S(src.szStar), "%s", sz);
     EphNodRateDiff(&FStarRatePointLocal, &src, rg,
       (iflag & SEFLG_RADIANS) != 0, (iflag & SEFLG_XYZ) != 0);
   }
