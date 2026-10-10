@@ -3525,6 +3525,72 @@ void SzObjSelName(char *sz, int cchMax, int nTyp, int nObj)
 }
 
 
+// The name a slot takes from the body put in it: the offered list's own
+// spelling when the list offers that body, since that is the word the
+// Contains field is showing beside it, and otherwise whatever the
+// ephemeris calls it. The two part company on one body -- seorbel.txt
+// spells the eighth Uranian "Vulcanus" -- and on any body whose file is
+// not installed, which the ephemeris can only call "???".
+
+void SzObjSelLabel(char *sz, int cchMax, int nTyp, int nObj)
+{
+  int i;
+
+  for (i = 0; i < cObjSel; i++)
+    if (rgObjSel[i].nTyp == nTyp && rgObjSel[i].nObj == nObj) {
+      sprintf2(sz, cchMax, "%s", rgObjSel[i].szName);
+      ObjSelRemember(nTyp, nObj, sz);
+      return;
+    }
+  SzObjSelName(sz, cchMax, nTyp, nObj);
+}
+
+
+// The name an Object Selections row is left with on OK, for both builds.
+// szName is what the name box holds and szName0 what it held when the
+// dialog opened; the definition and forced position come the same way.
+//
+// A name the user typed is theirs and is kept. One they did not touch is
+// the OLD body's name, and leaving it is what made picking a new body
+// look like it did nothing: the slot really did change while every label
+// in the chart still read what it used to be. So an untouched name
+// follows the definition -- to a new body, onto a midpoint, and off one
+// again, which changes neither body number and so needs its own test.
+//
+// A name box emptied on purpose asks for the same thing. Stored as it
+// stood it gave the object an empty label, in every chart and list.
+
+void SzObjSelRowName(char *sz, int cchMax, CONST char *szName,
+  CONST char *szName0, CONST OBJDEF *pod, real rForce, int nTyp0, int nObj0,
+  real rForce0)
+{
+  CONST char *pch;
+  flag fBlank, fMid = FForceMid(rForce);
+  int j, k;
+
+  for (pch = szName; *pch && *pch <= ' '; pch++)
+    ;
+  fBlank = (*pch == chNull);
+  sprintf2(sz, cchMax, "%s", szName);
+  if (!fBlank && !FEqSz(szName, szName0))
+    return;
+  if (fMid) {
+    if (!fBlank && rForce == rForce0)
+      return;
+    j = ObjForceMid1(rForce); k = ObjForceMid2(rForce);
+    if (FItem(j) && FItem(k))
+      sprintf2(sz, cchMax, "%.3s/%.3s", szObjDisp[j], szObjDisp[k]);
+    return;
+  }
+  if (!fBlank && pod->nTyp == nTyp0 && pod->nObj == nObj0 &&
+    !FForceMid(rForce0))
+    return;
+  SzObjSelLabel(sz, cchMax, pod->nTyp, pod->nObj);
+  if (FEqSz(sz, szObjUnknown) && !fBlank)
+    sprintf2(sz, cchMax, "%s", szName);
+}
+
+
 // Format what a slot's body field should show: one of rgObjSel[]'s names
 // when the slot holds exactly that body, otherwise the definition text
 // Object Customization uses, including any point and flag suffix. The
@@ -3613,11 +3679,38 @@ void SzObjDefFormat(char *sz, int cchMax, CONST OBJDEF *pod)
 }
 
 
+// One half of a midpoint, as the body field shows it: the object's
+// display name, unless that name would not read back as this object --
+// and then its stock name, which always does. A slot renamed "S/M" is the
+// case that matters: shown as a half of another midpoint it made
+// "S/M/Mars", which splits at the first slash into "S" and "M/Mars" and
+// is refused, so the dialog could not accept the text it had just put in
+// its own field and every OK failed until that row was retyped.
+
+static CONST char *SzObjSelMidHalf(int obj)
+{
+  CONST char *pch;
+
+  for (pch = szObjDisp[obj]; *pch && *pch != '/'; pch++)
+    ;
+  return *pch == chNull && NObjSelMid(szObjDisp[obj]) == obj ?
+    szObjDisp[obj] : szObjName[obj];
+}
+
+
 void SzObjSelDef(char *sz, int cchMax, int iobj)
 {
   OBJDEF od;
   int i;
 
+  // A slot forced to a midpoint shows it as A/B, which is both what the
+  // user typed and what an astrologer would write.
+  if (FForceMid(force[iobj])) {
+    sprintf2(sz, cchMax, "%s/%s",
+      SzObjSelMidHalf(ObjForceMid1(force[iobj])),
+      SzObjSelMidHalf(ObjForceMid2(force[iobj])));
+    return;
+  }
   ObjDefGet(iobj, &od);
   if (od.nPnt <= 0 && od.nFlg <= 0)
     for (i = 0; i < cObjSel; i++)

@@ -559,6 +559,9 @@ extern CONST OBJSEL rgObjSel[];
 extern CONST int cObjSel;
 extern void SzObjSelDef P((char *, int, int));
 extern void SzObjSelName P((char *, int, int, int));
+extern void SzObjSelLabel P((char *, int, int, int));
+extern void SzObjSelRowName P((char *, int, CONST char *, CONST char *,
+  CONST OBJDEF *, real, int, int, real));
 extern flag FObjSelFlagRun P((CONST char *));
 extern void ObjDefGet P((int, OBJDEF *));
 extern void ObjDefSet P((int, CONST OBJDEF *));

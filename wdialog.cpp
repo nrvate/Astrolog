@@ -1762,7 +1762,7 @@ flag API DlgCustom(HWND hdlg, uint message, WORD wParam, LONG lParam)
 flag API DlgObjectSel(HWND hdlg, uint message, WORD wParam, LONG lParam)
 {
   char sz[cchSzMax], szT[cchSzMax];
-  int i, j, k, l, iobj;
+  int i, j, k, iobj;
   // One OBJDEF a row rather than four arrays that have to stay aligned.
   OBJDEF rgod[cObjSelRow], od;
   real rgforce[cObjSelRow];
@@ -1791,11 +1791,7 @@ flag API DlgObjectSel(HWND hdlg, uint message, WORD wParam, LONG lParam)
       // what was typed and what an astrologer writes.
       for (j = 0; j < cObjSel; j++)
         SetCombo(dcOs01 + i, rgObjSel[j].szName);
-      if (FForceMid(force[iobj])) {
-        sprintf2(S(sz), "%s/%s", szObjDisp[ObjForceMid1(force[iobj])],
-          szObjDisp[ObjForceMid2(force[iobj])]);
-      } else
-        SzObjSelDef(S(sz), iobj);
+      SzObjSelDef(S(sz), iobj);
       SetEdit(dcOs01 + i, sz);
     }
     // Focus the first body field rather than letting the dialog
@@ -1828,19 +1824,10 @@ flag API DlgObjectSel(HWND hdlg, uint message, WORD wParam, LONG lParam)
           SetEdit(deOs01 + i, sz);
           continue;
         }
-        // Otherwise ask the ephemeris, falling back to the name the
-        // offered-body list already knows -- without that a body whose
-        // .se1 file is not installed reads "???" even while the Contains
-        // field beside it is displaying its name.
+        // Otherwise the offered list's name for it, or the ephemeris's
+        // where the list does not offer it: SzObjSelLabel().
         if (FObjSelParse(sz, &od)) {
-          SzObjSelName(S(sz), od.nTyp, od.nObj);
-          if (FEqSz(sz, szObjUnknown))
-            for (l = 0; l < cObjSel; l++)
-              if (rgObjSel[l].nTyp == od.nTyp &&
-                rgObjSel[l].nObj == od.nObj) {
-                sprintf2(S(sz), "%s", rgObjSel[l].szName);
-                break;
-              }
+          SzObjSelLabel(S(sz), od.nTyp, od.nObj);
           // Put the number and the name in the body field together,
           // so a row that has been looked up stops reading as a bare
           // catalogue number: "10199" becomes "10199 Chariklo".
@@ -1899,28 +1886,12 @@ flag API DlgObjectSel(HWND hdlg, uint message, WORD wParam, LONG lParam)
 #endif
         force[iobj] = rgforce[i];
         ignore[iobj] = !rgfShow[i];
-        GetEdit(deOs01 + i, sz);
-        // A name the user did not touch is the *old* body's name, and
-        // leaving it there is what made choosing a new body look inert:
-        // the slot really did change, to a different position and a
-        // different ephemeris number, while every label still read what
-        // it used to be. So an untouched name follows the definition; one
-        // the user typed is theirs and is kept.
-        if (FEqSz(sz, rgszName0[i])) {
-          if (rgforce[i] != rgforce0[i] && FForceMid(rgforce[i])) {
-            // Forced to a midpoint: name it after its two halves, as
-            // Lookup Names does. Otherwise the slot sits at the midpoint
-            // under the name of the body it used to be.
-            j = ObjForceMid1(rgforce[i]); k = ObjForceMid2(rgforce[i]);
-            if (FItem(j) && FItem(k))
-              sprintf2(S(sz), "%.3s/%.3s", szObjDisp[j], szObjDisp[k]);
-          } else if (rgod[i].nTyp != rgnTyp0[i] ||
-            rgod[i].nObj != rgnObj0[i]) {
-            SzObjSelName(S(szT), rgod[i].nTyp, rgod[i].nObj);
-            if (!FEqSz(szT, szObjUnknown))
-              sprintf2(S(sz), "%.*s", cchSzMax-1, szT);
-          }
-        }
+        // What the row ends up called is SzObjSelRowName()'s, shared
+        // with the Qt build: a typed name is kept, an untouched or
+        // emptied one follows the definition.
+        GetEdit(deOs01 + i, szT);
+        SzObjSelRowName(S(sz), szT, rgszName0[i], &rgod[i], rgforce[i],
+          rgnTyp0[i], rgnObj0[i], rgforce0[i]);
         SetObjDisp(iobj, sz);
       }
 

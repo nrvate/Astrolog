@@ -11349,6 +11349,52 @@ this is the note that explains the wall of dialogs.
     the next cut there means making those groups do less, not
     reordering them.
 
+281. **Enter in a tabbed-into combo wrote the first list row into it,
+    in every dialog; and Object Selections' behaviour gone over end to
+    end.** Reported 2026-10-10 as "Vulcan appears in name boxes when I
+    never typed that". `setEditable()` installs an inline `QCompleter`,
+    and `QLineEdit` accepts the completer's current completion on Enter
+    whenever the text is selected through to its end -- the state every
+    box is in after a Tab into it. The completer had never been given a
+    prefix, so its completion was row 0 of the list: the box read
+    "Vulcan", the key was swallowed so the dialog stayed open looking
+    untouched, and the next OK renamed the slot to match. All 214
+    editable combos in the port carried that completer -- the mechanism
+    is the widget's, not this dialog's, though only this dialog was
+    driven to show it. `TameEditComboQt()`, called from
+    `PrepareDialogQt()`, drops the completer and the insert policy
+    (Enter also appended the text to the list) and sets the current
+    index from the text -- it sat at 0 under `setEditText()`, so every
+    list opened with its first row highlighted and Down on "Sedna" gave
+    "Cupido". Windows' CBS_DROPDOWN has no completion, so this is parity
+    and not a feature removed. Then six more from driving the dialog by
+    key, the first four in both builds through shared calc.cpp code:
+    (a) a slot named "S/M" used as half of another midpoint showed as
+    "S/M/Mars", which splits at the first slash and is refused, so the
+    dialog rejected its own text on every OK -- a half whose name does
+    not read back is shown by its stock name (`SzObjSelMidHalf`);
+    (b) a slot taken off its midpoint back to its own body kept the
+    midpoint's name, neither body number having changed; (c) an emptied
+    name box stored an empty label -- it now takes the body's name;
+    (d) Lookup Names and a body change respelt Vulkanus "Vulcanus",
+    seorbel.txt's spelling, beside a Contains field reading "Vulkanus"
+    -- `SzObjSelLabel()` prefers the list's own name; the name policy
+    is one function, `SzObjSelRowName()`, where it was a copy a build.
+    Qt only: (e) one invalid row closed the dialog and discarded every
+    edit in all eighteen, since validation ran after `exec()` -- it
+    runs in OK's slot now, the dialog stays open and the bad box takes
+    the focus, as Windows' `EnsureN()` does; (f) a typed body was
+    auto-shown only when left by Tab (item 274), not by Enter, a click
+    or a pick from the list. And the resource put the hint line two
+    units into the last row; it and the buttons moved down six.
+    `objsel-keys`; five sabotages, each failing it. **Not changed, and
+    worth knowing:** Lookup Names rewrites every row's name, a typed
+    one included, by design (item 5 under "The Object Selections
+    dialog"); the other dialogs still validate after closing, as (e)
+    did; and the name boxes sit a few pixels taller than the combos
+    beside them, which is `RcBuildDialogQt()` giving a combo Qt's own
+    height and an edit the resource's, in every dialog.
+
 
 ## Features this fork adds to both builds
 

@@ -539,6 +539,41 @@ public:
 };
 
 
+// Make an editable combo behave as Windows' CBS_DROPDOWN does: a text
+// field with a list of suggestions beside it, and nothing that rewrites
+// the text on its own. Three Qt defaults each break that.
+//
+// The completer is the one that bit. setEditable() installs an inline
+// one, and QLineEdit accepts the completer's current completion on Enter
+// whenever the text is selected through to its end -- which is the state
+// every box is in after a Tab into it. The completer has been given no
+// prefix at that point, so its "current completion" is simply the first
+// row of the list: Tab into any Object Selections body, press Enter, and
+// the box reads "Vulcan" with the key swallowed, so the dialog stays open
+// looking as if nothing happened. The next OK then renames the slot.
+//
+// The insert policy appends whatever Enter was pressed on to the list as
+// a new entry. And the current index stays at zero under setEditText(),
+// so the list opens with its first row highlighted and the arrow keys
+// step from there rather than from what the box shows.
+
+static void TameEditComboQt(QComboBox *pcb)
+{
+  if (pcb == NULL || !pcb->isEditable())
+    return;
+  pcb->setCompleter(NULL);
+  pcb->setInsertPolicy(QComboBox::NoInsert);
+  QString str = pcb->currentText();
+  int i = pcb->findText(str);
+  if (i != pcb->currentIndex()) {
+    // Index -1 clears the text; nothing listening should see that blink.
+    QSignalBlocker blockCombo(pcb), blockEdit(pcb->lineEdit());
+    pcb->setCurrentIndex(i);
+    pcb->setEditText(str);
+  }
+}
+
+
 // Defined in qtdriver.cpp beside the palette it belongs with.
 extern void ApplyTitleBarThemeQt(QWidget *pw);
 
@@ -553,6 +588,7 @@ static void PrepareDialogQt(QDialog *pdlg)
   for (QComboBox *pcb : pdlg->findChildren<QComboBox *>()) {
     pcb->setFocusPolicy(Qt::StrongFocus);
     pcb->installEventFilter(&filter);
+    TameEditComboQt(pcb);
   }
 
   // Show the *start* of every field's text. Qt leaves a QLineEdit's cursor
@@ -1810,6 +1846,8 @@ static QComboBox *PcbGifFieldQt(QWidget *pw, CONST QStringList &rgstr,
   pcb->setEditable(true);
   pcb->addItems(rgstr);
   pcb->setEditText(str);
+  // This dialog never reaches PrepareDialogQt().
+  TameEditComboQt(pcb);
   return pcb;
 }
 
@@ -6349,7 +6387,7 @@ void ShowObjectSelDialogQt()
   OBJDEF rgod[cObjSelRow];
   real rgforce[cObjSelRow];
   char sz[cchSzMax];
-  int i, j, k, iobj;
+  int i, j, iobj;
 
   dlg.setWindowTitle(szTitleObjectSel);
   RcBuildDialogQt(&dlg, rgctlObjectSel, cctlObjectSel, dxObjectSel,
@@ -6377,14 +6415,8 @@ void ShowObjectSelDialogQt()
       pcbDef->setEditable(fTrue);
       for (j = 0; j < cObjSel; j++)
         pcbDef->addItem(rgObjSel[j].szName);
-      // A slot forced to a midpoint shows it as A/B, which is both what
-      // the user typed and what an astrologer would write. Otherwise the
-      // field shows the body, as before.
-      if (FForceMid(force[iobj])) {
-        sprintf2(S(sz), "%s/%s", szObjDisp[ObjForceMid1(force[iobj])],
-          szObjDisp[ObjForceMid2(force[iobj])]);
-      } else
-        SzObjSelDef(S(sz), iobj);
+      // The body, or the midpoint as A/B: SzObjSelDef() knows both.
+      SzObjSelDef(S(sz), iobj);
       pcbDef->setEditText(sz);
       // What the field opened with, for the tab-away auto-show: only a
       // definition the user typed over counts as entered.
@@ -6402,6 +6434,22 @@ void ShowObjectSelDialogQt()
     if (ppb != NULL)
       ppb->setFocusPolicy(Qt::NoFocus);
   }
+  // Leaving a definition box whose text the user typed over checks its
+  // row's show box: enter a body number, Tab, and the object is both
+  // named and shown, without touching the boxes at the end. "Entered"
+  // means changed, not merely filled -- the rows open showing the bodies
+  // they already hold, and wading through those should not silently
+  // re-show hidden ones. Each text is acted on once, so a box unchecked
+  // again afterwards stays unchecked.
+  auto fnShowTyped = [&rgpcbDef, &rgpcbShow, &rgstrDef0](int i) {
+    if (rgpcbDef[i] == NULL || rgpcbShow[i] == NULL)
+      return;
+    QString str1 = rgpcbDef[i]->currentText().trimmed();
+    if (!str1.isEmpty() && str1 != rgstrDef0[i].trimmed()) {
+      rgpcbShow[i]->setChecked(fTrue);
+      rgstrDef0[i] = str1;
+    }
+  };
   // Tab walks down the columns, not across the rows: the definition
   // boxes are what the user types body numbers into -- type a number,
   // Tab, type the next one -- then the names, then the show boxes, and
@@ -6418,25 +6466,27 @@ void ShowObjectSelDialogQt()
         rgpwShows << rgpcbShow[i];
     }
     if (!rgpwDefs.isEmpty()) {
-      // Leaving a definition box whose text the user typed over checks
-      // its row's show box: enter a body number, Tab, and the object is
-      // both named and shown, without touching the boxes at the end.
-      // "Entered" means changed, not merely filled -- the rows open
-      // showing the bodies they already hold, and wading through those
-      // should not silently re-show hidden ones.
-      auto fnShowTyped = [&rgpcbDef, &rgpcbShow, &rgstrDef0](int i) {
-        if (rgpcbDef[i] == NULL || rgpcbShow[i] == NULL)
-          return;
-        QString str1 = rgpcbDef[i]->currentText().trimmed();
-        if (!str1.isEmpty() && str1 != rgstrDef0[i].trimmed())
-          rgpcbShow[i]->setChecked(fTrue);
-      };
       TabColumnsQt *ptab = new TabColumnsQt(rgpwDefs,
         rgpwNames.isEmpty() ? NULL : rgpwNames.first(),
         rgpwShows.isEmpty() ? NULL : rgpwShows.last(), &dlg,
         fnShowTyped);
       for (QWidget *pw : rgpwDefs)
         pw->installEventFilter(ptab);
+      // Tab is one way out of a box and not the only one. A body typed
+      // and finished with Enter, or with a click somewhere else, or
+      // picked from the list, is entered just the same -- and left to
+      // the Tab key alone it changed a hidden slot's body and kept it
+      // hidden, which reads as the dialog having done nothing.
+      for (i = 0; i < cObjSelRow; i++) {
+        if (rgpcbDef[i] == NULL)
+          continue;
+        QObject::connect(rgpcbDef[i]->lineEdit(),
+          &QLineEdit::editingFinished, &dlg,
+          [fnShowTyped, i]() { fnShowTyped(i); });
+        QObject::connect(rgpcbDef[i],
+          QOverload<int>::of(&QComboBox::activated), &dlg,
+          [fnShowTyped, i](int) { fnShowTyped(i); });
+      }
     }
     if (!rgpwNames.isEmpty()) {
       TabColumnsQt *ptab = new TabColumnsQt(rgpwNames,
@@ -6488,19 +6538,10 @@ void ShowObjectSelDialogQt()
           continue;
         }
 
-        // Otherwise ask the ephemeris, and fall back to the name the
-        // offered-body list already knows. Without that fallback a body
-        // whose .se1 file isn't installed comes back "???" even though
-        // the Contains field beside it is displaying its name.
+        // Otherwise the offered list's name for it, or the ephemeris's
+        // where the list does not offer it: SzObjSelLabel().
         if (FObjSelParse(baDef.constData(), &od2)) {
-          SzObjSelName(S(szT), od2.nTyp, od2.nObj);
-          if (FEqSz(szT, szObjUnknown))
-            for (int iSel = 0; iSel < cObjSel; iSel++)
-              if (rgObjSel[iSel].nTyp == od2.nTyp &&
-                rgObjSel[iSel].nObj == od2.nObj) {
-                sprintf2(S(szT), "%s", rgObjSel[iSel].szName);
-                break;
-              }
+          SzObjSelLabel(S(szT), od2.nTyp, od2.nObj);
           // Put the number and the name in the body field together, so a
           // row that has been looked up stops reading as a bare catalogue
           // number: "10199" becomes "10199 Chariklo". Only for a plain
@@ -6522,43 +6563,66 @@ void ShowObjectSelDialogQt()
     });
 
   RcWireOkCancelQt(&dlg, rgbuilt);
+
+  // Validate every row before writing any of it, so a bad entry leaves the
+  // previous settings alone rather than applying half of them -- and
+  // BEFORE the dialog closes, as Windows' EnsureN() does by returning
+  // without EndDialog(). Validating after exec() threw away every edit in
+  // all eighteen rows over one typo in one of them. The box at fault takes
+  // the focus with its text selected, so the message has a referent.
+  auto fnValidate = [&]() -> flag {
+    int i2, j2, k2;
+
+    for (i2 = 0; i2 < cObjSelRow; i2++) {
+      if (rgpcbDef[i2] == NULL)
+        continue;
+      QByteArray ba = rgpcbDef[i2]->currentText().toLocal8Bit();
+      CONST char *szBad = NULL;
+
+      // A slash means a midpoint, and the slot keeps whatever body it had:
+      // -Fm moves a position, it does not change what the object is.
+      rgforce[i2] = 0.0;
+      if (FObjSelMidPair(ba.constData(), &j2, &k2)) {
+        if (FItem(j2) && FItem(k2)) {
+          rgforce[i2] = ForceMid(j2, k2);
+          ObjDefGet(uranLo + i2, &rgod[i2]);
+          continue;
+        }
+        szBad = "A midpoint needs two objects this chart has, written as "
+          "\"Sun/Moo\" or \"7066/90482\".";
+      } else if (!FObjSelParse(ba.constData(), &rgod[i2]) ||
+        !FValidCustom(rgod[i2].nObj, rgod[i2].nTyp))
+        szBad = "One or more object definitions are invalid.";
+      if (szBad != NULL) {
+        rgpcbDef[i2]->setFocus(Qt::OtherFocusReason);
+        rgpcbDef[i2]->lineEdit()->selectAll();
+        QMessageBox::warning(&dlg, szAppName, szBad);
+        return fFalse;
+      }
+    }
+    return fTrue;
+  };
+  QPushButton *ppbOK = (QPushButton *)PwRcFindQt(rgbuilt, "IDOK");
+  if (ppbOK != NULL) {
+    QObject::disconnect(ppbOK, &QPushButton::clicked, &dlg,
+      &QDialog::accept);
+    QObject::connect(ppbOK, &QPushButton::clicked, &dlg,
+      [&dlg, &rgpcbDef, fnShowTyped, fnValidate]() {
+      // OK is out of the focus chain, so a click on it takes the focus
+      // from nothing and the box being typed in never reports it was
+      // left. Count it as left here.
+      for (int i2 = 0; i2 < rgpcbDef.size(); i2++)
+        if (rgpcbDef[i2] != NULL && (rgpcbDef[i2]->hasFocus() ||
+          rgpcbDef[i2]->lineEdit()->hasFocus()))
+          fnShowTyped(i2);
+      if (fnValidate())
+        dlg.accept();
+    });
+  }
   PrepareDialogQt(&dlg);
   FocusDialogQt(PwRcFindIdxQt(rgbuilt, "dcOs", 1));
   if (dlg.exec() != QDialog::Accepted)
     return;
-
-  // Validate every row before writing any of it, so a bad entry leaves the
-  // previous settings alone rather than applying half of them.
-  for (i = 0; i < cObjSelRow; i++) {
-    if (rgpcbDef[i] == NULL)
-      continue;
-    QByteArray ba = rgpcbDef[i]->currentText().toLocal8Bit();
-
-    // A slash means a midpoint, and the slot keeps whatever body it had:
-    // -Fm moves a position, it does not change what the object is.
-    rgforce[i] = 0.0;
-    if (FObjSelMidPair(ba.constData(), &j, &k)) {
-      if (!FItem(j) || !FItem(k)) {
-        QMessageBox::warning(gi.qwind, szAppName,
-          "A midpoint needs two objects this chart has, written as "
-          "\"Sun/Moo\" or \"7066/90482\".");
-        return;
-      }
-      rgforce[i] = ForceMid(j, k);
-      rgod[i].nTyp = rgTypSwiss[uranLo + i - custLo];
-      rgod[i].nObj = rgObjSwiss[uranLo + i - custLo];
-      rgod[i].nPnt = rgPntSwiss[uranLo + i - custLo];
-      rgod[i].nFlg = rgFlgSwiss[uranLo + i - custLo];
-      continue;
-    }
-
-    if (!FObjSelParse(ba.constData(), &rgod[i]) ||
-      !FValidCustom(rgod[i].nObj, rgod[i].nTyp)) {
-      QMessageBox::warning(gi.qwind, szAppName,
-        "One or more object definitions are invalid.");
-      return;
-    }
-  }
 
   for (i = 0; i < cObjSelRow; i++) {
     iobj = uranLo + i;
@@ -6571,35 +6635,16 @@ void ShowObjectSelDialogQt()
     if (rgpcbShow[i] != NULL)
       ignore[iobj] = !rgpcbShow[i]->isChecked();
     if (rgpeName[i] != NULL) {
-      QString str = rgpeName[i]->text();
-      // A name the user did not touch is the *old* body's name, and
-      // leaving it there is what made picking a new body look like it did
-      // nothing: the slot really did change -- a different position, a
-      // different ephemeris number -- while every label in the chart still
-      // read the body it used to be. So when the definition changed and
-      // the name was not edited by hand, the name follows the definition.
-      // A name the user did type is theirs and is kept.
-      if (i < rgstrName0.size() && str == rgstrName0[i]) {
-        char szT[cchSzDef];
-        int j2, k2;
-        if (rgforce[i] != rgforceSav[i] && FForceMid(rgforce[i])) {
-          // Forced to a midpoint: name it after its two halves, the same
-          // way Lookup Names does. Left alone, the slot sits at the
-          // midpoint under the name of the body it used to be, which is
-          // the same confusion as picking a new body and keeping the old
-          // name.
-          j2 = ObjForceMid1(rgforce[i]); k2 = ObjForceMid2(rgforce[i]);
-          if (FItem(j2) && FItem(k2)) {
-            sprintf2(S(szT), "%.3s/%.3s", szObjDisp[j2], szObjDisp[k2]);
-            str = QString(szT);
-          }
-        } else if (rgod[i].nTyp != rgTypSwissSav[i] ||
-          rgod[i].nObj != rgObjSwissSav[i]) {
-          SzObjSelName(S(szT), rgod[i].nTyp, rgod[i].nObj);
-          if (!FEqSz(szT, szObjUnknown))
-            str = QString(szT);
-        }
-      }
+      // What the row ends up called is SzObjSelRowName()'s, shared with
+      // Windows: a typed name is kept, an untouched or emptied one
+      // follows the definition.
+      char szT[cchSzMax];
+      QByteArray baName = rgpeName[i]->text().toLocal8Bit();
+      QByteArray baName0 = rgstrName0[i].toLocal8Bit();
+      SzObjSelRowName(S(szT), baName.constData(), baName0.constData(),
+        &rgod[i], rgforce[i], rgTypSwissSav[i], rgObjSwissSav[i],
+        rgforceSav[i]);
+      QString str(szT);
       QByteArray ba = str.toLocal8Bit();
       SetObjDisp(iobj, ba.constData());
     }

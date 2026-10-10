@@ -1814,17 +1814,17 @@ static CONST RCCTL rgctlFile[] = {
 #define dxFile 341
 #define dyFile 127
 
-// dlgObjectSel -- 344 x 316 dialog units, from astrolog.rc
+// dlgObjectSel -- 344 x 322 dialog units, from astrolog.rc
 #define szTitleObjectSel "Object Selections"
 static CONST RCCTL rgctlObjectSel[] = {
-  {ctlButton, "OK", "IDOK", -1, 299,296,40,14},
-  {ctlButton, "Cancel", "IDCANCEL", -1, 254,296,40,14},
-  {ctlButton, "&Lookup Names", "dbOs_l", -1, 5,296,60,14},
+  {ctlButton, "OK", "IDOK", -1, 299,302,40,14},
+  {ctlButton, "Cancel", "IDCANCEL", -1, 254,302,40,14},
+  {ctlButton, "&Lookup Names", "dbOs_l", -1, 5,302,60,14},
   {ctlLabel,  "Object", "IDC_STATIC", -1, 5,5,34,8},
   {ctlLabel,  "Show", "IDC_STATIC", -1, 41,5,20,8},
   {ctlLabel,  "Contains", "IDC_STATIC", -1, 63,5,60,8},
   {ctlLabel,  "Name", "IDC_STATIC", -1, 243,5,40,8},
-  {ctlLabel,  "A body, or a midpoint written as two of them: Sun/Moo, Nessus/Orcus, 7066/90482", "IDC_STATIC", -1, 5,282,334,8},
+  {ctlLabel,  "A body, or a midpoint written as two of them: Sun/Moo, Nessus/Orcus, 7066/90482", "IDC_STATIC", -1, 5,289,334,8},
   {ctlLabel,  "Vulcan", "IDC_STATIC", -1, 5,18,34,8},
   {ctlCheck,  "", "dxOs", 1, 45,18,12,10},
   {ctlCombo,  "", "dcOs", 1, 63,16,174,90},
@@ -1900,7 +1900,7 @@ static CONST RCCTL rgctlObjectSel[] = {
 };
 #define cctlObjectSel (int)(sizeof(rgctlObjectSel) / sizeof(RCCTL))
 #define dxObjectSel 344
-#define dyObjectSel 316
+#define dyObjectSel 322
 
 // dlgEphem -- 262 x 240 dialog units, from astrolog.rc
 #define szTitleEphem "Ephemeris Settings"

@@ -10382,6 +10382,261 @@ static void TestTransitRestrictQt()
 }
 
 
+// What the keyboard does in Object Selections, and what OK does with
+// what it finds.
+//
+// Every dialog net before this one set a field with setEditText() and
+// clicked OK, which is the one path none of these faults is on. They are
+// all in what happens to a key: Tab into a body box and press Enter, and
+// the box read "Vulcan" -- Qt's inline completer accepting the first row
+// of the list, having never been given a prefix -- with the key swallowed
+// and the slot renamed by the next OK. The same completer sat on every
+// editable combo in every dialog, so the structural half of this walks
+// all of them.
+
+static void TypeOverQt(QLineEdit *pe, CONST char *sz)
+{
+  pe->setFocus(Qt::TabFocusReason);
+  pe->selectAll();
+  if (!*sz) {
+    QKeyEvent e(QEvent::KeyPress, Qt::Key_Delete, Qt::NoModifier);
+    QCoreApplication::sendEvent(pe, &e);
+  }
+  for (; *sz; sz++) {
+    QKeyEvent e(QEvent::KeyPress, QChar(*sz).toUpper().unicode(),
+      Qt::NoModifier, QString(QChar(*sz)));
+    QCoreApplication::sendEvent(pe, &e);
+  }
+}
+
+static void PressQt(QWidget *pw, int nKey)
+{
+  QKeyEvent e1(QEvent::KeyPress, nKey, Qt::NoModifier),
+    e2(QEvent::KeyRelease, nKey, Qt::NoModifier);
+  QCoreApplication::sendEvent(pw, &e1);
+  QCoreApplication::sendEvent(pw, &e2);
+}
+
+// The name boxes of Object Selections, in row order: every line edit
+// that is not the inside of a combo.
+static QList<QLineEdit *> RgpeObjSelNamesQt(QWidget *pw)
+{
+  QList<QLineEdit *> rgpe;
+
+  for (QLineEdit *pe : pw->findChildren<QLineEdit *>())
+    if (qobject_cast<QComboBox *>(pe->parentWidget()) == NULL)
+      rgpe << pe;
+  return rgpe;
+}
+
+static void TestObjSelKeysQt()
+{
+  CONST int cRow = 4;
+  int rgnTyp[cRow], rgnObj[cRow], rgnPnt[cRow], rgnFlg[cRow], i, c, cBad;
+  real rgforceSav[cRow];
+  byte rgignoreSav[cRow];
+  char rgszDisp[cRow][cchSzMax], szBad[cchSzMax];
+  flag fOpen, f1, f2;
+  QString str, str2;
+
+  Group("Object selection keys");
+
+  // Rows 0-3 as a fresh program has them, whatever the settings file
+  // says: Vulcan, Cupido, Hades and Zeus, all hidden, nothing forced.
+  for (i = 0; i < cRow; i++) {
+    int iobj = uranLo + i;
+    rgnTyp[i] = rgTypSwiss[iobj - custLo];
+    rgnObj[i] = rgObjSwiss[iobj - custLo];
+    rgnPnt[i] = rgPntSwiss[iobj - custLo];
+    rgnFlg[i] = rgFlgSwiss[iobj - custLo];
+    rgforceSav[i] = force[iobj]; rgignoreSav[i] = ignore[iobj];
+    sprintf2(S(rgszDisp[i]), "%s", szObjDisp[iobj]);
+    ResetCustomSlotQt(iobj);
+    force[iobj] = 0.0; ignore[iobj] = fTrue;
+    SetObjDisp(iobj, szObjName[iobj]);
+  }
+
+  // No editable combo anywhere keeps a completer, an insert policy, or a
+  // current index that disagrees with its text.
+  c = cBad = 0; szBad[0] = chNull;
+  for (i = 0; i < cdlgQt; i++) {
+    CONST char *szTitle = rgdlgQt[i].szTitle;
+    DriveModalQt(rgdlgQt[i].pfn, [&c, &cBad, &szBad, szTitle](QWidget *pw) {
+      for (QComboBox *pcb : pw->findChildren<QComboBox *>()) {
+        if (!pcb->isEditable())
+          continue;
+        c++;
+        if (pcb->completer() != NULL ||
+          pcb->insertPolicy() != QComboBox::NoInsert ||
+          pcb->currentIndex() != pcb->findText(pcb->currentText())) {
+          cBad++;
+          sprintf2(S(szBad), "%s: \"%s\"", szTitle,
+            pcb->currentText().toLatin1().constData());
+        }
+      }
+      pw->close();
+    });
+  }
+  Check(c > 100 && cBad == 0, "%d editable combos in %d dialogs, %d of "
+    "them still able to rewrite their own text (%s)", c, cdlgQt, cBad,
+    szBad);
+
+  // Tab into a body box and press Enter: OK, and nothing else.
+  fOpen = fTrue;
+  DriveModalQt(ShowObjectSelDialogQt, [&fOpen, &str](QWidget *pw) {
+    QList<QComboBox *> rgcb = pw->findChildren<QComboBox *>();
+    if (rgcb.size() < 4)
+      { pw->close(); return; }
+    rgcb[1]->setFocus(Qt::TabFocusReason);
+    PressQt(rgcb[1]->lineEdit(), Qt::Key_Return);
+    str = rgcb[1]->currentText();
+    fOpen = pw->isVisible();
+    if (fOpen)
+      pw->close();
+  });
+  Check(str == "Cupido" && !fOpen, "Enter in a body box tabbed into "
+    "leaves it reading \"Cupido\" and presses OK (\"%s\", open %d)",
+    str.toLatin1().constData(), fOpen);
+  Check(rgObjSwiss[uranLo + 1 - custLo] == rgObjSwissDef[uranLo + 1 - custLo]
+    && FEqSz(szObjDisp[uranLo + 1], "Cupido"),
+    "and the slot is still Cupido (\"%s\")", szObjDisp[uranLo + 1]);
+
+  // The arrow keys step from what the box shows, not from the top.
+  DriveModalQt(ShowObjectSelDialogQt, [&str](QWidget *pw) {
+    QList<QComboBox *> rgcb = pw->findChildren<QComboBox *>();
+    if (rgcb.size() >= 4) {
+      rgcb[2]->setFocus(Qt::TabFocusReason);
+      PressQt(rgcb[2]->lineEdit(), Qt::Key_Down);
+      str = rgcb[2]->currentText();
+    }
+    pw->close();
+  });
+  Check(str == "Zeus", "Down on \"Hades\" is the next body in the list, "
+    "\"Zeus\" (\"%s\")", str.toLatin1().constData());
+
+  // A body typed and finished with Enter is shown, as one finished with
+  // Tab always was, and takes its name.
+  DriveModalQt(ShowObjectSelDialogQt, [](QWidget *pw) {
+    QList<QComboBox *> rgcb = pw->findChildren<QComboBox *>();
+    if (rgcb.size() >= 4) {
+      TypeOverQt(rgcb[1]->lineEdit(), "10199");
+      PressQt(rgcb[1]->lineEdit(), Qt::Key_Return);
+    }
+    if (pw->isVisible())
+      pw->close();
+  });
+  Check(rgObjSwiss[uranLo + 1 - custLo] == 10199 && !ignore[uranLo + 1] &&
+    FEqSz(szObjDisp[uranLo + 1], "Chariklo"), "a number typed into a "
+    "hidden row and Enter: body %d, shown %d, named \"%s\"",
+    rgObjSwiss[uranLo + 1 - custLo], !ignore[uranLo + 1],
+    szObjDisp[uranLo + 1]);
+
+  // One bad row does not close the dialog and take the good ones with it.
+  fOpen = fFalse;
+  DriveModalQt(ShowObjectSelDialogQt, [&fOpen, &str](QWidget *pw) {
+    QList<QComboBox *> rgcb = pw->findChildren<QComboBox *>();
+    QPushButton *ppbOK = PpbButtonQt(pw, "IDOK");
+    QTimer tBox;
+    if (rgcb.size() < 4 || ppbOK == NULL)
+      { pw->close(); return; }
+    TypeOverQt(rgcb[2]->lineEdit(), "zzz");
+    TypeOverQt(rgcb[3]->lineEdit(), "Sedna");
+    // The complaint is a modal of its own; dismiss it and nothing else.
+    QObject::connect(&tBox, &QTimer::timeout, []() {
+      QMessageBox *pmb =
+        qobject_cast<QMessageBox *>(QApplication::activeModalWidget());
+      if (pmb != NULL)
+        pmb->close();
+    });
+    tBox.start(50 * nScaleTest);
+    ppbOK->click();
+    tBox.stop();
+    fOpen = pw->isVisible();
+    str = rgcb[3]->currentText();
+    pw->close();
+  });
+  Check(fOpen && str == "Sedna", "an invalid row leaves the dialog open "
+    "with the other rows as typed (open %d, \"%s\")", fOpen,
+    str.toLatin1().constData());
+  Check(rgObjSwiss[uranLo + 3 - custLo] == rgObjSwissDef[uranLo + 3 - custLo],
+    "and writes none of it");
+
+  // A slot named "S/M" as half of another midpoint: the field shows text
+  // the dialog will take back.
+  force[uranLo] = ForceMid(oSun, oMoo);
+  SetObjDisp(uranLo, "S/M");
+  fOpen = fTrue;
+  DriveModalQt(ShowObjectSelDialogQt, [](QWidget *pw) {
+    QList<QComboBox *> rgcb = pw->findChildren<QComboBox *>();
+    QPushButton *ppbOK = PpbButtonQt(pw, "IDOK");
+    char sz[cchSzDef];
+    if (rgcb.size() >= 4 && ppbOK != NULL) {
+      sprintf2(S(sz), "%d/Mar", uranLo);
+      rgcb[2]->setEditText(sz);
+      ppbOK->click();
+    }
+    if (pw->isVisible())
+      pw->close();
+  });
+  f1 = FForceMid(force[uranLo + 2]);
+  DriveModalQt(ShowObjectSelDialogQt, [&fOpen, &str, &str2](QWidget *pw) {
+    QList<QComboBox *> rgcb = pw->findChildren<QComboBox *>();
+    QPushButton *ppbOK = PpbButtonQt(pw, "IDOK");
+    QTimer tBox;
+    if (rgcb.size() < 4 || ppbOK == NULL)
+      { pw->close(); return; }
+    str = rgcb[0]->currentText(); str2 = rgcb[2]->currentText();
+    QObject::connect(&tBox, &QTimer::timeout, []() {
+      QMessageBox *pmb =
+        qobject_cast<QMessageBox *>(QApplication::activeModalWidget());
+      if (pmb != NULL)
+        pmb->close();
+    });
+    tBox.start(50 * nScaleTest);
+    ppbOK->click();
+    tBox.stop();
+    fOpen = pw->isVisible();
+    if (fOpen)
+      pw->close();
+  });
+  Check(f1 && str == "Sun/Moon" && str2.count('/') == 1 && !fOpen &&
+    FForceMid(force[uranLo + 2]), "a midpoint of the slot named \"S/M\" "
+    "reopens as text OK accepts (\"%s\", open %d)",
+    str2.toLatin1().constData(), fOpen);
+
+  // Off its midpoint and back to its own body, the untouched name goes
+  // with it; and a name box emptied gets the body's name, not a blank.
+  DriveModalQt(ShowObjectSelDialogQt, [](QWidget *pw) {
+    QList<QComboBox *> rgcb = pw->findChildren<QComboBox *>();
+    QList<QLineEdit *> rgpe = RgpeObjSelNamesQt(pw);
+    QPushButton *ppbOK = PpbButtonQt(pw, "IDOK");
+    if (rgcb.size() >= 4 && rgpe.size() >= 4 && ppbOK != NULL) {
+      rgcb[0]->setEditText("Vulcan");
+      rgpe[3]->setText("");
+      ppbOK->click();
+    }
+    if (pw->isVisible())
+      pw->close();
+  });
+  f2 = !FForceMid(force[uranLo]);
+  Check(f2 && FEqSz(szObjDisp[uranLo], "Vulcan"), "a slot taken off its "
+    "midpoint is renamed for its body (\"%s\")", szObjDisp[uranLo]);
+  Check(FEqSz(szObjDisp[uranLo + 3], "Zeus"), "an emptied name box is the "
+    "body's name (\"%s\")", szObjDisp[uranLo + 3]);
+
+  for (i = 0; i < cRow; i++) {
+    int iobj = uranLo + i;
+    ResetCustomSlotQt(iobj);
+    rgTypSwiss[iobj - custLo] = rgnTyp[i];
+    rgObjSwiss[iobj - custLo] = rgnObj[i];
+    rgPntSwiss[iobj - custLo] = rgnPnt[i];
+    rgFlgSwiss[iobj - custLo] = rgnFlg[i];
+    force[iobj] = rgforceSav[i]; ignore[iobj] = rgignoreSav[i];
+    SetObjDisp(iobj, rgszDisp[i]);
+  }
+}
+
+
 // The Object Selections list is a table of {type, index, name} triples,
 // and its whole value is that {1, 7066} really is Nessus -- a digit wrong
 // there silently puts a different body in the chart. Resolve each entry
@@ -10534,6 +10789,11 @@ static void TestObjSelParseQt()
   nPntSav = rgPntSwiss[uranLo - custLo];
   nFlgSav = rgFlgSwiss[uranLo - custLo];
 
+  // Not forced anywhere, for the length of this: SzObjSelDef() shows a
+  // forced midpoint as A/B, and the suite's settings can have this very
+  // slot on one.
+  real forceSav = force[uranLo];
+  force[uranLo] = 0.0;
   rgTypSwiss[uranLo - custLo] = 1; rgObjSwiss[uranLo - custLo] = 7066;
   rgPntSwiss[uranLo - custLo] = rgFlgSwiss[uranLo - custLo] = 0;
   SzObjSelDef(S(sz), uranLo);
@@ -10554,6 +10814,7 @@ static void TestObjSelParseQt()
   rgObjSwiss[uranLo - custLo] = nObjSav;
   rgPntSwiss[uranLo - custLo] = nPntSav;
   rgFlgSwiss[uranLo - custLo] = nFlgSav;
+  force[uranLo] = forceSav;
   printf("  body fields read as names, as definitions, and with suffixes\n");
 }
 
@@ -23690,6 +23951,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"custom-parse",         TestCustomDialogParseQt},
   {"objdef-set",           TestObjDefSetQt},
   {"objsel-glyph",         TestObjSelGlyphQt},
+  {"objsel-keys",          TestObjSelKeysQt},
   {"settings-roundtrip",   TestSettingsRoundTripQt},
   {"interface-settings",   TestInterfaceSettingsQt},
   {"graphics-fields",      TestGraphicsFieldsQt},
