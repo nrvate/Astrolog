@@ -67,6 +67,7 @@
 #include <QtCore/QStringListModel>
 #include <QtWidgets/QMessageBox>
 #include <QtWidgets/QListWidget>
+#include <QtWidgets/QButtonGroup>
 #include <QtWidgets/QPushButton>
 #include <QtCore/QTimer>
 #include <QtCore/QStringList>
@@ -8600,6 +8601,47 @@ static void TestDialogArrowKeysQt()
     }
     pw->close();
   });
+
+  // A radio group wraps at its ends, and the arrow selects as it goes:
+  // Down on the last of the Transits dialog's first group lands on, and
+  // chooses, its first -- not on whatever control lies below the group.
+  {
+    QString strFirst, strGot;
+    flag fChecked = fFalse;
+    DriveModalQt(ShowTransitDialogQt, [&](QWidget *pw) {
+      QButtonGroup *pg = NULL;
+      for (QRadioButton *prb : pw->findChildren<QRadioButton *>())
+        if (prb->group() != NULL && prb->group()->buttons().size() > 1) {
+          pg = prb->group();
+          break;
+        }
+      if (pg != NULL) {
+        QAbstractButton *pbLast = pg->buttons().last();
+        strFirst = pg->buttons().first()->text();
+        pbLast->setFocus();
+        pbLast->click();
+        // Both ways off the end it could be: the group runs down or across.
+        for (int key : {(int)Qt::Key_Down, (int)Qt::Key_Right}) {
+          if (QApplication::focusWidget() != pbLast)
+            break;
+          QKeyEvent ev(QEvent::KeyPress, key, Qt::NoModifier);
+          QApplication::sendEvent(pbLast, &ev);
+        }
+        QAbstractButton *pb =
+          qobject_cast<QAbstractButton *>(QApplication::focusWidget());
+        if (pb != NULL) {
+          strGot = pb->text();
+          fChecked = pb->isChecked();
+        }
+      }
+      pw->close();
+    });
+    Check(!strFirst.isEmpty() && strGot == strFirst && fChecked,
+      "an arrow off the end of a radio group wraps to its first and "
+      "selects it (got \"%s\", checked %d, want \"%s\")",
+      strGot.toLocal8Bit().constData(), fChecked,
+      strFirst.toLocal8Bit().constData());
+  }
 
   printf("  arrow keys follow the layout, not the order controls were built\n");
 }

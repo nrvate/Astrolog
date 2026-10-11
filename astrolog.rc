@@ -2691,7 +2691,7 @@ BEGIN
     EDITTEXT        ded48,460,135,40,13,ES_AUTOHSCROLL
     EDITTEXT        ded49,460,150,40,13,ES_AUTOHSCROLL
     EDITTEXT        ded50,460,165,40,13,ES_AUTOHSCROLL
-    DEFPUSHBUTTON   "&Lookup Names",dbCu_l,430,180,55,14
+    PUSHBUTTON      "&Lookup Names",dbCu_l,430,180,55,14
     LTEXT           "Vulcan",IDC_STATIC,5,15,30,8
     LTEXT           "Cupido",IDC_STATIC,5,30,30,8
     LTEXT           "Hades",IDC_STATIC,5,45,30,8
@@ -2860,7 +2860,7 @@ BEGIN
     EDITTEXT        ded48,475,135,40,13,ES_AUTOHSCROLL
     EDITTEXT        ded49,475,150,40,13,ES_AUTOHSCROLL
     EDITTEXT        ded50,475,165,40,13,ES_AUTOHSCROLL
-    DEFPUSHBUTTON   "&Lookup Names",dbCu_l,445,180,55,14
+    PUSHBUTTON      "&Lookup Names",dbCu_l,445,180,55,14
     LTEXT           "Sirius",IDC_STATIC,5,15,35,8
     LTEXT           "Canopus",IDC_STATIC,5,30,35,8
     LTEXT           "Rigil Kent.",IDC_STATIC,5,45,35,8

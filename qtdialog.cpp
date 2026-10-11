@@ -542,6 +542,23 @@ public:
     if (fArrow) {
       if (FWidgetTakesKeysQt(pwFocus, fTrue))
         return QObject::eventFilter(pobj, pev);
+      // A radio button only lets an arrow through when its group has
+      // nothing further that way. Windows wraps to the other end of the
+      // group there and selects it; leaving the group for whatever
+      // control lay nearest is what this did.
+      QRadioButton *prb = qobject_cast<QRadioButton *>(pwFocus);
+      if (prb != NULL && prb->group() != NULL) {
+        QList<QAbstractButton *> rgpbGroup = prb->group()->buttons();
+        if (rgpbGroup.size() > 1) {
+          QAbstractButton *pbTo = key == Qt::Key_Down ||
+            key == Qt::Key_Right ? rgpbGroup.first() : rgpbGroup.last();
+          if (pbTo == prb)
+            return true;
+          pbTo->setFocus(Qt::TabFocusReason);
+          pbTo->click();
+          return true;
+        }
+      }
       QWidget *pwTo = PwArrowTargetQt(pdlg, pwFocus, key);
       if (pwTo == NULL)
         return QObject::eventFilter(pobj, pev);
@@ -3177,8 +3194,11 @@ static void RcLoadChartInfoQt(CONST QVector<RCBUILT> &rgbuilt, CONST CI *pci)
   sprintf2(S(sz), "%.3s", szMonth[FValidMon(pci->mon) ? pci->mon : 1]);
   FillComboQt((QComboBox *)PwRcFindQt(rgbuilt, "dcInMon"), sz,
     RgstrMonthQt());
+  // A day the month does not have is shown as 1, as Windows'
+  // SetEditMDYT() shows it, rather than as a number OK will refuse.
   FillComboQt((QComboBox *)PwRcFindQt(rgbuilt, "dcInDay"),
-    QString::number(pci->day), RgstrDayQt());
+    QString::number(FValidDay(pci->day, FValidMon(pci->mon) ? pci->mon : 1,
+    pci->yea) ? pci->day : 1), RgstrDayQt());
   FillComboQt((QComboBox *)PwRcFindQt(rgbuilt, "dcInYea"),
     QString::number(pci->yea), RgstrYearQt());
   FillComboQt((QComboBox *)PwRcFindQt(rgbuilt, "dcInTim"),

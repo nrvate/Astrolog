@@ -11445,10 +11445,18 @@ this is the note that explains the wall of dialogs.
     Animated GIF's OK no longer swallows Enter during the recount, and
     its fields ignore a passing wheel; smaller ones in the code.
 
-    *Not changed, with the reason.* Object Customization's resource
-    marks "Lookup Names" as a second default button, so on Windows
-    Enter there may look names up rather than close; Enter is OK here,
-    which is what every other dialog does. A chart name holding
+    *Three more the same day.* `dlgCustom` and `dlgCustomS` each
+    marked "Lookup Names" as a second `DEFPUSHBUTTON`, so on Windows
+    Enter looked names up where every other dialog closes; it is a
+    plain `PUSHBUTTON` now and Enter is OK in both builds. A day the
+    month does not have is shown as 1 in Chart Info, as
+    `SetEditMDYT()` shows it. An arrow off the end of a radio group
+    wraps to the other end and selects it.
+
+    *Not changed, with the reason.* Chart Info shows "Autodetect" for
+    daylight where Windows shows the resolved Yes or No: deliberate
+    (see `RgstrDstQt`), because Windows' way turns an Autodetect chart
+    into a fixed one on any OK. A chart name holding
     non-UTF-8 bytes (a Latin-1 file from the Win32 build) shows a
     replacement character and is rewritten on OK, and on the Windows
     Qt build `toLocal8Bit()` is the ANSI code page while the load is
