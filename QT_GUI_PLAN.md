@@ -11396,6 +11396,70 @@ this is the note that explains the wall of dialogs.
     height and an edit the resource's, in every dialog.
 
 
+282. **Every dialog read against its Windows original, after item 281.**
+    2026-10-10. The three things 281 left alone, then what three
+    read-only review agents found comparing `qtdialog.cpp` with
+    `wdialog.cpp` dialog by dialog.
+
+    *Left alone by 281, now done.* (a) **A bad field no longer closes
+    its dialog.** Fifteen dialogs validated after `exec()` had hidden
+    them, so one typo cost every other edit; Windows' `EnsureN()`
+    returns before `EndDialog()`. `AstroDialogQt` keeps the dialog on
+    screen until its function returns, and a refused field says
+    `goto LAgain`. Chart Info, Default Info, Set Colors and Object
+    Customization also said only "one or more fields are invalid";
+    they name the field now. Two dialogs stored settings before a
+    later check could refuse (Moon Object Settings' three flags,
+    Display Settings' fonts). (b) **Lookup Names keeps the user's
+    names**, both builds: a name typed this visit, or their own label
+    on a row they did not change, stays (`FObjSelNameKept()`); the
+    lookup itself is `ObjSelLookup()` in `calc.cpp`, shared. (c) **A
+    combo and a one-line edit on one row are one height**
+    (`RcBuildDialogQt`).
+
+    *Found by the review, fixed.* Save pickers were Open dialogs --
+    button "Open", **no overwrite question** (`setAcceptMode`). A
+    mnemonic two buttons share moved the focus AND pressed, so a bare
+    "a" in the chart list pressed Delete All; it only moves the focus
+    now, as Windows does. The pin that said otherwise was on the
+    Transits dialog's "&Now"/"N&one", which were never ambiguous: the
+    radio's letter is o. **The layout-following arrow keys had never
+    worked from a keyboard**: the filter sat on the dialog, a button
+    takes an arrow itself, and the test sent the key to the dialog; it
+    is installed on the buttons and the test sends to the focus
+    widget. "Set Info" on chart #1 in the Charts dialog wrote `ciMain`
+    alone and the recast overwrote it. Ephemeris Settings' Browse was
+    dead on any row hidden when the dialog opened. Chart Info's Now
+    and Recall put the stored name back over a typed one, and each
+    press appended every combo's list again. Colour lists offered
+    Element/Ray/Star to fields whose OK refuses them
+    (`FillColorComboQt` lacked `SetEditColor()`'s skip). A list tabbed
+    into has a current row and no selected one, and OK, Delete Chart
+    and Apply Info acted on it (`NListSelRowQt()`). The combo index is
+    resynced before any key or click that steps the list, not only at
+    open. Graphics Settings' OK shows the graphics chart;
+    Display Settings builds the ray table; Enter Command Line stores
+    its checkbox on an empty line and goes through
+    `FProcessCommandLine()` (a bare file name opens it); aspect sort
+    can be set back to "Power" (both builds, an upstream bug);
+    Animated GIF's OK no longer swallows Enter during the recount, and
+    its fields ignore a passing wheel; smaller ones in the code.
+
+    *Not changed, with the reason.* Object Customization's resource
+    marks "Lookup Names" as a second default button, so on Windows
+    Enter there may look names up rather than close; Enter is OK here,
+    which is what every other dialog does. A chart name holding
+    non-UTF-8 bytes (a Latin-1 file from the Win32 build) shows a
+    replacement character and is rewritten on OK, and on the Windows
+    Qt build `toLocal8Bit()` is the ANSI code page while the load is
+    UTF-8: **open**, it is 84 call sites and a policy, and it has not
+    been run on Windows. Orb fields round to two decimals on any OK,
+    as Windows' do.
+
+    Nets: `dialog-bad-field` (eleven dialogs, sabotaged),
+    `dialog-quirks` (seven, each sabotaged), `objsel-keys`,
+    `mnemonics`, `arrow-keys` (failed 5 of 11 before the fix).
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

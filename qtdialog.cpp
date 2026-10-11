@@ -131,6 +131,9 @@ static void FillComboQt(QComboBox *pcb, CONST QString &strCur,
   if (pcb == NULL)
     return;
   pcb->setEditable(fTrue);
+  // Cleared first: "Now" and "Recall" fill the same boxes again, and each
+  // press used to append the whole list of suggestions once more.
+  pcb->clear();
   // addItem() before setEditText(): see the Progressions dialog.
   for (int i = 0; i < rgstr.size(); i++)
     pcb->addItem(rgstr[i]);
@@ -327,6 +330,22 @@ static QStringList RgstrLatQt()
 // dialog scrolls and the value stays put. Clicking a combo still focuses
 // it, after which the wheel adjusts it as usual.
 
+static void TameEditComboQt(QComboBox *pcb);
+
+// The row the user SELECTED in a list, or -1, which is what Windows'
+// LB_GETCURSEL answers. Not currentRow(): a list reached with Tab makes
+// its first row "current" without selecting or highlighting it, and
+// everything that asked for the current row then acted on a row nobody
+// had picked -- OK in the chart list loaded chart 0, Delete Chart deleted
+// it, Apply Info took the atlas's first city over the typed location.
+static int NListSelRowQt(QListWidget *plist)
+{
+  QListWidgetItem *pitem = plist != NULL ? plist->currentItem() : NULL;
+
+  return pitem != NULL && pitem->isSelected() ? plist->currentRow() : -1;
+}
+
+
 class NoComboWheelQt : public QObject
 {
 public:
@@ -334,6 +353,19 @@ public:
   {
     QWidget *pw;
 
+    // Anything about to step through the list or open it starts from the
+    // text the box shows NOW. TameEditComboQt() lines the two up when the
+    // dialog opens, and every setEditText() after that -- a "Now" button,
+    // an atlas lookup, the user's typing -- leaves the index behind
+    // again: Transits open on "Mar", Now to "Oct", Down gave "Apr".
+    if (pev->type() == QEvent::MouseButtonPress ||
+      pev->type() == QEvent::Wheel || (pev->type() == QEvent::KeyPress &&
+      (((QKeyEvent *)pev)->key() == Qt::Key_Up ||
+      ((QKeyEvent *)pev)->key() == Qt::Key_Down ||
+      ((QKeyEvent *)pev)->key() == Qt::Key_PageUp ||
+      ((QKeyEvent *)pev)->key() == Qt::Key_PageDown ||
+      ((QKeyEvent *)pev)->key() == Qt::Key_F4)))
+      TameEditComboQt(qobject_cast<QComboBox *>(pobj));
     if (pev->type() != QEvent::Wheel)
       return QObject::eventFilter(pobj, pev);
     pw = qobject_cast<QWidget *>(pobj);
@@ -488,14 +520,26 @@ public:
     QKeyEvent *pke = (QKeyEvent *)pev;
     if ((pke->modifiers() & ~Qt::KeypadModifier) != Qt::NoModifier)
       return QObject::eventFilter(pobj, pev);
+    int key = pke->key();
+    flag fArrow = key == Qt::Key_Up || key == Qt::Key_Down ||
+      key == Qt::Key_Left || key == Qt::Key_Right;
     pdlg = qobject_cast<QDialog *>(pobj);
+    // On a button rather than on the dialog, for the arrows alone. A
+    // filter on the dialog only sees a key its focused child ignored, and
+    // a button does not ignore an arrow: it takes it and walks the tab
+    // chain itself. So the arrow branch below was never reached from a
+    // keyboard, only from a test that sent the key to the dialog.
+    if (pdlg == NULL) {
+      QWidget *pwBtn = qobject_cast<QWidget *>(pobj);
+      if (!fArrow || pwBtn == NULL)
+        return QObject::eventFilter(pobj, pev);
+      pdlg = qobject_cast<QDialog *>(pwBtn->window());
+    }
     if (pdlg == NULL)
       return QObject::eventFilter(pobj, pev);
     pwFocus = pdlg->focusWidget();
 
-    int key = pke->key();
-    if (key == Qt::Key_Up || key == Qt::Key_Down || key == Qt::Key_Left ||
-      key == Qt::Key_Right) {
+    if (fArrow) {
       if (FWidgetTakesKeysQt(pwFocus, fTrue))
         return QObject::eventFilter(pobj, pev);
       QWidget *pwTo = PwArrowTargetQt(pdlg, pwFocus, key);
@@ -524,17 +568,21 @@ public:
     }
     if (rgpb.isEmpty())
       return QObject::eventFilter(pobj, pev);
-    // An AMBIGUOUS mnemonic -- several buttons share the letter -- moves
-    // focus to the next match and CLICKS it, in one keystroke. That is
-    // Windows' behavior too, confirmed against the real build under Wine
-    // on the Transits dialog, where "&Now" and "N&one" share 'n': a bare
-    // 'n' with the None radio focused fired &Now in the same press. The
-    // suite pins this in TestDialogMnemonicsQt; do not "fix" it into a
-    // cycle-without-click.
+    // A mnemonic only one control carries presses it. An AMBIGUOUS one --
+    // several share the letter -- only moves the focus to the next match,
+    // and the user presses Space or Enter to act: that is what Windows'
+    // dialog manager does, and it is what keeps a bare "a" in the chart
+    // list, meant for the L&atitude sort, from pressing "Delete &All",
+    // which asks nothing. This used to focus AND click, on the strength
+    // of a check against the Transits dialog's "&Now" and "N&one" -- a
+    // pair that is not ambiguous at all, the radio's letter being o. A
+    // radio button is still selected by the focus reaching it, as a
+    // Windows auto radio button is.
     int i = rgpb.indexOf(qobject_cast<QAbstractButton *>(pwFocus));
     QAbstractButton *pb = rgpb[(i + 1) % rgpb.size()];
     pb->setFocus(Qt::ShortcutFocusReason);
-    pb->click();
+    if (rgpb.size() == 1 || qobject_cast<QRadioButton *>(pb) != NULL)
+      pb->click();
     return true;
   }
 };
@@ -1020,6 +1068,13 @@ static void RcBuildDialogQt(QDialog *pdlg, CONST RCCTL *rgctl, int cctl,
           Qt::SmoothTransformation));
     }
   }
+  // The arrow keys follow the layout; see MnemonicKeysQt for why that
+  // has to be asked of each button and not of the dialog.
+  // Not the radio buttons: an arrow inside a radio group moves the choice
+  // with it, which is the button's own doing and Windows' too.
+  for (QAbstractButton *pb : pdlg->findChildren<QAbstractButton *>())
+    if (qobject_cast<QRadioButton *>(pb) == NULL)
+      pb->installEventFilter(&filterMnemonic);
 }
 
 static void RcWireOkCancelQt(QDialog *pdlg, CONST QVector<RCBUILT> &rgbuilt)
@@ -1565,6 +1620,10 @@ static QString StrSaveFileNameQt(CONST char *szTitle, CONST QString &qsStart,
     {
       QFileDialog dlg(gi.qwind, szTitle, qsDir, qsFilter);
 
+      // Without this the picker is an Open dialog: its button says
+      // "Open" and it replaces an existing file without a word, where
+      // Windows asks (OFN_OVERWRITEPROMPT, xdata.cpp).
+      dlg.setAcceptMode(QFileDialog::AcceptSave);
       SizeFileDlgQt(&dlg);
       qs = dlg.exec() == QDialog::Accepted &&
         !dlg.selectedFiles().isEmpty() ?
@@ -1695,6 +1754,7 @@ void ShowOpenBackgroundDialogQt()
     StrLastDirQt(QString("Open Background")),
     "Windows Bitmaps (*.bmp);;All Files (*)");
 
+  dlg.setFileMode(QFileDialog::ExistingFile);
   SizeFileDlgQt(&dlg);
   QString qs = dlg.exec() != QDialog::Accepted ||
     dlg.selectedFiles().isEmpty() ? QString() : dlg.selectedFiles()[0];
@@ -1718,6 +1778,7 @@ void ShowOpenWorldDialogQt()
     StrLastDirQt(QString("Open World Map")),
     "Windows Bitmaps (*.bmp);;All Files (*)");
 
+  dlg.setFileMode(QFileDialog::ExistingFile);
   SizeFileDlgQt(&dlg);
   QString qs = dlg.exec() != QDialog::Accepted ||
     dlg.selectedFiles().isEmpty() ? QString() : dlg.selectedFiles()[0];
@@ -1906,8 +1967,13 @@ static QComboBox *PcbGifFieldQt(QWidget *pw, CONST QStringList &rgstr,
   pcb->setEditable(true);
   pcb->addItems(rgstr);
   pcb->setEditText(str);
-  // This dialog never reaches PrepareDialogQt().
+  // This dialog never reaches PrepareDialogQt(), so it gets here what
+  // that gives every other combo: no completer, and no wheel changing a
+  // value the pointer merely passed over.
+  static NoComboWheelQt filter;
   TameEditComboQt(pcb);
+  pcb->setFocusPolicy(Qt::StrongFocus);
+  pcb->installEventFilter(&filter);
   return pcb;
 }
 
@@ -2211,10 +2277,22 @@ void ShowGenerateGifDialogQt()
   tRecount.setSingleShot(true);
   tRecount.setInterval(150);
   QObject::connect(&tRecount, &QTimer::timeout, &dlg, fnRecount);
+  // OK is not disabled while a count is pending: a disabled default
+  // button swallows Enter, so a year typed and Enter pressed inside the
+  // 150 ms did nothing at all. OK finishes the count itself instead, and
+  // closes only if the count allows it.
   auto fnUpdate = [&]() {
-    pbb->button(QDialogButtonBox::Ok)->setEnabled(false);
     tRecount.start();
   };
+  QObject::disconnect(pbb, &QDialogButtonBox::accepted, &dlg, NULL);
+  QObject::connect(pbb, &QDialogButtonBox::accepted, &dlg, [&]() {
+    if (tRecount.isActive()) {
+      tRecount.stop();
+      fnRecount();
+    }
+    if (pbb->button(QDialogButtonBox::Ok)->isEnabled())
+      dlg.accept();
+  });
   for (i = 0; i < 2; i++) {
     QObject::connect(rggd[i].pcbMon, &QComboBox::editTextChanged, &dlg,
       fnUpdate);
@@ -2920,6 +2998,11 @@ LAgain:
   // RedrawQt() instead.
   if (fResize && FWindowChartQt())
     ResizeWindowToChartQt();
+  // OK here shows the graphics chart, as Windows' DlgGraphics ends with
+  // "us.fGraphics = wi.fRedraw = wi.fMenuAll = fTrue": changing a
+  // graphics setting while looking at a text chart otherwise appears to
+  // have done nothing at all.
+  us.fGraphics = fTrue;
   RedoMenuQt();
   RecastAndRedrawQt();
 }
@@ -2951,10 +3034,10 @@ static void AtlasRowQt(CONST char *sz, int iae)
 
 // Run one lookup with the rows going to "plist".
 static void RcAtlasRunQt(QListWidget *plist, int nWhich, QLineEdit *peLoc,
-  QComboBox *pcbLon, QComboBox *pcbLat, CI *pci)
+  QComboBox *pcbLon, QComboBox *pcbLat, CI *pci, int ilist = 12)
 {
   char sz[cchSzMax];
-  int ilist = 12, i;
+  int i;
   real lon, lat;
 
   if (plist == NULL)
@@ -3022,7 +3105,7 @@ static void RcAtlasApplyQt(QListWidget *plist,
     return;
   QLineEdit *peLoc = (QLineEdit *)PwRcFindQt(rgbuilt,
     fDefault ? "deDeLoc" : "deInLoc");
-  iRow = plist->currentRow();
+  iRow = NListSelRowQt(plist);
   if (iRow >= 0 && iRow < s_rgiaeQt.size())
     iae = s_rgiaeQt[iRow];
   if (iae < 0) {
@@ -3123,9 +3206,30 @@ static void RcLoadChartInfoQt(CONST QVector<RCBUILT> &rgbuilt, CONST CI *pci)
 }
 
 
+// "Now" and "Recall" refill the date, time and place fields and leave the
+// name and location boxes exactly as they stand, typed text included:
+// Windows' two buttons jump to a label below the lines that set those two
+// controls. Reloading everything put back the name the dialog opened with
+// over whatever the user had just typed.
+static void RcReloadChartInfoQt(CONST QVector<RCBUILT> &rgbuilt,
+  CONST CI *pci)
+{
+  QLineEdit *peName = (QLineEdit *)PwRcFindQt(rgbuilt, "deInNam");
+  QLineEdit *peLoc = (QLineEdit *)PwRcFindQt(rgbuilt, "deInLoc");
+  QString strName = peName != NULL ? peName->text() : QString();
+  QString strLoc = peLoc != NULL ? peLoc->text() : QString();
+
+  RcLoadChartInfoQt(rgbuilt, pci);
+  if (peName != NULL)
+    peName->setText(strName);
+  if (peLoc != NULL)
+    peLoc->setText(strLoc);
+}
+
+
 static void ShowChartInfoForQt(CI *pci, CONST char *szTitle)
 {
-  QDialog dlg(gi.qwind);
+  AstroDialogQt dlg(gi.qwind);
   QVector<RCBUILT> rgbuilt;
   CI ci = *pci;
 
@@ -3158,12 +3262,12 @@ static void ShowChartInfoForQt(CI *pci, CONST char *szTitle)
       // took them from ciDefa instead, which for most users is empty --
       // so typing a name and pressing "Now" erased it.
       ciT.nam = ci.nam; ciT.loc = ci.loc;
-      RcLoadChartInfoQt(rgbuilt, &ciT);
+      RcReloadChartInfoQt(rgbuilt, &ciT);
 #endif
     });
   if (ppbSet != NULL)
     QObject::connect(ppbSet, &QPushButton::clicked, &dlg, [&rgbuilt]() {
-      RcLoadChartInfoQt(rgbuilt, &ciSave);
+      RcReloadChartInfoQt(rgbuilt, &ciSave);
     });
 
 #ifdef ATLAS
@@ -3174,11 +3278,11 @@ static void ShowChartInfoForQt(CI *pci, CONST char *szTitle)
   if (ppbCity != NULL)
     QObject::connect(ppbCity, &QPushButton::clicked, &dlg,
       [plist, peLoc, pcbLon, pcbLat, &ci]() {
-        RcAtlasRunQt(plist, 0, peLoc, pcbLon, pcbLat, &ci); });
+        RcAtlasRunQt(plist, 0, peLoc, pcbLon, pcbLat, &ci, 14); });
   if (ppbCoor != NULL)
     QObject::connect(ppbCoor, &QPushButton::clicked, &dlg,
       [plist, peLoc, pcbLon, pcbLat, &ci]() {
-        RcAtlasRunQt(plist, 1, peLoc, pcbLon, pcbLat, &ci); });
+        RcAtlasRunQt(plist, 1, peLoc, pcbLon, pcbLat, &ci, 14); });
   if (ppbChan != NULL)
     QObject::connect(ppbChan, &QPushButton::clicked, &dlg,
       [plist, peLoc, pcbLon, pcbLat, &ci, &rgbuilt]() {
@@ -3187,7 +3291,7 @@ static void ShowChartInfoForQt(CI *pci, CONST char *szTitle)
         if (pcbYea != NULL)
           ci.yea = NParseSz(pcbYea->currentText().toLocal8Bit().constData(),
             pmYea);
-        RcAtlasRunQt(plist, 2, peLoc, pcbLon, pcbLat, &ci); });
+        RcAtlasRunQt(plist, 2, peLoc, pcbLon, pcbLat, &ci, 14); });
   if (ppbAppl != NULL)
     QObject::connect(ppbAppl, &QPushButton::clicked, &dlg,
       [plist, &rgbuilt]() {
@@ -3197,6 +3301,7 @@ static void ShowChartInfoForQt(CI *pci, CONST char *szTitle)
   RcWireOkCancelQt(&dlg, rgbuilt);
   PrepareDialogQt(&dlg);
   FocusDialogQt(PwRcFindQt(rgbuilt, "dcInMon"));
+LAgain:
   if (dlg.exec() != QDialog::Accepted)
     return;
 
@@ -3225,13 +3330,25 @@ static void ShowChartInfoForQt(CI *pci, CONST char *szTitle)
   if (pcbLat != NULL) { ba = pcbLat->currentText().toLocal8Bit();
     ci.lat = RParseSz(ba.constData(), pmLat); }
 
-  if (!FValidMon(ci.mon) || !FValidDay(ci.day, ci.mon, ci.yea) ||
-    !FValidYea(ci.yea) || !FValidTim(ci.tim) || !FValidDst(ci.dst) ||
-    !FValidZon(ci.zon) || !FValidLon(ci.lon) || !FValidLat(ci.lat)) {
-    QMessageBox::warning(gi.qwind, szAppName,
-      "One or more chart info fields are invalid.");
-    return;
-  }
+  // Each field named, and the dialog left up, as Windows' DlgInfo does
+  // with eight EnsureN() lines. This said "One or more chart info fields
+  // are invalid" about a dialog it had already closed.
+  if (!FValidMon(ci.mon))
+    { ErrorEnsureQt(&dlg, ci.mon, "month"); goto LAgain; }
+  if (!FValidYea(ci.yea))
+    { ErrorEnsureQt(&dlg, ci.yea, "year"); goto LAgain; }
+  if (!FValidDay(ci.day, ci.mon, ci.yea))
+    { ErrorEnsureQt(&dlg, ci.day, "day"); goto LAgain; }
+  if (!FValidTim(ci.tim))
+    { ErrorEnsureRQt(&dlg, ci.tim, "time"); goto LAgain; }
+  if (!FValidDst(ci.dst))
+    { ErrorEnsureRQt(&dlg, ci.dst, "daylight saving"); goto LAgain; }
+  if (!FValidZon(ci.zon))
+    { ErrorEnsureRQt(&dlg, ci.zon, "time zone"); goto LAgain; }
+  if (!FValidLon(ci.lon))
+    { ErrorEnsureRQt(&dlg, ci.lon, "longitude"); goto LAgain; }
+  if (!FValidLat(ci.lat))
+    { ErrorEnsureRQt(&dlg, ci.lat, "latitude"); goto LAgain; }
   QLineEdit *peName = (QLineEdit *)PwRcFindQt(rgbuilt, "deInNam");
   // SzClone and assign, NOT FCloneSz. A CI's nam and loc are copied
   // around by value all over this program -- ciCore into ciMain, ciTwin
@@ -3250,6 +3367,12 @@ static void ShowChartInfoForQt(CI *pci, CONST char *szTitle)
   if (peLoc != NULL)
     ci.loc = SzClone(peLoc->text().toLocal8Bit().constData());
   *pci = ci;
+  // Chart #1 reached through the Charts dialog is ciMain, which every
+  // recast overwrites from ciCore: Windows' DlgInfo stores both
+  // (wdialog.cpp, "if (wi.nDlgChart == 1) ciCore = ci"), and without the
+  // second the edit was simply gone.
+  if (pci == &ciMain)
+    ciCore = ci;
   // No "ciSave = ci" here. Windows' DlgInfo OK handler (wdialog.cpp:1238)
   // writes rgpci[] and nothing else; ciSave is the Chart menu's Store slot
   // and SetRelQt()'s midpoint stash, and this dialog filling it made the
@@ -3310,6 +3433,7 @@ static void ShowOpenChartIntoDialogQt(int iChart)
     "iCalendar Files (*.ics);;"
     "Text Files [Solar Fire] (*.txt);;"
     "All Files (*)");
+  dlg.setFileMode(QFileDialog::ExistingFile);
   SizeFileDlgQt(&dlg);
   QString qs = dlg.exec() != QDialog::Accepted ||
     dlg.selectedFiles().isEmpty() ? QString() : dlg.selectedFiles()[0];
@@ -3587,7 +3711,7 @@ void ShowChartListDialogQt()
 
   // The selected chart, or -1 when the row is the "no charts" placeholder.
   auto iciSel = [plist]() -> int {
-    int iRow = plist != NULL ? plist->currentRow() : -1;
+    int iRow = NListSelRowQt(plist);
     return (iRow >= 0 && iRow < s_rgiciQt.size()) ? s_rgiciQt[iRow] : -1;
   };
   auto iSlot = [&rgbuilt]() -> int {
@@ -3633,7 +3757,7 @@ void ShowChartListDialogQt()
     QObject::connect(ppb, &QPushButton::clicked, &dlg,
       [nAct, &rgbuilt, plist, iciSel, iSlot, refill, refillAt]() {
         int ici = iciSel(), i2;
-        int iRow = plist != NULL ? plist->currentRow() : -1;
+        int iRow = NListSelRowQt(plist);
         switch (nAct) {
         case 0:                                   // Sort List
           FSortCIList(NRcStoreRadioQt(rgbuilt, 1, 5, 0));
@@ -3668,7 +3792,11 @@ void ShowChartListDialogQt()
           refillAt(is.cci - 1);
           return;
         case 6:                                   // Edit Chart
-          ShowChartInfoForQt(&is.rgci[ici], "Set Chart List Info");
+          {
+            char szT[cchSzDef];
+            sprintf2(S(szT), "Set Chart List #%d Info", ici + 1);
+            ShowChartInfoForQt(&is.rgci[ici], szT);
+          }
           break;
         case 7:                                   // Delete Chart
           i2 = is.cci - 1 - ici;
@@ -3834,8 +3962,15 @@ static void FillColorComboQt(QComboBox *pcb, KI ki, int nExtra)
     return;
   pcb->setEditable(true);
   // addItem() before setEditText(): see the Progressions dialog.
-  for (i = 0; i < iMax; i++)
+  // The same skip Windows' SetEditColor() makes after White: past the
+  // ten extra palette colours, and for the fields taking one symbolic
+  // entry, past the ones before it. Listing all of them offered "Element"
+  // and "Ray" to fields whose own OK then refused them.
+  for (i = 0; i < iMax; i++) {
     pcb->addItem(szColor[i]);
+    if (i == kWhite)
+      i += (cColor2 - cColor) + (nExtra >= 2)*nExtra;
+  }
   pcb->setEditText(SzColor(ki));
 }
 
@@ -3926,7 +4061,7 @@ static void ShowRcRestrictQt(CONST char *szTitle, CONST RCCTL *rgctl,
     // reads astrolog.rc and cannot see a relabel done here, the same
     // blind spot the RCRESBUT button overrides above sit in.
     if (FObjDispCustom(iObj))
-      pcb->setText(QString::fromLatin1(szObjDisp[iObj]));
+      pcb->setText(QString(szObjDisp[iObj]));
     rgpcb[iObj - lo] = pcb;
   }
 
@@ -3957,6 +4092,7 @@ static void ShowRcRestrictQt(CONST char *szTitle, CONST RCCTL *rgctl,
   }
 
   RcWireOkCancelQt(&dlg, rgbuilt);
+  PrepareDialogQt(&dlg);
   if (dlg.exec() != QDialog::Accepted)
     return;
   for (i = lo; i <= hi; i++)
@@ -4036,7 +4172,7 @@ void ShowTransitRestrictDialogQt()
 
 void ShowDefaultInfoDialogQt()
 {
-  QDialog dlg(gi.qwind);
+  AstroDialogQt dlg(gi.qwind);
   QVector<RCBUILT> rgbuilt;
   char sz[cchSzMax];
   int nSavChar;
@@ -4106,11 +4242,14 @@ void ShowDefaultInfoDialogQt()
   RcWireOkCancelQt(&dlg, rgbuilt);
   PrepareDialogQt(&dlg);
   FocusDialogQt(PwRcFindQt(rgbuilt, "dcDeDst"));
+  CI ci;
+  QByteArray ba;
+
+LAgain:
   if (dlg.exec() != QDialog::Accepted)
     return;
 
-  CI ci = ciDefa;
-  QByteArray ba;
+  ci = ciDefa;
   if (pcbDst != NULL) { ba = pcbDst->currentText().toLocal8Bit();
     ci.dst = RParseSz(ba.constData(), pmDst); }
   if (pcbZon != NULL) { ba = pcbZon->currentText().toLocal8Bit();
@@ -4119,12 +4258,14 @@ void ShowDefaultInfoDialogQt()
     ci.lon = RParseSz(ba.constData(), pmLon); }
   if (pcbLat != NULL) { ba = pcbLat->currentText().toLocal8Bit();
     ci.lat = RParseSz(ba.constData(), pmLat); }
-  if (!FValidDst(ci.dst) || !FValidZon(ci.zon) ||
-    !FValidLon(ci.lon) || !FValidLat(ci.lat)) {
-    QMessageBox::warning(gi.qwind, szAppName,
-      "One or more chart info fields are invalid.");
-    return;
-  }
+  if (!FValidDst(ci.dst))
+    { ErrorEnsureRQt(&dlg, ci.dst, "daylight saving"); goto LAgain; }
+  if (!FValidZon(ci.zon))
+    { ErrorEnsureRQt(&dlg, ci.zon, "time zone"); goto LAgain; }
+  if (!FValidLon(ci.lon))
+    { ErrorEnsureRQt(&dlg, ci.lon, "longitude"); goto LAgain; }
+  if (!FValidLat(ci.lat))
+    { ErrorEnsureRQt(&dlg, ci.lat, "latitude"); goto LAgain; }
   if (pcbElv != NULL) { ba = pcbElv->currentText().toLocal8Bit();
     us.elvDef = RParseSz(ba.constData(), pmElv); }
   if (pcbTmp != NULL) { ba = pcbTmp->currentText().toLocal8Bit();
@@ -4528,7 +4669,10 @@ void ShowChartSettingsDialogQt()
   QLineEdit *peRatio = (QLineEdit *)PwRcFindIdxQt(rgbuilt, "deCh_rc", 0);
   if (peWheel != NULL) peWheel->setText(QString::number(us.nWheelRows));
   if (peStep != NULL)  peStep->setText(QString::number(us.nAstroGraphStep));
-  if (peDist != NULL)  peDist->setText(QString::number(us.nAstroGraphDist));
+  // With its unit, as Windows shows it; NFromSz() reads the number back.
+  if (peDist != NULL)
+    peDist->setText(QString::number(us.nAstroGraphDist) +
+      (us.fEuroDist ? "km" : "mi"));
   if (pePart != NULL)  pePart->setText(QString::number(us.nArabicParts));
   if (peCity != NULL)  peCity->setText(QString::number(us.nAtlasList));
   if (peBio != NULL)   peBio->setText(QString::number(us.nBioday));
@@ -4566,7 +4710,11 @@ LAgain:
 
   nw = peWheel != NULL ? NFieldQt(peWheel->text()) : us.nWheelRows;
   nl = peStep != NULL ? NFieldQt(peStep->text()) : us.nAstroGraphStep;
-  nl2 = peDist != NULL ? NFieldQt(peDist->text()) : us.nAstroGraphDist;
+  nl2 = us.nAstroGraphDist;
+  if (peDist != NULL) {
+    SzFieldQt(sz, peDist->text());
+    nl2 = NFromSz(sz);
+  }
   np = pePart != NULL ? NFieldQt(pePart->text()) : us.nArabicParts;
   nn = peCity != NULL ? NFieldQt(peCity->text()) : us.nAtlasList;
   yb = peBio != NULL ? NFieldQt(peBio->text()) : us.nBioday;
@@ -4593,7 +4741,10 @@ LAgain:
     (int)sizeof(rgchArabicSort), 0)];
   if (pcbSort != NULL) {
     SzFieldQt(sz, pcbSort->currentText());
-    for (i = 1; i < asMax; i++)
+    // From 0, not 1: "Power" is entry 0, and starting past it meant the
+    // sort could never be set back to Power once it had been anything
+    // else. Windows' DlgChart had the same loop and has the same fix.
+    for (i = 0; i < asMax; i++)
       if (FMatchSz(sz, rgszSortQt[i]))
         us.nAspectSort = i;
   }
@@ -4637,20 +4788,21 @@ LAgain:
 static flag FRunCommandLineQt(CONST QString &qsLine)
 {
   char szLine[cchSzLine];
-  char *rgsz[MAXSWITCHES];
   QByteArray ba = qsLine.toLocal8Bit();
-  int argc;
   flag fRet;
 
   strncpy(szLine, ba.constData(), cchSzLine-1);
   szLine[cchSzLine-1] = chNull;
-  argc = NParseCommandLine(szLine, rgsz);
   ciCore = ciMain;
   // A chart-type switch has to be routed back through SetChartModeQt(),
   // or gi.nMode and the Chart menu stay where the menus last put them.
   QVector<flag> rgfMode(CChartModeQt());
   SnapChartModeQt(rgfMode.data());
-  fRet = (argc > 0 && FProcessSwitches(argc, rgsz, NULL));
+  // FProcessCommandLine(), which is what Windows' DlgCommand calls, and
+  // not the parser underneath it: a line that is only a file name is that
+  // file opened ("mychart.as" in the box loads it), the nesting guard
+  // applies, and a line that fails says which line it was.
+  fRet = FProcessCommandLine(szLine);
   ciMain = ciCore;
   InitColorsX();
   SyncChartModeFromFlagsQt(rgfMode.constData());
@@ -4685,15 +4837,16 @@ void ShowCommandLineDialogQt()
   RcWireOkCancelQt(&dlg, rgbuilt);
   PrepareDialogQt(&dlg);
   FocusDialogQt(PwRcFindQt(rgbuilt, "deCo"));
-  if (dlg.exec() != QDialog::Accepted || peLine == NULL ||
-    peLine->text().trimmed().isEmpty())
+  if (dlg.exec() != QDialog::Accepted)
     return;
 
+  // The checkbox is stored whatever the line holds, as Windows stores it:
+  // unticking it and pressing OK on an empty line used to do nothing.
   if (pcbExp != NULL)
     us.fExpOff = !pcbExp->isChecked();
-  if (!FRunCommandLineQt(peLine->text()))
-    QMessageBox::warning(gi.qwind, szAppName,
-      "One or more switches were not understood.");
+  if (peLine == NULL || peLine->text().trimmed().isEmpty())
+    return;
+  FRunCommandLineQt(peLine->text());
 }
 
 
@@ -4916,7 +5069,7 @@ LAgain:
 
 void ShowColorDialogQt()
 {
-  QDialog dlg(gi.qwind);
+  AstroDialogQt dlg(gi.qwind);
   QVector<RCBUILT> rgbuilt;
   QComboBox *rgpcbPalette[cColor];
   QComboBox *rgpcbElem[cElem];
@@ -4946,34 +5099,36 @@ void ShowColorDialogQt()
 
   RcWireOkCancelQt(&dlg, rgbuilt);
   PrepareDialogQt(&dlg);
+  // Validate everything before writing anything, so a single bad entry
+  // can't leave the palette half updated -- and with the dialog still
+  // up and the field named, as Windows' DlgColor does.
+  int rgkPalette[cColor], rgkElem[cElem], rgkRay[cRay+1], kPen, kDeca;
+
+LAgain:
   if (dlg.exec() != QDialog::Accepted)
     return;
 
-  // Validate everything before writing anything, so a single bad entry
-  // can't leave the palette half updated.
-  int rgkPalette[cColor], rgkElem[cElem], rgkRay[cRay+1], kPen, kDeca;
-  flag fOK = fTrue;
   for (i = 0; i < cColor; i++) {
     rgkPalette[i] = NColorFromComboQt(rgpcbPalette[i]);
-    fOK &= FValidColorA(rgkPalette[i]);
+    if (!FValidColorA(rgkPalette[i]))
+      { ErrorEnsureQt(&dlg, rgkPalette[i], "palette color"); goto LAgain; }
   }
   for (i = 0; i < cElem; i++) {
     rgkElem[i] = NColorFromComboQt(rgpcbElem[i]);
-    fOK &= FValidColorA(rgkElem[i]);
+    if (!FValidColorA(rgkElem[i]))
+      { ErrorEnsureQt(&dlg, rgkElem[i], "element color"); goto LAgain; }
   }
   for (i = 1; i <= cRay; i++) {
     rgkRay[i] = NColorFromComboQt(rgpcbRay[i]);
-    fOK &= FValidColorA(rgkRay[i]);
+    if (!FValidColorA(rgkRay[i]))
+      { ErrorEnsureQt(&dlg, rgkRay[i], "ray color"); goto LAgain; }
   }
   kPen = NColorFromComboQt(pcbPen);
-  fOK &= FValidColorA(kPen);
+  if (!FValidColorA(kPen))
+    { ErrorEnsureQt(&dlg, kPen, "scribble color"); goto LAgain; }
   kDeca = NColorFromComboQt(pcbDeca);
-  fOK &= (FValidColorA(kDeca) || kDeca == kMax);
-  if (!fOK) {
-    QMessageBox::warning(gi.qwind, szAppName,
-      "One or more colors were not understood.");
-    return;
-  }
+  if (!(FValidColorA(kDeca) || kDeca == kMax))
+    { ErrorEnsureQt(&dlg, kDeca, "wheel corner color"); goto LAgain; }
 
   for (i = 0; i < cColor; i++) {
     j = ikPalette[i];
@@ -5019,7 +5174,7 @@ static void RcLabelObjRowQt(CONST QVector<RCBUILT> &rgbuilt, int nIdx,
     return;
   plab = (QLabel *)PwRcFindIdxQt(rgbuilt, "dno", nIdx);
   if (plab != NULL)
-    plab->setText(QString::fromLatin1(szObjDisp[iobj]));
+    plab->setText(QString(szObjDisp[iobj]));
 }
 
 
@@ -5561,7 +5716,9 @@ void ShowEphemDialogQt()
     if (peChain != NULL)
       QObject::connect(plist, &QListWidget::currentRowChanged, &dlg,
         [plist, peChain, plDesc, &ApplyParamRows](int iRow) {
-        if (iRow < 0)
+        // A pick, not the row a Tab into the list made current without
+        // selecting it: see NListSelRowQt().
+        if (iRow < 0 || !plist->item(iRow)->isSelected())
           return;
         EPHSRCDEF *pephsrc = PephsrcGet(
           plist->item(iRow)->data(Qt::UserRole).toInt());
@@ -5596,6 +5753,24 @@ void ShowEphemDialogQt()
     QPushButton *ppbBrowse = (QPushButton *)PwRcFindIdxQt(rgbuilt, "dbEp_b",
       i+1);
 
+    // Wired for every row, shown or not: a row hidden for the source the
+    // dialog opened on is shown again when another source is picked, and
+    // its button was dead for having been skipped here.
+    if (ppbBrowse != NULL && peRow != NULL)
+      QObject::connect(ppbBrowse, &QPushButton::clicked, &dlg,
+        [peRow]() {
+        QFileInfo fi(peRow->text());
+        QFileDialog dlgF(gi.qwind, "Browse",
+          fi.isAbsolute() ? fi.absolutePath() : StrLastDirQt("Browse"),
+          "Ephemeris Files (*.eph);;All Files (*)");
+        dlgF.setFileMode(QFileDialog::ExistingFile);
+        SizeFileDlgQt(&dlgF);
+        if (dlgF.exec() == QDialog::Accepted &&
+          !dlgF.selectedFiles().isEmpty()) {
+          peRow->setText(dlgF.selectedFiles()[0]);
+          NoteLastDirQt("Browse", dlgF.selectedFiles()[0]);
+        }
+      });
     // A source with fewer parameters than there are rows leaves the rest
     // empty rather than showing another source's: a row the current
     // selection cannot use is a control that does nothing.
@@ -5625,20 +5800,6 @@ void ShowEphemDialogQt()
     if (ppbBrowse != NULL) {
       ppbBrowse->setVisible(pep->ep.nKind == epkPath ||
         pep->ep.nKind == epkFile);
-      if (peRow != NULL)
-        QObject::connect(ppbBrowse, &QPushButton::clicked, &dlg,
-          [peRow]() {
-          QFileInfo fi(peRow->text());
-          QFileDialog dlgF(gi.qwind, "Browse",
-            fi.isAbsolute() ? fi.absolutePath() : StrLastDirQt("Browse"),
-            "Ephemeris Files (*.eph);;All Files (*)");
-          SizeFileDlgQt(&dlgF);
-          if (dlgF.exec() == QDialog::Accepted &&
-            !dlgF.selectedFiles().isEmpty()) {
-            peRow->setText(dlgF.selectedFiles()[0]);
-            NoteLastDirQt("Browse", dlgF.selectedFiles()[0]);
-          }
-        });
     }
   }
 
@@ -5730,6 +5891,8 @@ void ShowEphemDialogQt()
       &QDialog::reject);
 
   PrepareDialogQt(&dlg);
+  // Windows' DlgEphem sets the focus on the chain field.
+  FocusDialogQt(peChain);
   if (dlg.exec() != QDialog::Accepted)
     return;
 
@@ -5941,7 +6104,7 @@ void ShowDisplayDialogQt()
   // The two radios share the dialog as their parent, which makes them
   // exclusive without a button group.
   QLabel *plSort = new QLabel("Aspect List Sort:", &dlg);
-  QRadioButton *prbObj = new QRadioButton("&Object order", &dlg);
+  QRadioButton *prbObj = new QRadioButton("Object ord&er", &dlg);
   QRadioButton *prbAlpha = new QRadioButton("&Alphabetical", &dlg);
   pchAa->setToolTip("Antialias the text charts");
   pchMenuAa->setToolTip("Antialias the menus and dialogs");
@@ -6110,6 +6273,11 @@ LAgain:
     if (pcb != NULL)
       ignore7[i] = pcb->isChecked();
   }
+  // The ray rulership table is built on demand; Windows builds it here
+  // when the box is cleared, and without it the ray dignities stay blank
+  // until something else happens to ask for the table.
+  if (!ignore7[rrRay])
+    EnsureRay();
   us.nDegForm = NRcStoreRadioQt(rgbuilt, 4, 4, us.nDegForm);
   us.nCharset = NRcStoreRadioQt(rgbuilt, 8, 4, us.nCharset);
   us.nAppSep = NRcStoreRadioQt(rgbuilt, 12, 3, us.nAppSep);
@@ -6292,6 +6460,10 @@ static void LookupCustomNamesQt(QVector<QLineEdit *> &rgpeName,
     if (!strName.isEmpty() && strName != szObjUnknown)
       continue;
     ParseCustomDefQt(rgpeDef[i]->text(), &od);
+    // A definition that does not parse names nothing: Windows skips the
+    // row, and this wrote "???" beside it.
+    if (od.nTyp == 2 && od.nObj == -1)
+      continue;
     // SzObjSelName() covers every definition type now, the JPL Horizons
     // web query included, and remembers the name it answers -- so a name
     // this button shows is a name the program accepts back.
@@ -6313,7 +6485,7 @@ static void LookupCustomNamesQt(QVector<QLineEdit *> &rgpeName,
 
 void ShowCustomDialogQt()
 {
-  QDialog dlg(gi.qwind);
+  AstroDialogQt dlg(gi.qwind);
   QVector<RCBUILT> rgbuilt;
   QVector<QLineEdit *> rgpeName, rgpeDef;
   OBJDEF od;
@@ -6347,16 +6519,20 @@ void ShowCustomDialogQt()
       [&rgpeName, &rgpeDef]() { LookupCustomNamesQt(rgpeName, rgpeDef); });
   RcWireOkCancelQt(&dlg, rgbuilt);
   PrepareDialogQt(&dlg);
+LAgain:
   if (dlg.exec() != QDialog::Accepted)
     return;
 
   for (i = custLo; i <= custHi; i++) {
     j = i - custLo;
     ParseCustomDefQt(rgpeDef[j]->text(), &od);
+    // The dialog stays up with the bad row focused: there are some
+    // fifty rows here, and closing over one of them lost all the rest.
     if (!FValidCustom(od.nObj, od.nTyp)) {
-      QMessageBox::warning(gi.qwind, szAppName,
-        "One or more object definitions are invalid.");
-      return;
+      rgpeDef[j]->setFocus();
+      rgpeDef[j]->selectAll();
+      ErrorEnsureQt(&dlg, od.nObj, "definition");
+      goto LAgain;
     }
   }
 

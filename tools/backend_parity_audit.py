@@ -209,11 +209,6 @@ ALLOWFN = {
     "DrawClearScreen": "draws through gi.qpaint, which only exists for the "
                        "length of a redraw -- ClearScreenQt() fills the "
                        "buffer instead, which is what it would have done",
-    "EnsureRay": "derives rgSignRay2[] from rgSignRay[]. Windows calls it "
-                 "when the ray restriction is lifted; every consumer of "
-                 "that table already calls it first (charts0, charts1, "
-                 "xcharts2, intrpret), so the dialog call is belt and "
-                 "braces. Checked rather than assumed",
     "FBmpDrawBack": "Win32 background blitting; xdevice.cpp has Qt paths",
     "FBmpShrinkToWin": "takes HDCs",
     "FProcessSwitchFile": "startup reads astrolog.as in astrolog.cpp, "

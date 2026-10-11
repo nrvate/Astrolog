@@ -2006,8 +2006,12 @@ static void TestGenerateGifQt()
       if (!FClickButtonQt(pw, "IDCANCEL"))
         pw->close();
     });
-    Check(cSync == 0 && !fOkPending, "five quick edits to the step count "
-      "nothing yet, with OK off (counted %d, OK %d)", cSync, fOkPending);
+    // OK stays ON while the count is pending, since 2026-10-10: disabled,
+    // it swallowed an Enter pressed inside the delay. Pressing it finishes
+    // the count first instead.
+    Check(cSync == 0 && fOkPending, "five quick edits to the step count "
+      "nothing yet, and OK still answers (counted %d, OK %d)", cSync,
+      fOkPending);
     Check(cAfter == 1 && fOkAfter && strAfter != strBefore, "and then "
       "count once, with OK back on (counted %d, OK %d: \"%s\")", cAfter,
       fOkAfter, strAfter.toLocal8Bit().constData());
@@ -4740,7 +4744,7 @@ static void TestSharedSymbolBoxesQt()
     QPushButton *ppbOK = NULL;
     for (QLineEdit *p : pw->findChildren<QLineEdit *>()) {
       if (p->text() == "7") peStep = p;
-      if (p->text() == "15") peDist = p;
+      if (p->text().startsWith("15")) peDist = p;
     }
     ppbOK = PpbButtonQt(pw, "IDOK");
     if (peStep != NULL) peStep->setText("9");
@@ -8498,46 +8502,46 @@ static void TestDialogMnemonicsQt()
     pw->close();
   });
 
-  // The AMBIGUOUS mnemonic, pinned to the oracle's verdict. The Transits
-  // dialog's "&Now" and "N&one" share 'n', and the 2026-09-12 smell pass
-  // flagged the port's focus-AND-click as surely divergent from Windows'
-  // believed cycle-focus-without-click. The Wine oracle said the opposite:
-  // driven on the real build, a bare n with the None radio focused fired
-  // &Now in one press -- the date fields jumped from the chart's date to
-  // the current moment and the focus ring landed on the Now button. This
-  // asserts that, so nobody fixes it into the cycle behavior later: the
-  // Daylight sentinel only reads "Yes" again if &Now actually fired, and
-  // the focus has to be ON the Now button when the keystroke settles.
-  DriveModalQt(ShowTransitDialogQt, [](QWidget *pw) {
-    QComboBox *pcbDst = pw->findChild<QComboBox *>("dcTrDst");
-    QRadioButton *prbNone = NULL;
-    QPushButton *ppbNow = NULL;
+  // The AMBIGUOUS mnemonic: the chart list's "Delete &All" and
+  // "L&atitude" share 'a'. A bare a moves the focus to the next of them
+  // and presses NEITHER, which is what Windows' dialog manager does with a
+  // letter two controls claim -- and Delete All asks nothing before
+  // emptying the list. This used to assert focus-and-click, on a pair
+  // that was never ambiguous: the Transits dialog's "&Now" and "N&one",
+  // where the radio's letter is o. The spies are on the signal rather
+  // than on the list, so an empty list cannot pass it.
+  DriveModalQt(ShowChartListDialogQt, [](QWidget *pw) {
+    QList<QAbstractButton *> rgpb;
+    int cClick = 0;
 
-    for (QRadioButton *prb : pw->findChildren<QRadioButton *>())
-      if (prb->text() == QString("N&one"))
-        prbNone = prb;
-    for (QPushButton *ppb : pw->findChildren<QPushButton *>())
-      if (ppb->text().contains("Now"))
-        ppbNow = ppb;
-    Check(prbNone != NULL && ppbNow != NULL,
-      "the Transits dialog has its ambiguous Now/None pair");
-    if (prbNone != NULL && ppbNow != NULL && pcbDst != NULL) {
-      // What &Now writes, recorded from clicking it directly: asserting
-      // against a literal reads whatever an earlier group left ciDefa at.
-      pcbDst->setEditText("sentinelD");
-      ppbNow->click();
-      QString strDirect = pcbDst->currentText();
-      pcbDst->setEditText("sentinel2");
-      prbNone->setFocus();
-      QKeyEvent ev(QEvent::KeyPress, (int)Qt::Key_N, Qt::NoModifier,
-        QString("n"));
+    for (QAbstractButton *pb : pw->findChildren<QAbstractButton *>()) {
+      QString str = pb->text().toLower();
+      int ich = str.indexOf('&');
+      if (ich < 0 || ich + 1 >= str.size() || str[ich + 1] != 'a' ||
+        !pb->isEnabled())
+        continue;
+      rgpb << pb;
+      // A push button is disarmed and counted instead: pressing Delete
+      // All for real would empty the list under the test.
+      if (qobject_cast<QPushButton *>(pb) != NULL) {
+        QObject::disconnect(pb, &QAbstractButton::clicked, NULL, NULL);
+        QObject::connect(pb, &QAbstractButton::clicked, pw,
+          [&cClick]() { cClick++; });
+      }
+    }
+    Check(rgpb.size() >= 2, "the chart list has buttons sharing the letter "
+      "a (%d)", (int)rgpb.size());
+    if (rgpb.size() >= 2) {
+      QWidget *pwStart = pw->findChild<QPushButton *>("IDCANCEL");
+      if (pwStart != NULL)
+        pwStart->setFocus();
+      QKeyEvent ev(QEvent::KeyPress, (int)Qt::Key_A, Qt::NoModifier,
+        QString("a"));
       QApplication::sendEvent(pw, &ev);
-      Check(ppbNow->hasFocus(),
-        "an ambiguous mnemonic moves focus to the next match");
-      Check(pcbDst->currentText() == strDirect,
-        "and CLICKS it in the same keystroke (\"%s\" = what a direct "
-        "click writes; the oracle showed Windows doing the same)",
-        pcbDst->currentText().toLocal8Bit().constData());
+      Check(qobject_cast<QPushButton *>(pw->focusWidget()) != NULL &&
+        rgpb.contains((QAbstractButton *)pw->focusWidget()),
+        "an ambiguous mnemonic moves the focus to the next button with it");
+      Check(cClick == 0, "and does not press it (%d clicks)", cClick);
     }
     pw->close();
   });
@@ -8566,7 +8570,8 @@ static void TestDialogArrowKeysQt()
           break;
         }
       QKeyEvent ev(QEvent::KeyPress, key, Qt::NoModifier);
-      QApplication::sendEvent(pw, &ev);
+      QApplication::sendEvent(QApplication::focusWidget() != NULL ?
+        QApplication::focusWidget() : pw, &ev);
       QWidget *pwNow = QApplication::focusWidget();
       QAbstractButton *pb = qobject_cast<QAbstractButton *>(pwNow);
       return pb != NULL ? pb->text() : QString("(not a button)");
@@ -10428,6 +10433,151 @@ static QList<QLineEdit *> RgpeObjSelNamesQt(QWidget *pw)
       rgpe << pe;
   return rgpe;
 }
+
+// Behaviour found by reading every dialog against its Windows original on
+// 2026-10-10, after the Object Selections "Vulcan" report: things a user
+// would not expect, each of which was a Qt default or a missing line.
+
+static void TestDialogQuirksQt()
+{
+  QString str, str2;
+  int c = 0, cBad = 0, nMode = -1;
+  flag f = fFalse, fExpSav = us.fExpOff;
+  char szBad[cchSzMax];
+
+  Group("Dialog behaviour a user would not expect");
+
+  // A Save picker is a Save dialog: it asks before replacing a file, and
+  // only QFileDialog::AcceptSave makes it.
+  DriveModalQt(ShowSaveChartDialogQt, [&nMode](QWidget *pw) {
+    QFileDialog *pfd = qobject_cast<QFileDialog *>(pw);
+    if (pfd != NULL)
+      nMode = (int)pfd->acceptMode();
+    pw->close();
+  });
+  Check(nMode == (int)QFileDialog::AcceptSave, "the Save Chart picker is "
+    "in save mode, so it asks before overwriting (mode %d)", nMode);
+
+  // "Now" in Chart Info refills the date and leaves a name just typed.
+  DriveModalQt(ShowChartInfoDialogQt, [&str](QWidget *pw) {
+    QLineEdit *pe = pw->findChild<QLineEdit *>("deInNam");
+    if (pe != NULL) {
+      pe->setText("Typed Name");
+      FClickButtonQt(pw, "dbInNow");
+      str = pe->text();
+    }
+    pw->close();
+  });
+  Check(str == "Typed Name", "Now keeps a name typed into Chart Info "
+    "(\"%s\")", str.toLatin1().constData());
+
+  // Every colour a Moon Object Settings list offers is one its OK takes.
+  szBad[0] = chNull;
+  DriveModalQt(ShowMoonObjectDialogQt, [&c, &cBad, &szBad](QWidget *pw) {
+    for (QComboBox *pcb : pw->findChildren<QComboBox *>())
+      for (int i2 = 0; i2 < pcb->count(); i2++) {
+        QByteArray ba = pcb->itemText(i2).toLatin1();
+        int k = NParseSz(ba.constData(), pmColor);
+        c++;
+        if (!FValidColorMA(k)) {
+          cBad++;
+          sprintf2(S(szBad), "%s", ba.constData());
+        }
+      }
+    pw->close();
+  });
+  Check(c > 0 && cBad == 0, "no colour list offers an entry its own OK "
+    "refuses (%d of %d, last \"%s\")", cBad, c, szBad);
+
+  // The Down key steps from the text the box shows, also after something
+  // other than the user put it there.
+  DriveModalQt(ShowTransitDialogQt, [&str, &str2](QWidget *pw) {
+    QComboBox *pcb = pw->findChild<QComboBox *>("dcTrMon");
+    if (pcb != NULL && pcb->count() > 6) {
+      pcb->setEditText(pcb->itemText(5));
+      str = pcb->itemText(6);
+      pcb->setFocus();
+      PressQt(pcb->lineEdit(), Qt::Key_Down);
+      str2 = pcb->currentText();
+    }
+    pw->close();
+  });
+  Check(!str.isEmpty() && str == str2, "Down steps from the text set after "
+    "the dialog opened (\"%s\", want \"%s\")", str2.toLatin1().constData(),
+    str.toLatin1().constData());
+
+  // Every Browse button in Ephemeris Settings is wired, the ones on rows
+  // hidden for the source the dialog opened on included.
+  c = cBad = 0;
+  DriveModalQt(ShowEphemDialogQt, [&c, &cBad](QWidget *pw) {
+    QTimer tBox;
+    int cOpen = 0;
+    // The file picker is a modal of its own; count it and close it.
+    QObject::connect(&tBox, &QTimer::timeout, [&cOpen]() {
+      QFileDialog *pfd =
+        qobject_cast<QFileDialog *>(QApplication::activeModalWidget());
+      if (pfd != NULL) {
+        cOpen++;
+        pfd->close();
+      }
+    });
+    tBox.start(50 * nScaleTest);
+    for (QPushButton *ppb : pw->findChildren<QPushButton *>("dbEp_b")) {
+      int cWas = cOpen;
+      c++;
+      ppb->click();
+      if (cOpen == cWas)
+        cBad++;
+    }
+    tBox.stop();
+    pw->close();
+  });
+  Check(c == 4 && cBad == 0, "all four ephemeris Browse buttons do "
+    "something (%d of %d dead)", cBad, c);
+
+  // Enter Command Line stores its checkbox with an empty line too.
+  us.fExpOff = fFalse;
+  DriveModalQt(ShowCommandLineDialogQt, [](QWidget *pw) {
+    QCheckBox *pcb = pw->findChild<QCheckBox *>("dxCo_e");
+    if (pcb != NULL)
+      pcb->setChecked(fFalse);
+    if (!FClickButtonQt(pw, "IDOK"))
+      pw->close();
+  });
+  Check(us.fExpOff, "the AstroExpression box is stored with an empty "
+    "command line");
+  us.fExpOff = fExpSav;
+
+  // A list reached with Tab has a current row and no selected one, and
+  // nothing may act on it: OK in the chart list must not load the first
+  // chart into the slot when the user picked none.
+  {
+    int cciSav = is.cci, yeaSav = ciCore.yea;
+    CI ciT = ciCore;
+
+    ciT.yea = yeaSav + 7;
+    f = FAppendCIList(&ciT);
+    c = -1;
+    DriveModalQt(ShowChartListDialogQt, [&c](QWidget *pw) {
+      QListWidget *plist = pw->findChild<QListWidget *>();
+      if (plist != NULL && plist->count() > 0) {
+        plist->clearSelection();
+        plist->selectionModel()->setCurrentIndex(
+          plist->model()->index(plist->count() - 1, 0),
+          QItemSelectionModel::NoUpdate);
+        c = plist->selectedItems().size();
+      }
+      if (!FClickButtonQt(pw, "IDOK"))
+        pw->close();
+    });
+    Check(f && c == 0 && ciCore.yea == yeaSav, "OK in the chart list with "
+      "a current row but none selected loads nothing (year %d, want %d)",
+      ciCore.yea, yeaSav);
+    ciCore.yea = yeaSav; ciMain.yea = yeaSav;
+    is.cci = cciSav;
+  }
+}
+
 
 // A field out of range leaves its dialog OPEN, with everything typed into
 // it, as Windows' EnsureN() does by returning before EndDialog(). Every
@@ -24100,6 +24250,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"objsel-glyph",         TestObjSelGlyphQt},
   {"objsel-keys",          TestObjSelKeysQt},
   {"dialog-bad-field",     TestDialogBadFieldQt},
+  {"dialog-quirks",        TestDialogQuirksQt},
   {"settings-roundtrip",   TestSettingsRoundTripQt},
   {"interface-settings",   TestInterfaceSettingsQt},
   {"graphics-fields",      TestGraphicsFieldsQt},

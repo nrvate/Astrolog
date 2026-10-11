@@ -3142,7 +3142,9 @@ flag API DlgChart(HWND hdlg, uint message, WORD wParam, LONG lParam)
       us.nArabicSort = GetCheck(dr09) ? 'z' : (GetCheck(dr10) ? 'n' :
         (GetCheck(dr11) ? 'f' : 0));
       GetEdit(dcCh_a, sz);
-      for (i = 1; i < asMax; i++)
+      // From 0: "Power" is entry 0, and starting past it meant the sort
+      // could never be set back to Power.
+      for (i = 0; i < asMax; i++)
         if (FMatchSz(sz, rgszSort[i]))
           us.nAspectSort = i;
       us.rRatio = GetEditR(hdlg, deCh_rc0);
