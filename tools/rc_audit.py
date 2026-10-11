@@ -13,6 +13,8 @@ IDC_STATIC (labels and group boxes), IDOK, IDCANCEL, the icon, and the dx
 checkbox runs the restriction dialogs address by index are all expected to
 go unnamed.
 
+Also reports any dialog in astrolog.rc with more than one DEFPUSHBUTTON.
+
 Usage:  python3 tools/rc_audit.py
 """
 
@@ -43,7 +45,23 @@ def main():
             bad += 1
         print("%-10s %3d controls   %s" % (name, len(ctls), status))
     print("\n%d dialog(s) with unwired controls" % bad)
-    return 1 if bad else 0
+
+    # One default button a dialog. The dialog manager honours the LAST
+    # DEFPUSHBUTTON it meets, so a second one silently takes Enter away
+    # from OK -- dlgCustom and dlgCustomS did that with "Lookup Names" --
+    # and rc2qt.py maps both kinds to one control type, so nothing on the
+    # Qt side can see it.
+    rc = open("astrolog.rc", "rb").read().decode("latin-1")
+    two = 0
+    for name, body in re.findall(
+            r"^(\w+) DIALOG(?:EX)? .*?^BEGIN\r?$(.*?)^END\r?$", rc,
+            re.S | re.M):
+        n = len(re.findall(r"^\s*DEFPUSHBUTTON\b", body, re.M))
+        if n > 1:
+            two += 1
+            print("%s has %d default buttons" % (name, n))
+    print("%d dialog(s) with more than one default button" % two)
+    return 1 if bad or two else 0
 
 
 sys.exit(main())

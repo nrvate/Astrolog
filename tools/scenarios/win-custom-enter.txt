@@ -1,0 +1,19 @@
+# Enter is OK in the two customization dialogs. Each resource marked
+# "Lookup Names" as a second DEFPUSHBUTTON, and the dialog manager takes
+# the last one it is told about: Enter looked names up and the dialog
+# stayed, where every other dialog here closes. Reached by accelerator,
+# for the reason win-dialogs.txt gives.
+expect-window Astrolog
+focus Astrolog
+
+key ctrl+alt+w
+expect-window Object Customization
+focus Object Customization
+key Return
+expect-no-window Object Customization
+
+key ctrl+alt+f
+expect-window Fixed Star Customization
+focus Fixed Star Customization
+key Return
+expect-no-window Fixed Star Customization

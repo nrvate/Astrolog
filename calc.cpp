@@ -3718,14 +3718,26 @@ flag FObjIsCOBOf(int obj, int objPla)
 void SzObjDefFormat(char *sz, int cchMax, CONST OBJDEF *pod)
 {
   char *pch;
+  int cch, cchName;
 
   if (pod->nTyp != 2)
     sprintf2(sz, cchMax, "%s%d", pod->nTyp <= 0 ? "h" :
       (pod->nTyp == 1 ? "" : (pod->nTyp == 3 ? "m" :
       (pod->nTyp == 4 ? "j" : "A"))), pod->nObj);
-  else
-    sprintf2(sz, cchMax, pod->nObj < cobLo ? "%.3s" : "%.4s",
-      szObjName[pod->nObj]);
+  else {
+    // The shortest abbreviation that reads back as this object. Three
+    // letters is not always one: "Tit" is Titan and never Titania.
+    cchName = CchSz(szObjName[pod->nObj]);
+    for (cch = pod->nObj < cobLo ? 3 : 4; ; cch++) {
+      sprintf2(sz, cchMax, "%.*s", cch, szObjName[pod->nObj]);
+      if (cch >= cchName || szObjName[pod->nObj][cch] == ' ' ||
+        NParseSz(sz, pmObject) == pod->nObj)
+        break;
+    }
+    if (NParseSz(sz, pmObject) != pod->nObj)
+      sprintf2(sz, cchMax, pod->nObj < cobLo ? "%.3s" : "%.4s",
+        szObjName[pod->nObj]);
+  }
   for (pch = sz; *pch; pch++)
     ;
   if (pod->nPnt > 0 || pod->nFlg > 0)
@@ -3929,7 +3941,7 @@ flag FObjSelFlagRun(CONST char *szRun)
 
 flag FObjDefParse(CONST char *szIn, OBJDEF *pod)
 {
-  char sz[cchSzMax], *pch, *pchEnd;
+  char sz[cchSzMax], *pch, *pchEnd, *pchT;
   int j, k, nPnt = 0, nFlg = 0;
 
   while (*szIn && *szIn <= ' ')
@@ -3947,6 +3959,18 @@ flag FObjDefParse(CONST char *szIn, OBJDEF *pod)
   pch = sz;
   k = (*pch == 'h' ? 0 : (*pch == 'm' ? 3 : (*pch == 'j' ? 4 :
     (*pch == 'A' ? 5 : (FNumCh(*pch) ? 1 : 2)))));
+  // A type letter is one only in front of a number: "A3" is an Arabic
+  // part, "Asc" and "Apo" are objects that happen to start with it.
+  if ((k == 0 || k >= 3) && !FNumCh(pch[1]))
+    k = 2;
+  // And a number is one only when nothing but flags follows its digits:
+  // "433n" is asteroid 433's node, "2nd" is a cusp.
+  if (k == 1) {
+    for (pchT = pch; FNumCh(*pchT); pchT++)
+      ;
+    if (*pchT >= 'A' && !FObjSelFlagRun(pchT))
+      k = 2;
+  }
   if (k == 0 || k >= 3)
     pch++;
   j = (k == 2 ? NParseSz(pch, pmObject) : NFromSz(pch));

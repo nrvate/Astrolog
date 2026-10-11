@@ -236,6 +236,10 @@ void TextPressAtPtQt(int xPix, int yPix, flag fShift = fFalse);
 void TextDragAtPtQt(int xPix, int yPix);
 void TextReleaseAtPtQt(int xPix, int yPix);
 QString StrTextSelectionQt(void);
+// Core text to a QString and back, by the character set "-Ya" names. See
+// the definitions; not for file names.
+QString StrSzQt(CONST char *sz);
+QByteArray BaStrQt(CONST QString &str);
 // The pixel rectangle of one view cell.
 QRect RgrcTextCellQt(int xCell, int yCell);
 void ClearTextHoverQt(void);

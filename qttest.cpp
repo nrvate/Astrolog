@@ -10616,8 +10616,273 @@ static void TestDialogQuirksQt()
       "a current row but none selected loads nothing (year %d, want %d)",
       ciCore.yea, yeaSav);
     ciCore.yea = yeaSav; ciMain.yea = yeaSav;
+
+    // Nor may Delete Chart delete it.
+    c = is.cci;
+    DriveModalQt(ShowChartListDialogQt, [](QWidget *pw) {
+      QListWidget *plist = pw->findChild<QListWidget *>();
+      if (plist != NULL && plist->count() > 0) {
+        plist->clearSelection();
+        plist->selectionModel()->setCurrentIndex(
+          plist->model()->index(plist->count() - 1, 0),
+          QItemSelectionModel::NoUpdate);
+      }
+      FClickButtonQt(pw, "dbLi_dc");
+      pw->close();
+    });
+    Check(is.cci == c, "Delete Chart with no row selected deletes nothing "
+      "(%d charts, was %d)", is.cci, c);
     is.cci = cciSav;
   }
+
+  // A day the month does not have is shown as 1, as SetEditMDYT() shows
+  // it, not as a number the dialog's own OK refuses.
+  {
+    CI ciSav = ciCore;
+
+    ciCore.mon = 2; ciCore.day = 31;
+    str.clear();
+    DriveModalQt(ShowChartInfoDialogQt, [&str](QWidget *pw) {
+      QComboBox *pcb = pw->findChild<QComboBox *>("dcInDay");
+      if (pcb != NULL)
+        str = pcb->currentText();
+      pw->close();
+    });
+    Check(str == "1", "Chart Info shows February 31st as day 1 (\"%s\")",
+      str.toLatin1().constData());
+    ciCore = ciSav;
+  }
+
+  // "Set Info" on chart #1 in the Charts dialog reaches the chart: it
+  // wrote ciMain alone, and the recast copied ciCore back over it.
+  {
+    CI ciSav = ciCore, ciMainSav = ciMain;
+    QTimer tIn;
+    QWidget *pwOuter = NULL;
+
+    QObject::connect(&tIn, &QTimer::timeout, [&pwOuter]() {
+      QWidget *pw = QApplication::activeModalWidget();
+      QLineEdit *pe;
+      if (pw == NULL || pw == pwOuter)
+        return;
+      pe = pw->findChild<QLineEdit *>("deInNam");
+      if (pe != NULL)
+        pe->setText("Set Info Name");
+      if (!FClickButtonQt(pw, "IDOK"))
+        pw->close();
+    });
+    DriveModalQt(ShowChartsAllDialogQt, [&tIn, &pwOuter](QWidget *pw) {
+      QList<QPushButton *> rg = pw->findChildren<QPushButton *>("dbIa_i");
+      pwOuter = pw;
+      tIn.start(50 * nScaleTest);
+      if (!rg.isEmpty())
+        rg[0]->click();
+      tIn.stop();
+      if (!FClickButtonQt(pw, "IDOK"))
+        pw->close();
+    });
+    Check(ciCore.nam != NULL && FEqSz(ciCore.nam, "Set Info Name"),
+      "Set Info on chart #1 in the Charts dialog changes the chart (\"%s\")",
+      ciCore.nam != NULL ? ciCore.nam : "");
+    ciCore = ciSav; ciMain = ciMainSav;
+  }
+
+  // The aspect list can be sorted by power again once it has been sorted
+  // by anything else: the store skipped entry 0.
+  {
+    int nSav = us.nAspectSort;
+
+    us.nAspectSort = 1;
+    DriveModalQt(ShowChartSettingsDialogQt, [](QWidget *pw) {
+      QComboBox *pcb = pw->findChild<QComboBox *>("dcCh_a");
+      if (pcb != NULL && pcb->count() > 0)
+        pcb->setEditText(pcb->itemText(0));
+      if (!FClickButtonQt(pw, "IDOK"))
+        pw->close();
+    });
+    Check(us.nAspectSort == 0, "the aspect sort can be set back to its "
+      "first entry (%d)", us.nAspectSort);
+    us.nAspectSort = nSav;
+  }
+
+  // OK in Graphics Settings shows the graphics chart, as Windows' does.
+  {
+    flag fSav = us.fGraphics;
+
+    us.fGraphics = fFalse;
+    DriveModalQt(ShowGraphicsSettingsDialogQt, [](QWidget *pw) {
+      if (!FClickButtonQt(pw, "IDOK"))
+        pw->close();
+    });
+    Check(us.fGraphics, "OK in Graphics Settings switches to the graphics "
+      "chart");
+    us.fGraphics = fSav;
+  }
+
+  // A paper size nobody touched is not re-read from its two decimals.
+  {
+    real xSav = gs.xInch;
+    flag fSav = us.fEuroDist;
+
+    us.fEuroDist = fTrue; gs.xInch = 8.123;
+    DriveModalQt(ShowFileSettingsDialogQt, [](QWidget *pw) {
+      if (!FClickButtonQt(pw, "IDOK"))
+        pw->close();
+    });
+    Check(gs.xInch == 8.123, "an untouched paper width survives OK in "
+      "centimetres (%.6f)", gs.xInch);
+    gs.xInch = xSav; us.fEuroDist = fSav;
+  }
+
+  // The wheel over a field of the Animated GIF dialog that does not have
+  // the focus changes nothing.
+  {
+    int n1 = -1, n2 = -2;
+
+    DriveModalQt(ShowGenerateGifDialogQt, [&n1, &n2](QWidget *pw) {
+      QSpinBox *psp = pw->findChild<QSpinBox *>("IDGIFCOUNT");
+      QSpinBox *psp2 = pw->findChild<QSpinBox *>("IDGIFDELAY");
+      if (psp != NULL && psp2 != NULL) {
+        psp2->setFocus();
+        n1 = psp->value();
+        QWheelEvent ev(QPointF(3, 3), psp->mapToGlobal(QPoint(3, 3)),
+          QPoint(), QPoint(0, 120), Qt::NoButton, Qt::NoModifier,
+          Qt::NoScrollPhase, false);
+        QCoreApplication::sendEvent(psp, &ev);
+        n2 = psp->value();
+      }
+      pw->close();
+    });
+    Check(n1 == n2, "the wheel over an unfocused GIF field leaves it alone "
+      "(%d, was %d)", n2, n1);
+  }
+
+  // The radio added to Display Settings has a letter of its own, and the
+  // two labels of Ephemeris Settings are shortcuts to their fields.
+  c = cBad = 0;
+  DriveModalQt(ShowDisplayDialogQt, [&c, &cBad](QWidget *pw) {
+    QList<QWidget *> rgpw;
+    for (QAbstractButton *pb : pw->findChildren<QAbstractButton *>())
+      rgpw << pb;
+    for (QLabel *pl : pw->findChildren<QLabel *>())
+      if (pl->buddy() != NULL)
+        rgpw << pl;
+    for (QWidget *pwT : rgpw) {
+      QString strT = pwT->property("text").toString().toLower();
+      int ich = strT.indexOf("&r");
+      if (ich >= 0) {
+        c++;
+        if (!strT.startsWith("object"))
+          cBad++;
+      }
+    }
+    pw->close();
+  });
+  Check(c == 1 && cBad == 0, "\"Object order\" in Display Settings shares "
+    "its letter with nothing (%d controls on it)", c);
+  c = 0;
+  DriveModalQt(ShowEphemDialogQt, [&c](QWidget *pw) {
+    for (QLabel *pl : pw->findChildren<QLabel *>())
+      if (pl->text().contains(QChar('&')) && pl->buddy() != NULL)
+        c++;
+    pw->close();
+  });
+  Check(c == 2, "both labelled fields of Ephemeris Settings answer their "
+    "Alt letter (%d)", c);
+
+  // Every object's definition text reads back as that object: "Asc" is
+  // not an Arabic part and "Tit" is not Titania.
+  {
+    OBJDEF od, od2;
+    char szT[cchSzMax];
+    int i;
+
+    c = cBad = 0; szBad[0] = chNull;
+    for (i = 0; i < cObj; i++) {
+      if (!FValidCustom(i, 2))
+        continue;
+      od.nTyp = 2; od.nObj = i; od.nPnt = od.nFlg = 0;
+      SzObjDefFormat(S(szT), &od);
+      c++;
+      if (!FObjDefParse(szT, &od2) || od2.nTyp != 2 || od2.nObj != i) {
+        cBad++;
+        printf("    %s -> %d/%d for %s\n", szT, od2.nTyp, od2.nObj,
+          szObjName[i]);
+        sprintf2(S(szBad), "%.40s for %.40s", szT, szObjName[i]);
+      }
+    }
+    Check(c > 0 && cBad == 0, "an object used as a definition reads back as "
+      "itself (%d of %d do not, last %s)", cBad, c, szBad);
+  }
+}
+
+
+// Text crosses between the core and a dialog by the character set "-Ya"
+// names, the same both ways. It used to be UTF-8 in and the system's
+// encoding out, which on Windows are different: an accented chart name
+// came back as a replacement character and the next OK stored "?". And a
+// name in a file the Win32 build wrote (Windows-1252 bytes) is shown, and
+// kept, rather than dropped for not being UTF-8.
+
+static void TestTextCharsetQt()
+{
+  static CONST struct {
+    int nCharset;
+    CONST char *szIn;     // bytes the core holds
+    CONST char *szOut;    // bytes it holds after an untouched OK
+    CONST char *szWhat;
+  } rgt[] = {
+    {ccUTF8,  "Z\xC3\xBCrich", "Z\xC3\xBCrich", "UTF-8 under -Ya3"},
+    {ccLatin, "Z\xFCrich",     "Z\xFCrich",     "Latin-1 under -Ya2"},
+    {ccIBM,   "Z\x81rich",     "Z\x81rich",     "IBM under -Ya1"},
+    {ccUTF8,  "Z\xFCrich",     "Z\xC3\xBCrich",
+     "Latin-1 bytes under -Ya3"},
+#ifndef _WIN32
+    {ccNone,  "Z\xC3\xBCrich", "Z\xC3\xBCrich", "UTF-8 under -Ya0"},
+    {ccNone,  "Z\xFCrich",     "Z\xC3\xBCrich",
+     "Latin-1 bytes under -Ya0"},
+#endif
+  };
+  int iT, nCharsetSav = us.nCharset;
+  char *szNamSav = ciMain.nam, *szNamCoreSav = ciCore.nam;
+  CI ciSav = ciMain, ciCoreSav = ciCore;
+  QString str, strWant = QString::fromUtf8("Z\xC3\xBCrich");
+
+  Group("Dialog text follows the character set");
+
+  for (iT = 0; iT < (int)(sizeof(rgt)/sizeof(rgt[0])); iT++) {
+    us.nCharset = rgt[iT].nCharset;
+    ciMain.nam = SzClone(rgt[iT].szIn);
+    ciCore.nam = ciMain.nam;
+    str = QString();
+    DriveModalQt(ShowChartInfoDialogQt, [&str](QWidget *pw) {
+      QLineEdit *pe = pw->findChild<QLineEdit *>("deInNam");
+      if (pe != NULL)
+        str = pe->text();
+      if (!FClickButtonQt(pw, "IDOK"))
+        pw->close();
+    });
+    Check(str == strWant, "%s: Chart Info shows the name (%d chars, "
+      "want %d)", rgt[iT].szWhat, (int)str.size(), (int)strWant.size());
+    Check(ciMain.nam != NULL && FEqSz(ciMain.nam, rgt[iT].szOut),
+      "%s: an untouched OK keeps it", rgt[iT].szWhat);
+  }
+
+  // Typed, not loaded: what the box holds is what the core gets.
+  us.nCharset = ccLatin;
+  DriveModalQt(ShowChartInfoDialogQt, [&strWant](QWidget *pw) {
+    QLineEdit *pe = pw->findChild<QLineEdit *>("deInNam");
+    if (pe != NULL)
+      pe->setText(strWant);
+    if (!FClickButtonQt(pw, "IDOK"))
+      pw->close();
+  });
+  Check(ciMain.nam != NULL && FEqSz(ciMain.nam, "Z\xFCrich"),
+    "a name typed under -Ya2 is stored as Latin-1");
+
+  us.nCharset = nCharsetSav;
+  ciMain = ciSav; ciCore = ciCoreSav;
+  ciMain.nam = szNamSav; ciCore.nam = szNamCoreSav;
 }
 
 
@@ -10652,7 +10917,13 @@ static void TestDialogBadFieldQt()
     {ShowCalcDialogQt,             "deSe_",   fFalse, "99999",
      "Calculation Settings"},
     {ShowDisplayDialogQt,          "deDi_Yw", fFalse, "-1",
-     "Display Settings"}};
+     "Display Settings"},
+    {ShowChartInfoDialogQt,        "dcInMon", fTrue,  "99", "Chart Info"},
+    {ShowDefaultInfoDialogQt,      "dcDeLon", fTrue,  "999",
+     "Default Chart Info"},
+    {ShowColorDialogQt,            "dck",     fTrue,  "999", "Set Colors"},
+    {ShowCustomDialogQt,           "ded",     fFalse, "zzz",
+     "Object Customization"}};
   int iT, nDelaySav = NAnimDelayQt(), cBox = 0, nState = 0;
   flag fOpen = fFalse, fAgain = fFalse;
   CONST char *szId = "", *szBad = "";
@@ -24293,6 +24564,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"objsel-keys",          TestObjSelKeysQt},
   {"dialog-bad-field",     TestDialogBadFieldQt},
   {"dialog-quirks",        TestDialogQuirksQt},
+  {"text-charset",         TestTextCharsetQt},
   {"settings-roundtrip",   TestSettingsRoundTripQt},
   {"interface-settings",   TestInterfaceSettingsQt},
   {"graphics-fields",      TestGraphicsFieldsQt},

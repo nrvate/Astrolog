@@ -11457,16 +11457,87 @@ this is the note that explains the wall of dialogs.
     daylight where Windows shows the resolved Yes or No: deliberate
     (see `RgstrDstQt`), because Windows' way turns an Autodetect chart
     into a fixed one on any OK. A chart name holding
-    non-UTF-8 bytes (a Latin-1 file from the Win32 build) shows a
-    replacement character and is rewritten on OK, and on the Windows
-    Qt build `toLocal8Bit()` is the ANSI code page while the load is
-    UTF-8: **open**, it is 84 call sites and a policy, and it has not
-    been run on Windows. Orb fields round to two decimals on any OK,
+    non-UTF-8 bytes was left "open" here, which is not a state a
+    finding may be in; it is item 283. Orb fields round to two decimals on any OK,
     as Windows' do.
 
     Nets: `dialog-bad-field` (eleven dialogs, sabotaged),
     `dialog-quirks` (seven, each sabotaged), `objsel-keys`,
     `mnemonics`, `arrow-keys` (failed 5 of 11 before the fix).
+
+283. **What item 282 swept under the rug.** 2026-10-10, the same day,
+    after the maintainer asked why a finding was still "open". An
+    audit of the three reviewers' reports against the tree found six
+    findings neither fixed nor recorded, seventeen fixes with no test,
+    and three admissions the work log did not carry.
+
+    *Dialog text follows `-Ya`, both ways.* Text went into a dialog as
+    UTF-8 and came out through `toLocal8Bit()`. Those are the same on
+    Linux and different on Windows, **which is the shipped Windows
+    product**: an accented chart name was stored in the ANSI code
+    page, shown back as a replacement character, and written as "?"
+    by the next OK. `StrSzQt()` and `BaStrQt()` in `qtdriver.cpp`
+    convert by `us.nCharset` through the core's own tables: UTF-8,
+    Windows-1252 or IBM 437 as set, and for `-Ya0` ("never convert")
+    the system's encoding -- the ANSI code page on Windows, which is
+    what the Win32 build's edit controls store, UTF-8 elsewhere, which
+    is what the console build reads off a command line. Bytes that are
+    not valid UTF-8 are read as Windows-1252, so a chart file from the
+    Win32 build shows its name and an untouched OK keeps it. 74 encode
+    sites and some thirty decode sites; the atlas and chart list rows
+    were `fromLatin1()`, wrong under `-Ya3`. **File names are not
+    text**: they stay on `toLocal8Bit()`, since `fopen()` takes the
+    system's encoding whatever `-Ya` says, and the two places that
+    loaded one as UTF-8 (the ADB path, the ephemeris parameters) load
+    it the way they store it now. Font names are UTF-8 both ways.
+    Net: `text-charset`, six encodings through Chart Info; sabotaged
+    on each side.
+
+    *Not changed, with the reason.* Under `-Ya0` on a UTF-8 system a
+    non-ASCII name still DRAWS one glyph per byte, in text and
+    graphics charts alike. That is the core's reading of `-Ya0`, the
+    console build does the same, and the text screen cannot guess: a
+    box corner in IBM 437 is the bytes C4 BF, which is also valid
+    UTF-8. `-Ya3` is the setting for it. Whether the Qt build should
+    default to `-Ya3` off Windows is the maintainer's call and was
+    put to them.
+
+    *The six dropped findings.* Animated GIF's spin boxes and unit
+    list still took a passing wheel (282 said "its fields", true of 8
+    of 13). The Display Settings mnemonic clash was moved from Alt+O
+    to Alt+E, which "Menu Font" already had: the radio is "Object
+    o&rder". A paper size nobody touched was re-read from its two
+    decimals, so in centimetres it drifted on every OK; only a changed
+    field is parsed (Windows still drifts). **An object used as a
+    custom definition was written as its first three letters and read
+    back as something else** (`calc.cpp`, both builds): "Asc", "Apo"
+    and "Adm" as Arabic parts, "Tit" as Titan for Titania, "2nd" as
+    the number 2. `SzObjDefFormat()` writes the shortest abbreviation
+    that reads back as the object, and `FObjDefParse()` takes a type
+    letter only before a digit and a number only when nothing but
+    flags follows it. A static label's `&` is its field's shortcut
+    again (`RcBuildDialogQt` sets the buddy; the resource has two,
+    both in Ephemeris Settings). A stale comment on Moon Restrictions.
+
+    *Tests the fixes of 282 did not have.* The four dialogs
+    `dialog-bad-field` skipped (Chart Info, Default Chart Info, Set
+    Colors, Object Customization); Set Info on chart #1; February 31st
+    shown as 1; the aspect sort back to its first entry; Graphics
+    Settings' OK; Delete Chart with no row selected. Ten of these and
+    the new ones were each broken on purpose and failed. **Two default
+    buttons in one dialog** is a check in `tools/rc_audit.py` now, and
+    `tools/scenarios/win-custom-enter.txt` drives Enter in both
+    customization dialogs under Wine.
+
+    *Still not measured, said plainly.* That a mnemonic two buttons
+    share only moves the focus on Windows is documented Win32
+    behaviour and was not run: the one dialog with such a pair shows
+    nothing a scenario can read. The Windows glue for Lookup Names
+    and the aspect sort is compiled and its logic is the shared
+    functions the Qt suite tests; neither was driven, for the same
+    reason. Untested still: Recall keeping a typed name (the code
+    path Now's test covers), a bare file name in Enter Command Line,
+    Ephemeris Settings' initial focus.
 
 ## Features this fork adds to both builds
 

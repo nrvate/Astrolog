@@ -971,6 +971,85 @@ int NScrollChartQt(void)
 }
 
 
+// Text crossing between the core and a Qt widget, both directions. The
+// core holds bytes in the character set "-Ya" names (us.nCharset), and a
+// QString is Unicode, so every chart name, location, object name and
+// field has to be converted by that setting, the same way coming back as
+// going out. It used to be UTF-8 in and toLocal8Bit() out: equal on
+// Linux, but on Windows the second is the ANSI code page, so an accented
+// name was stored in one encoding, shown in the other as a replacement
+// character, and written back as "?" by the next OK.
+//
+// ccNone is "unknown, never convert", which in practice is the system's
+// own encoding: the ANSI code page on Windows, where it matches what the
+// Win32 build's edit controls store, and UTF-8 everywhere else, where it
+// matches what the console build reads off a command line. Bytes that
+// are not valid UTF-8 are read as Windows-1252 rather than dropped, so a
+// file written by the Win32 build shows its name and keeps it.
+//
+// File NAMES are not text in this sense. They go through toLocal8Bit(),
+// because fopen() takes the system's encoding whatever "-Ya" says.
+
+static flag FValidUtf8Qt(CONST char *sz)
+{
+  CONST uchar *pch = (CONST uchar *)sz;
+  int cch, i;
+
+  while (*pch) {
+    if (*pch < 0x80) { pch++; continue; }
+    if (*pch >= 0xC2 && *pch <= 0xDF) cch = 1;
+    else if (*pch >= 0xE0 && *pch <= 0xEF) cch = 2;
+    else if (*pch >= 0xF0 && *pch <= 0xF4) cch = 3;
+    else return fFalse;
+    for (i = 1; i <= cch; i++)
+      if ((pch[i] & 0xC0) != 0x80)
+        return fFalse;
+    pch += cch + 1;
+  }
+  return fTrue;
+}
+
+QString StrSzQt(CONST char *sz)
+{
+  QString str;
+  CONST uchar *pch;
+
+  if (sz == NULL)
+    return str;
+  if (us.nCharset == ccNone) {
+#ifdef _WIN32
+    return QString::fromLocal8Bit(sz);
+#endif
+  }
+  if ((us.nCharset == ccNone || us.nCharset >= ccUTF8) && FValidUtf8Qt(sz))
+    return QString::fromUtf8(sz);
+  for (pch = (CONST uchar *)sz; *pch; pch++)
+    str += QChar((ushort)(us.nCharset == ccIBM ? WchFromChIBM(*pch) :
+      WchFromChLatin(*pch)));
+  return str;
+}
+
+QByteArray BaStrQt(CONST QString &str)
+{
+  QByteArray ba;
+  int i;
+
+  if (us.nCharset == ccNone) {
+#ifdef _WIN32
+    return str.toLocal8Bit();
+#endif
+  }
+  if (us.nCharset == ccNone || us.nCharset >= ccUTF8)
+    return str.toUtf8();
+  for (i = 0; i < str.size(); i++) {
+    ushort wch = str.at(i).unicode();
+    ba.append((char)(wch < 128 ? (uchar)wch : us.nCharset == ccIBM ?
+      ChIBMFromWch(wch) : ChLatinFromWch(wch)));
+  }
+  return ba;
+}
+
+
 // Warnings and errors reach the user in a message box, as they do on
 // Windows, rather than going to stderr. That matters more than it looks:
 // PrintError()'s non-Windows path ends in Terminate(), so a chart that
@@ -1015,7 +1094,7 @@ void PrintWarningQt(CONST char *sz, flag fError)
   if (gs.nAnim > 0)
     neg(gs.nAnim);
   QMessageBox::warning(gi.qwind, QString("%1 %2").arg(szAppName)
-    .arg(fError ? "Error" : "Warning"), QString::fromLatin1(sz));
+    .arg(fError ? "Error" : "Warning"), StrSzQt(sz));
 }
 
 
@@ -1039,7 +1118,7 @@ void PrintNoticeQt(CONST char *sz)
     return;
   }
   QMessageBox::information(gi.qwind,
-    QString("%1 Notice").arg(szAppName), QString::fromLatin1(sz));
+    QString("%1 Notice").arg(szAppName), StrSzQt(sz));
 }
 
 
@@ -1384,7 +1463,7 @@ static flag FObjNamePhraseQt(CONST QString &str)
   if (str.isEmpty())
     return fFalse;
   for (i = 0; i < objMax; i++)
-    if (str == szObjDisp[i])
+    if (str == StrSzQt(szObjDisp[i]))
       return fTrue;
   return fFalse;
 }
@@ -1527,15 +1606,15 @@ static flag FRowLessQt(int a, int b)
   for (k = 0; k < qi.cSortKeys; k++) {
     switch (qi.rnSortCol[k]) {
     case tcolObj1:
-      z = qi.fSortObjAlpha ? QString(szObjDisp[ra.o1]).compare(
-        QString(szObjDisp[rb.o1]), Qt::CaseInsensitive) : ra.o1 - rb.o1;
+      z = qi.fSortObjAlpha ? StrSzQt(szObjDisp[ra.o1]).compare(
+        StrSzQt(szObjDisp[rb.o1]), Qt::CaseInsensitive) : ra.o1 - rb.o1;
       break;
     case tcolAsp:
       z = ra.ahi - rb.ahi;
       break;
     case tcolObj2:
-      z = qi.fSortObjAlpha ? QString(szObjDisp[ra.o2]).compare(
-        QString(szObjDisp[rb.o2]), Qt::CaseInsensitive) : ra.o2 - rb.o2;
+      z = qi.fSortObjAlpha ? StrSzQt(szObjDisp[ra.o2]).compare(
+        StrSzQt(szObjDisp[rb.o2]), Qt::CaseInsensitive) : ra.o2 - rb.o2;
       break;
     case tcolOrb:
       z = RAbs(ra.rOrb) < RAbs(rb.rOrb) ? -1 :
@@ -1663,8 +1742,8 @@ static flag FBuildAspectViewQt(void)
   // counting runs or tokens would slide every label a field left;
   // searching the strings themselves can't.
   QString strRow = StrPrisSpanQt(rgyData[0], 0, cch - 1);
-  QString strObj1 = QString(szObjDisp[qi.rgasprow[0].o1]).left(7);
-  QString strObj2 = QString(szObjDisp[qi.rgasprow[0].o2]).left(7);
+  QString strObj1 = StrSzQt(szObjDisp[qi.rgasprow[0].o1]).left(7);
+  QString strObj2 = StrSzQt(szObjDisp[qi.rgasprow[0].o2]).left(7);
   QString strAsp = QString(SzAspectAbbrev(qi.rgasprow[0].ahi));
   int xObj1 = strRow.indexOf(strObj1);
   int xAsp = strRow.indexOf(strAsp, xObj1 + strObj1.length());
@@ -2249,7 +2328,7 @@ void PasteChartQt()
         "Could not read the bitmap on the clipboard.");
   } else {
     QFile file(szTemp);
-    QByteArray baText = pmime->text().toLocal8Bit();
+    QByteArray baText = BaStrQt(pmime->text());
     // Did the clipboard text reach the disk whole? The write and the
     // FLUSH both have to say so: close() returns void and flushes there,
     // so a failure that only appears when the buffer is written -- no

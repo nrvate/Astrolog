@@ -182,7 +182,7 @@ static QString SzCoordEditQt(CONST char *sz)
 {
   while (*sz == ' ')
     sz++;
-  return QString(sz);
+  return StrSzQt(sz);
 }
 
 
@@ -193,7 +193,7 @@ static QString SzCoordEditQt(CONST char *sz)
 static void SzFieldQt(char *szDst, CONST QString &str)
 {
   sprintf2(szDst, cchSzMax, "%.*s", cchSzMax-1,
-    str.toLocal8Bit().constData());
+    BaStrQt(str).constData());
 }
 
 
@@ -588,7 +588,10 @@ public:
     // A mnemonic only one control carries presses it. An AMBIGUOUS one --
     // several share the letter -- only moves the focus to the next match,
     // and the user presses Space or Enter to act: that is what Windows'
-    // dialog manager does, and it is what keeps a bare "a" in the chart
+    // dialog manager is documented to do (not measured here: nothing a
+    // scenario can see tells a focused button from a pressed one in the
+    // one dialog that has such a pair), and it is what keeps a bare "a"
+    // in the chart
     // list, meant for the L&atitude sort, from pressing "Delete &All",
     // which asks nothing. This used to focus AND click, on the strength
     // of a check against the Transits dialog's "&Now" and "N&one" -- a
@@ -773,7 +776,7 @@ static QString SzFormatRQt(real r, int n)
 
 static int NFieldQt(CONST QString &str)
 {
-  QByteArray ba = str.toLocal8Bit();
+  QByteArray ba = BaStrQt(str);
 
   return NFromSz(ba.constData());
 }
@@ -781,7 +784,7 @@ static int NFieldQt(CONST QString &str)
 
 static real RFieldQt(CONST QString &str)
 {
-  QByteArray ba = str.toLocal8Bit();
+  QByteArray ba = BaStrQt(str);
 
   return RFromSz(ba.constData());
 }
@@ -911,6 +914,7 @@ static void RcBuildDialogQt(QDialog *pdlg, CONST RCCTL *rgctl, int cctl,
   QFontMetrics fm(pdlg->font());
   int dxBase = fm.averageCharWidth(), dyBase = fm.height();
   int i, iPass;
+  QLabel *plPend = NULL;
 
   // Every dialog built from the resource answers bare mnemonic letters,
   // which is where Windows' dialogs act on them. Installed here rather
@@ -948,10 +952,13 @@ static void RcBuildDialogQt(QDialog *pdlg, CONST RCCTL *rgctl, int cctl,
         ((QRadioButton *)pw)->setAutoExclusive(fFalse);
         break;
       case ctlLabel: {
-        // A static label renders "&" literally, so drop it -- the
-        // resource only uses it on controls that take focus. Wrapping
-        // matches Windows, whose static text wraps inside its rectangle.
-        QLabel *pl = new QLabel(str.remove(QChar('&')), pdlg);
+        // A static label's "&" is the shortcut to the control after it,
+        // as on Windows; Qt wants that control named as the buddy, which
+        // happens below when it is built. Wrapping matches Windows,
+        // whose static text wraps inside its rectangle.
+        QLabel *pl = new QLabel(str, pdlg);
+        if (str.contains(QChar('&')))
+          plPend = pl;
         pl->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
         pw = pl;
         break; }
@@ -981,6 +988,11 @@ static void RcBuildDialogQt(QDialog *pdlg, CONST RCCTL *rgctl, int cctl,
       }
       if (pw == NULL)
         continue;
+      if (plPend != NULL && pw != plPend &&
+        pw->focusPolicy() != Qt::NoFocus) {
+        plPend->setBuddy(pw);
+        plPend = NULL;
+      }
       // Give the widget the resource's own id as its Qt object name.
       // PwRcFindQt() looks controls up through the table below rather
       // than by object name, so nothing in the program needs this -- but
@@ -1997,10 +2009,10 @@ static QComboBox *PcbGifFieldQt(QWidget *pw, CONST QStringList &rgstr,
 static flag FGifDateQt(CONST GIFDATEQT &gd, int *mon, int *day, int *yea,
   real *tim)
 {
-  *mon = NParseSz(gd.pcbMon->currentText().toLocal8Bit().constData(), pmMon);
-  *day = NParseSz(gd.pcbDay->currentText().toLocal8Bit().constData(), pmDay);
-  *yea = NParseSz(gd.pcbYea->currentText().toLocal8Bit().constData(), pmYea);
-  *tim = RParseSz(gd.pcbTim->currentText().toLocal8Bit().constData(), pmTim);
+  *mon = NParseSz(BaStrQt(gd.pcbMon->currentText()).constData(), pmMon);
+  *day = NParseSz(BaStrQt(gd.pcbDay->currentText()).constData(), pmDay);
+  *yea = NParseSz(BaStrQt(gd.pcbYea->currentText()).constData(), pmYea);
+  *tim = RParseSz(BaStrQt(gd.pcbTim->currentText()).constData(), pmTim);
   return FValidMon(*mon) && FValidYea(*yea) && FValidDay(*day, *mon, *yea) &&
     FValidTim(*tim);
 }
@@ -2229,6 +2241,19 @@ void ShowGenerateGifDialogQt()
   pspThread->setSpecialValueText("All cores");
   pspThread->setValue(gs.nGifThread);
   plabelThread->setBuddy(pspThread);
+  // The date boxes got this in PcbGifFieldQt(); the spin boxes and the
+  // unit list are fields the wheel changes just the same.
+  {
+    static NoComboWheelQt filterGif;
+    QList<QWidget *> rgpw;
+    for (QAbstractSpinBox *psp : dlg.findChildren<QAbstractSpinBox *>())
+      rgpw << psp;
+    rgpw << pcbUnit;
+    for (QWidget *pw : rgpw) {
+      pw->setFocusPolicy(Qt::StrongFocus);
+      pw->installEventFilter(&filterGif);
+    }
+  }
   pgrid->addWidget(plabelThread, 7, 0);
   pgrid->addWidget(pspThread, 7, 1, 1, 2);
 
@@ -2533,7 +2558,8 @@ void ShowFileSettingsDialogQt()
   QComboBox *pcbPct = (QComboBox *)PwRcFindIdxQt(rgbuilt, "dcFi_XI", 1);
   if (peAnti != NULL)  peAnti->setText(QString::number(NAntialiasQt()));
   if (peThick != NULL) peThick->setText(QString::number(gs.nThickAdjust));
-  if (peADB != NULL)   peADB->setText(FSzSet(us.szADB) ? us.szADB : "");
+  if (peADB != NULL)   peADB->setText(
+    QString::fromLocal8Bit(FSzSet(us.szADB) ? us.szADB : ""));
   if (peInchX != NULL) peInchX->setText(SzLength(gs.xInch));
   if (peInchY != NULL) peInchY->setText(SzLength(gs.yInch));
   if (pcbPct != NULL) {
@@ -2553,7 +2579,7 @@ LAgain:
 
   nwx = peAnti != NULL ? NFieldQt(peAnti->text()) : NAntialiasQt();
   rI = pcbPct != NULL ?
-    RFromSz(pcbPct->currentText().toLocal8Bit().constData()) : gs.rBackPct;
+    RFromSz(BaStrQt(pcbPct->currentText()).constData()) : gs.rBackPct;
   if (!FValidAntialias(nwx)) { ErrorEnsureQt(&dlg, nwx, "antialias"); goto LAgain; }
   if (!FValidBackPct(rI))    { ErrorEnsureRQt(&dlg, rI, "background transparency"); goto LAgain; }
 
@@ -2586,13 +2612,17 @@ LAgain:
   if (peThick != NULL) gs.nThickAdjust = NFieldQt(peThick->text());
   gs.rBackPct = rI;
   if (peADB != NULL) {
-    SzFieldQt(sz, peADB->text());
+    // A file name: the system encoding, not "-Ya". See StrSzQt().
+    sprintf2(S(sz), "%s", peADB->text().toLocal8Bit().constData());
     FCloneSz(sz, &us.szADB);
   }
-  if (peInchX != NULL)
-    gs.xInch = RParseSz(peInchX->text().toLocal8Bit().constData(), pmLength);
-  if (peInchY != NULL)
-    gs.yInch = RParseSz(peInchY->text().toLocal8Bit().constData(), pmLength);
+  // Only a size the user changed is read back. The field shows two
+  // decimals, in centimetres when distances are metric, so parsing an
+  // untouched one moved the paper a little on every OK.
+  if (peInchX != NULL && peInchX->text() != SzLength(gs.xInch))
+    gs.xInch = RParseSz(BaStrQt(peInchX->text()).constData(), pmLength);
+  if (peInchY != NULL && peInchY->text() != SzLength(gs.yInch))
+    gs.yInch = RParseSz(BaStrQt(peInchY->text()).constData(), pmLength);
   i = NRcStoreRadioQt(rgbuilt, 1, 3, 2);
   gs.nOrient = (i == 2 ? 0 : (i == 0 ? 1 : -1));
   RedrawQt();
@@ -2704,13 +2734,13 @@ void ShowGraphicsSettingsDialogQt()
   if (peY != NULL)     peY->setText(QString::number(gs.yWin));
   if (peGrid != NULL)  peGrid->setText(QString::number(gs.nGridCell));
   if (peSpace != NULL) peSpace->setText(QString::number(gs.cspace));
-  if (peTrack != NULL) peTrack->setText(SzObjNameQt(gs.objTrack));
+  if (peTrack != NULL) peTrack->setText(StrSzQt(SzObjNameQt(gs.objTrack)));
   if (peAU != NULL)    peAU->setText(SzFormatRQt(gs.rspace, -6));
   if (peRot != NULL)   peRot->setText(SzFormatRQt(gs.rRot, -3));
   if (peTilt != NULL)  peTilt->setText(SzFormatRQt(gs.rTilt, -3));
   if (peDelay != NULL) peDelay->setText(QString::number(NAnimDelayQt()));
-  if (peLeft != NULL)  peLeft->setText(SzObjNameQt(
-    gs.objLeft == 0 ? oSun : NAbs(gs.objLeft)-1));
+  if (peLeft != NULL)  peLeft->setText(StrSzQt(SzObjNameQt(
+    gs.objLeft == 0 ? oSun : NAbs(gs.objLeft)-1)));
   if (peDeca != NULL)  peDeca->setText(QString::number(gs.nDecaSize));
 
   QComboBox *pcbScale = (QComboBox *)PwRcFindQt(rgbuilt, "dcGr_Xs");
@@ -3042,10 +3072,11 @@ static void AtlasRowQt(CONST char *sz, int iae)
 {
   if (s_plistAtlasQt == NULL)
     return;
-  // fromLatin1, not the implicit UTF-8: these rows carry Astrolog's degree
+  // StrSzQt(), not the implicit UTF-8: these rows carry Astrolog's degree
   // sign as a single high byte, which decoded as UTF-8 is invalid and comes
-  // out as a replacement character.
-  s_plistAtlasQt->addItem(QString::fromLatin1(sz));
+  // out as a replacement character -- and not fromLatin1() either, which
+  // this was, because under "-Ya3" the city names are UTF-8.
+  s_plistAtlasQt->addItem(StrSzQt(sz));
   s_rgiaeQt.append(iae);
 }
 
@@ -3069,8 +3100,8 @@ static void RcAtlasRunQt(QListWidget *plist, int nWhich, QLineEdit *peLoc,
     if (!DisplayAtlasLookup(sz, 1, &ilist))
       plist->addItem("Couldn't get atlas data!");
   } else if (nWhich == 1) {              // Nearby Cities
-    lon = RParseSz(pcbLon->currentText().toLocal8Bit().constData(), pmLon);
-    lat = RParseSz(pcbLat->currentText().toLocal8Bit().constData(), pmLat);
+    lon = RParseSz(BaStrQt(pcbLon->currentText()).constData(), pmLon);
+    lat = RParseSz(BaStrQt(pcbLat->currentText()).constData(), pmLat);
     if (!DisplayAtlasNearby(lon, lat, 1, &ilist, fFalse))
       plist->addItem("Couldn't get atlas data!");
   } else {                               // Time Changes
@@ -3143,13 +3174,13 @@ static void RcAtlasApplyQt(QListWidget *plist,
   if (!fDefault) {
     QComboBox *pcbT;
     if ((pcbT = (QComboBox *)PwRcFindQt(rgbuilt, "dcInMon")) != NULL)
-      ci.mon = NParseSz(pcbT->currentText().toLocal8Bit().constData(), pmMon);
+      ci.mon = NParseSz(BaStrQt(pcbT->currentText()).constData(), pmMon);
     if ((pcbT = (QComboBox *)PwRcFindQt(rgbuilt, "dcInDay")) != NULL)
-      ci.day = NParseSz(pcbT->currentText().toLocal8Bit().constData(), pmDay);
+      ci.day = NParseSz(BaStrQt(pcbT->currentText()).constData(), pmDay);
     if ((pcbT = (QComboBox *)PwRcFindQt(rgbuilt, "dcInYea")) != NULL)
-      ci.yea = NParseSz(pcbT->currentText().toLocal8Bit().constData(), pmYea);
+      ci.yea = NParseSz(BaStrQt(pcbT->currentText()).constData(), pmYea);
     if ((pcbT = (QComboBox *)PwRcFindQt(rgbuilt, "dcInTim")) != NULL)
-      ci.tim = RParseSz(pcbT->currentText().toLocal8Bit().constData(), pmTim);
+      ci.tim = RParseSz(BaStrQt(pcbT->currentText()).constData(), pmTim);
   }
   if (!DisplayTimezoneChanges(is.rgae[iae].izn, 0, &ci))
     PrintWarning("Couldn't get time zone data!");
@@ -3176,7 +3207,7 @@ static void RcAtlasApplyQt(QListWidget *plist,
   sz[is.ichLocSplit] = chNull;
   if (pcbLon != NULL) pcbLon->setEditText(SzCoordEditQt(&sz[0]));
   if (pcbLat != NULL) pcbLat->setEditText(SzCoordEditQt(&sz[is.ichLocSplit+1]));
-  if (peLoc != NULL) peLoc->setText(SzCity(iae));
+  if (peLoc != NULL) peLoc->setText(StrSzQt(SzCity(iae)));
 }
 #endif // ATLAS
 
@@ -3220,9 +3251,9 @@ static void RcLoadChartInfoQt(CONST QVector<RCBUILT> &rgbuilt, CONST CI *pci)
   QLineEdit *peName = (QLineEdit *)PwRcFindQt(rgbuilt, "deInNam");
   QLineEdit *peLoc = (QLineEdit *)PwRcFindQt(rgbuilt, "deInLoc");
   if (peName != NULL)
-    peName->setText(FSzSet(pci->nam) ? pci->nam : "");
+    peName->setText(StrSzQt(FSzSet(pci->nam) ? pci->nam : ""));
   if (peLoc != NULL)
-    peLoc->setText(FSzSet(pci->loc) ? pci->loc : "");
+    peLoc->setText(StrSzQt(FSzSet(pci->loc) ? pci->loc : ""));
 }
 
 
@@ -3309,7 +3340,7 @@ static void ShowChartInfoForQt(CI *pci, CONST char *szTitle)
         // Windows takes the year from the dialog for this one.
         QComboBox *pcbYea = (QComboBox *)PwRcFindQt(rgbuilt, "dcInYea");
         if (pcbYea != NULL)
-          ci.yea = NParseSz(pcbYea->currentText().toLocal8Bit().constData(),
+          ci.yea = NParseSz(BaStrQt(pcbYea->currentText()).constData(),
             pmYea);
         RcAtlasRunQt(plist, 2, peLoc, pcbLon, pcbLat, &ci, 14); });
   if (ppbAppl != NULL)
@@ -3329,25 +3360,25 @@ LAgain:
   QComboBox *pcb;
   ci = *pci;
   if ((pcb = (QComboBox *)PwRcFindQt(rgbuilt, "dcInMon")) != NULL) {
-    ba = pcb->currentText().toLocal8Bit();
+    ba = BaStrQt(pcb->currentText());
     ci.mon = NParseSz(ba.constData(), pmMon); }
   if ((pcb = (QComboBox *)PwRcFindQt(rgbuilt, "dcInDay")) != NULL) {
-    ba = pcb->currentText().toLocal8Bit();
+    ba = BaStrQt(pcb->currentText());
     ci.day = NParseSz(ba.constData(), pmDay); }
   if ((pcb = (QComboBox *)PwRcFindQt(rgbuilt, "dcInYea")) != NULL) {
-    ba = pcb->currentText().toLocal8Bit();
+    ba = BaStrQt(pcb->currentText());
     ci.yea = NParseSz(ba.constData(), pmYea); }
   if ((pcb = (QComboBox *)PwRcFindQt(rgbuilt, "dcInTim")) != NULL) {
-    ba = pcb->currentText().toLocal8Bit();
+    ba = BaStrQt(pcb->currentText());
     ci.tim = RParseSz(ba.constData(), pmTim); }
   if ((pcb = (QComboBox *)PwRcFindQt(rgbuilt, "dcInDst")) != NULL) {
-    ba = pcb->currentText().toLocal8Bit();
+    ba = BaStrQt(pcb->currentText());
     ci.dst = RParseSz(ba.constData(), pmDst); }
-  if (pcbZon != NULL) { ba = pcbZon->currentText().toLocal8Bit();
+  if (pcbZon != NULL) { ba = BaStrQt(pcbZon->currentText());
     ci.zon = RParseSz(ba.constData(), pmZon); }
-  if (pcbLon != NULL) { ba = pcbLon->currentText().toLocal8Bit();
+  if (pcbLon != NULL) { ba = BaStrQt(pcbLon->currentText());
     ci.lon = RParseSz(ba.constData(), pmLon); }
-  if (pcbLat != NULL) { ba = pcbLat->currentText().toLocal8Bit();
+  if (pcbLat != NULL) { ba = BaStrQt(pcbLat->currentText());
     ci.lat = RParseSz(ba.constData(), pmLat); }
 
   // Each field named, and the dialog left up, as Windows' DlgInfo does
@@ -3383,9 +3414,9 @@ LAgain:
   // from under every other CI still holding it -- ciMain's, which is what
   // the chart header prints from.
   if (peName != NULL)
-    ci.nam = SzClone(peName->text().toLocal8Bit().constData());
+    ci.nam = SzClone(BaStrQt(peName->text()).constData());
   if (peLoc != NULL)
-    ci.loc = SzClone(peLoc->text().toLocal8Bit().constData());
+    ci.loc = SzClone(BaStrQt(peLoc->text()).constData());
   *pci = ci;
   // Chart #1 reached through the Charts dialog is ciMain, which every
   // recast overwrites from ciCore: Windows' DlgInfo stores both
@@ -3514,7 +3545,7 @@ static void RcLoadInfoAllQt(CONST QVector<RCBUILT> &rgbuilt)
       ChDst(pci->dst), SzZone(pci->zon), SzLocation(pci->lon, pci->lat));
     QLabel *pl = (QLabel *)PwRcFindIdxQt(rgbuilt, "ds", (i-1)*2 + 1);
     if (pl != NULL)
-      pl->setText(QString::fromLatin1(sz));
+      pl->setText(StrSzQt(sz));
     // SzSet() on both, as RcFillChartListQt() already does and for the
     // same reason: a CI's nam and loc are NULL until something sets them,
     // and ciThre through ciSixt start that way (data.cpp:160). Passing a
@@ -3527,7 +3558,7 @@ static void RcLoadInfoAllQt(CONST QVector<RCBUILT> &rgbuilt)
       FSzSet(pci->nam) && FSzSet(pci->loc) ? "; " : "", SzSet(pci->loc));
     pl = (QLabel *)PwRcFindIdxQt(rgbuilt, "ds", (i-1)*2 + 2);
     if (pl != NULL)
-      pl->setText(QString::fromLatin1(sz));
+      pl->setText(StrSzQt(sz));
   }
   us.fAnsiChar = nSav; us.fGraphics = fSav;
 }
@@ -3637,10 +3668,10 @@ static void RcFillChartListQt(QListWidget *plist, QLabel *plSize,
   if (fFilter) {
     if (peName != NULL)
       sprintf2(S(sz1), "%.*s", cchSzDef-1,
-        peName->text().toLocal8Bit().constData());
+        BaStrQt(peName->text()).constData());
     if (peLoc != NULL)
       sprintf2(S(sz2), "%.*s", cchSzDef-1,
-        peLoc->text().toLocal8Bit().constData());
+        BaStrQt(peLoc->text()).constData());
   }
   for (i = 0; i < is.cci; i++) {
     pci = &is.rgci[i];
@@ -3700,7 +3731,7 @@ static void RcFillChartListQt(QListWidget *plist, QLabel *plSize,
       SzSet(pci->nam), FSzSet(pci->nam) && FSzSet(pci->loc) ? "; " : "",
       SzSet(pci->loc));
     us.fAnsiChar = nSav; us.fGraphics = fSav;
-    plist->addItem(QString::fromLatin1(sz));
+    plist->addItem(StrSzQt(sz));
     s_rgiciQt.append(i);
     i2++;
   }
@@ -3856,8 +3887,8 @@ void ShowChartListDialogQt()
   // this half behind: pressing Filter and then OK narrowed the list on
   // Windows and threw the narrowing away here.
   if (fFiltered && peName != NULL && peLoc != NULL) {
-    QByteArray baName = peName->text().toLocal8Bit();
-    QByteArray baLoc = peLoc->text().toLocal8Bit();
+    QByteArray baName = BaStrQt(peName->text());
+    QByteArray baLoc = BaStrQt(peLoc->text());
     FilterCIList(baName.constData(), baLoc.constData());
   }
 }
@@ -3998,7 +4029,7 @@ static int NColorFromComboQt(QComboBox *pcb);
 
 static int NColorFromComboQt(QComboBox *pcb)
 {
-  QByteArray ba = pcb->currentText().toLocal8Bit();
+  QByteArray ba = BaStrQt(pcb->currentText());
   return NParseSz(ba.constData(), pmColor);
 }
 
@@ -4081,7 +4112,7 @@ static void ShowRcRestrictQt(CONST char *szTitle, CONST RCCTL *rgctl,
     // reads astrolog.rc and cannot see a relabel done here, the same
     // blind spot the RCRESBUT button overrides above sit in.
     if (FObjDispCustom(iObj))
-      pcb->setText(QString(szObjDisp[iObj]));
+      pcb->setText(StrSzQt(szObjDisp[iObj]));
     rgpcb[iObj - lo] = pcb;
   }
 
@@ -4230,9 +4261,9 @@ void ShowDefaultInfoDialogQt()
   FillComboQt(pcbCor, QString::number(us.lTimeAddition),
     QStringList() << "60" << "0" << "-60");
   if (peName != NULL)
-    peName->setText(FSzSet(ciDefa.nam) ? ciDefa.nam : "");
+    peName->setText(StrSzQt(FSzSet(ciDefa.nam) ? ciDefa.nam : ""));
   if (peLoc != NULL)
-    peLoc->setText(FSzSet(ciDefa.loc) ? ciDefa.loc : "");
+    peLoc->setText(StrSzQt(FSzSet(ciDefa.loc) ? ciDefa.loc : ""));
 
 #ifdef ATLAS
   // The atlas buttons, which this port didn't have at all.
@@ -4270,13 +4301,13 @@ LAgain:
     return;
 
   ci = ciDefa;
-  if (pcbDst != NULL) { ba = pcbDst->currentText().toLocal8Bit();
+  if (pcbDst != NULL) { ba = BaStrQt(pcbDst->currentText());
     ci.dst = RParseSz(ba.constData(), pmDst); }
-  if (pcbZon != NULL) { ba = pcbZon->currentText().toLocal8Bit();
+  if (pcbZon != NULL) { ba = BaStrQt(pcbZon->currentText());
     ci.zon = RParseSz(ba.constData(), pmZon); }
-  if (pcbLon != NULL) { ba = pcbLon->currentText().toLocal8Bit();
+  if (pcbLon != NULL) { ba = BaStrQt(pcbLon->currentText());
     ci.lon = RParseSz(ba.constData(), pmLon); }
-  if (pcbLat != NULL) { ba = pcbLat->currentText().toLocal8Bit();
+  if (pcbLat != NULL) { ba = BaStrQt(pcbLat->currentText());
     ci.lat = RParseSz(ba.constData(), pmLat); }
   if (!FValidDst(ci.dst))
     { ErrorEnsureRQt(&dlg, ci.dst, "daylight saving"); goto LAgain; }
@@ -4286,9 +4317,9 @@ LAgain:
     { ErrorEnsureRQt(&dlg, ci.lon, "longitude"); goto LAgain; }
   if (!FValidLat(ci.lat))
     { ErrorEnsureRQt(&dlg, ci.lat, "latitude"); goto LAgain; }
-  if (pcbElv != NULL) { ba = pcbElv->currentText().toLocal8Bit();
+  if (pcbElv != NULL) { ba = BaStrQt(pcbElv->currentText());
     us.elvDef = RParseSz(ba.constData(), pmElv); }
-  if (pcbTmp != NULL) { ba = pcbTmp->currentText().toLocal8Bit();
+  if (pcbTmp != NULL) { ba = BaStrQt(pcbTmp->currentText());
     us.tmpDef = RParseSz(ba.constData(), pmTmp); }
   if (pcbCor != NULL)
     us.lTimeAddition = NFieldQt(pcbCor->currentText());
@@ -4305,9 +4336,9 @@ LAgain:
   // from under every other CI still holding it -- ciMain's, which is what
   // the chart header prints from.
   if (peName != NULL)
-    ci.nam = SzClone(peName->text().toLocal8Bit().constData());
+    ci.nam = SzClone(BaStrQt(peName->text()).constData());
   if (peLoc != NULL)
-    ci.loc = SzClone(peLoc->text().toLocal8Bit().constData());
+    ci.loc = SzClone(BaStrQt(peLoc->text()).constData());
   ciDefa = ci;
   RecastAndRedrawQt();
 }
@@ -4386,17 +4417,17 @@ LAgain:
     return;
 
   mon = pcbMon != NULL ?
-    NParseSz(pcbMon->currentText().toLocal8Bit().constData(), pmMon) : MonT;
+    NParseSz(BaStrQt(pcbMon->currentText()).constData(), pmMon) : MonT;
   day = pcbDay != NULL ?
-    NParseSz(pcbDay->currentText().toLocal8Bit().constData(), pmDay) : DayT;
+    NParseSz(BaStrQt(pcbDay->currentText()).constData(), pmDay) : DayT;
   yea = pcbYea != NULL ?
-    NParseSz(pcbYea->currentText().toLocal8Bit().constData(), pmYea) : YeaT;
+    NParseSz(BaStrQt(pcbYea->currentText()).constData(), pmYea) : YeaT;
   tim = pcbTim != NULL ?
-    RParseSz(pcbTim->currentText().toLocal8Bit().constData(), pmTim) : TimT;
+    RParseSz(BaStrQt(pcbTim->currentText()).constData(), pmTim) : TimT;
   dst = pcbDst != NULL ?
-    RParseSz(pcbDst->currentText().toLocal8Bit().constData(), pmDst) : DstT;
+    RParseSz(BaStrQt(pcbDst->currentText()).constData(), pmDst) : DstT;
   zon = pcbZon != NULL ?
-    RParseSz(pcbZon->currentText().toLocal8Bit().constData(), pmZon) : ZonT;
+    RParseSz(BaStrQt(pcbZon->currentText()).constData(), pmZon) : ZonT;
   nty = peYears != NULL ? NFieldQt(peYears->text()) : us.nEphemYears;
   nd = peDiv != NULL ? NFieldQt(peDiv->text()) : us.nDivision;
 
@@ -4532,7 +4563,7 @@ void ShowProgressDialogQt()
     FillComboQt(pcbCusp, strCur, rgstr);
   }
   if (peArc != NULL)
-    peArc->setText(SzObjNameQt(us.objProgArc));
+    peArc->setText(StrSzQt(SzObjNameQt(us.objProgArc)));
   // The direction arc offers its four choices by number and name, the
   // number being what is read back, as the rate list does.
   if (pcbArcType != NULL) {
@@ -4578,7 +4609,7 @@ LAgain:
       rd = rDayInYear / rd;
   }
   rC = pcbCusp != NULL ?
-    RFromSz(pcbCusp->currentText().toLocal8Bit().constData()) : us.rProgCusp;
+    RFromSz(BaStrQt(pcbCusp->currentText()).constData()) : us.rProgCusp;
   npO = us.objProgArc;
   if (peArc != NULL) {
     SzFieldQt(sz, peArc->text());
@@ -4590,17 +4621,17 @@ LAgain:
     npa = NFromSz(sz);
   }
   mon = pcbMon != NULL ?
-    NParseSz(pcbMon->currentText().toLocal8Bit().constData(), pmMon) : MonT;
+    NParseSz(BaStrQt(pcbMon->currentText()).constData(), pmMon) : MonT;
   day = pcbDay != NULL ?
-    NParseSz(pcbDay->currentText().toLocal8Bit().constData(), pmDay) : DayT;
+    NParseSz(BaStrQt(pcbDay->currentText()).constData(), pmDay) : DayT;
   yea = pcbYea != NULL ?
-    NParseSz(pcbYea->currentText().toLocal8Bit().constData(), pmYea) : YeaT;
+    NParseSz(BaStrQt(pcbYea->currentText()).constData(), pmYea) : YeaT;
   tim = pcbTim != NULL ?
-    RParseSz(pcbTim->currentText().toLocal8Bit().constData(), pmTim) : TimT;
+    RParseSz(BaStrQt(pcbTim->currentText()).constData(), pmTim) : TimT;
   dst = pcbDst != NULL ?
-    RParseSz(pcbDst->currentText().toLocal8Bit().constData(), pmDst) : DstT;
+    RParseSz(BaStrQt(pcbDst->currentText()).constData(), pmDst) : DstT;
   zon = pcbZon != NULL ?
-    RParseSz(pcbZon->currentText().toLocal8Bit().constData(), pmZon) : ZonT;
+    RParseSz(BaStrQt(pcbZon->currentText()).constData(), pmZon) : ZonT;
 
   if (rd == 0.0)                { ErrorEnsureQt(&dlg, 0, "degree per day"); goto LAgain; }
   if (rC == 0.0)                { ErrorEnsureQt(&dlg, 0, "cusp move ratio"); goto LAgain; }
@@ -4808,7 +4839,7 @@ LAgain:
 static flag FRunCommandLineQt(CONST QString &qsLine)
 {
   char szLine[cchSzLine];
-  QByteArray ba = qsLine.toLocal8Bit();
+  QByteArray ba = BaStrQt(qsLine);
   flag fRet;
 
   strncpy(szLine, ba.constData(), cchSzLine-1);
@@ -4835,7 +4866,7 @@ static flag FRunCommandLineQt(CONST QString &qsLine)
 #ifdef QTTEST
 flag FRunCommandLineTestQt(CONST char *szLine)
 {
-  return FRunCommandLineQt(QString::fromUtf8(szLine));
+  return FRunCommandLineQt(StrSzQt(szLine));
 }
 #endif
 
@@ -5194,7 +5225,7 @@ static void RcLabelObjRowQt(CONST QVector<RCBUILT> &rgbuilt, int nIdx,
     return;
   plab = (QLabel *)PwRcFindIdxQt(rgbuilt, "dno", nIdx);
   if (plab != NULL)
-    plab->setText(QString(szObjDisp[iobj]));
+    plab->setText(StrSzQt(szObjDisp[iobj]));
 }
 
 
@@ -5426,14 +5457,14 @@ void ShowCalcDialogQt()
   QLineEdit *peDwad = (QLineEdit *)PwRcFindIdxQt(rgbuilt, "deSe_", 4);
   QLineEdit *peSolar = (QLineEdit *)PwRcFindIdxQt(rgbuilt, "deSe_", 1);
   if (peCentral != NULL)
-    peCentral->setText(SzObjNameQt(us.objCenter));
+    peCentral->setText(StrSzQt(SzObjNameQt(us.objCenter)));
   if (peHarmonic != NULL)
     peHarmonic->setText(SzFormatRQt(us.rHarmonic, -6));
   if (peDwad != NULL)
     peDwad->setText(QString::number(us.nDwad));
   if (peSolar != NULL)
-    peSolar->setText(SzObjNameQt(us.objOnAsc == 0 ? oSun :
-      NAbs(us.objOnAsc)-1));
+    peSolar->setText(StrSzQt(SzObjNameQt(us.objOnAsc == 0 ? oSun :
+      NAbs(us.objOnAsc)-1)));
 
   // dr01..dr03 pick what sits on the Ascendant; dr04..dr06 the 3D house
   // frame of reference.
@@ -5450,7 +5481,7 @@ LAgain:
   rs = us.rZodiacOffset; nc = us.nHouseSystem; nh = us.objCenter;
   rx = us.rHarmonic; n4 = us.nDwad; n1 = oSun;
   if (pcbAyan != NULL)
-    rs = RFromSz(pcbAyan->currentText().toLocal8Bit().constData());
+    rs = RFromSz(BaStrQt(pcbAyan->currentText()).constData());
   if (pcbHouse != NULL) {
     SzFieldQt(sz, pcbHouse->currentText());
     nc = NParseSz(sz, pmSystem);
@@ -5612,7 +5643,7 @@ static flag FEphChainValidQt(QLineEdit *peChain, char *szErr)
 
   if (peChain == NULL)
     return fTrue;
-  QByteArray ba = peChain->text().toLocal8Bit();
+  QByteArray ba = BaStrQt(peChain->text());
   sz = ba.constData();
   for (pchTok = sz; ; pchTok = pch + 1) {
     for (pch = pchTok; *pch && *pch != ','; pch++)
@@ -5691,7 +5722,7 @@ void ShowEphemDialogQt()
       if (peR != NULL) {
         peR->setVisible(fLive);
         if (fLive) {
-          peR->setText(QString::fromUtf8(
+          peR->setText(QString::fromLocal8Bit(
             SzSet(us.rgszEphParam[rgiepParam[iR]])));
           peR->setEchoMode(pepR->ep.nKind == epkToken ?
             QLineEdit::PasswordEchoOnEdit : QLineEdit::Normal);
@@ -5812,7 +5843,7 @@ void ShowEphemDialogQt()
     }
     if (peRow != NULL) {
       peRow->setVisible(fTrue);
-      peRow->setText(QString::fromUtf8(
+      peRow->setText(QString::fromLocal8Bit(
         SzSet(us.rgszEphParam[rgiepParam[i]])));
       if (pep->ep.nKind == epkToken)
         peRow->setEchoMode(QLineEdit::PasswordEchoOnEdit);
@@ -5863,7 +5894,7 @@ void ShowEphemDialogQt()
 
       sprintf2(S(szHeadL), "%s", "");
       if (peChain != NULL) {
-        QByteArray ba = peChain->text().toLocal8Bit();
+        QByteArray ba = BaStrQt(peChain->text());
         SzEphChainHead(ba.constData(), S(szHeadL));
       }
       pephsrc = PephsrcGet(IEphSrcFromKey(szHeadL));
@@ -5939,7 +5970,7 @@ void ShowEphemDialogQt()
     }
   }
   if (peChain != NULL) {
-    QByteArray baChain = peChain->text().toLocal8Bit();
+    QByteArray baChain = BaStrQt(peChain->text());
     EphSourceSet(baChain.constData());
   }
   RecastAndRedrawQt();
@@ -6071,7 +6102,7 @@ void ShowDisplayDialogQt()
   if (peAsp != NULL)
     peAsp->setText(QString::number(us.nAsp));
   if (peReq != NULL)
-    peReq->setText(SzObjNameQt(us.objRequire));
+    peReq->setText(StrSzQt(SzObjNameQt(us.objRequire)));
   if (peWid != NULL)
     peWid->setText(QString::number(us.nScreenWidth));
   if (peSta != NULL)
@@ -6124,7 +6155,7 @@ void ShowDisplayDialogQt()
   // The two radios share the dialog as their parent, which makes them
   // exclusive without a button group.
   QLabel *plSort = new QLabel("Aspect List Sort:", &dlg);
-  QRadioButton *prbObj = new QRadioButton("Object ord&er", &dlg);
+  QRadioButton *prbObj = new QRadioButton("Object o&rder", &dlg);
   QRadioButton *prbAlpha = new QRadioButton("&Alphabetical", &dlg);
   pchAa->setToolTip("Antialias the text charts");
   pchMenuAa->setToolTip("Antialias the menus and dialogs");
@@ -6271,10 +6302,10 @@ LAgain:
     goto LAgain;
   }
 
-  SetConsoleFontQt(pcbFont->currentText().toLocal8Bit().constData(),
+  SetConsoleFontQt(pcbFont->currentText().toUtf8().constData(),
     nSizeCon);
   SetConsoleAntialiasQt(pchAa->isChecked());
-  SetMenuFontQt(pcbMenu->currentText().toLocal8Bit().constData(), nSizeMen);
+  SetMenuFontQt(pcbMenu->currentText().toUtf8().constData(), nSizeMen);
   SetMenuAntialiasQt(pchMenuAa->isChecked());
   SetSortObjAlphaQt(prbAlpha->isChecked());
   // The interface font is applied here rather than at the next start:
@@ -6323,10 +6354,8 @@ LAgain:
 
 // Moon restrictions, equivalent to Windows' DlgMoons: which individual
 // moons and center-of-body points are shown, using the same shared
-// checkbox-list dialog the main Restrictions menu items use. Simplified
-// from Windows' version by not including its per-planet "toggle this
-// group of moons" quick buttons -- the checkbox list alone covers the
-// same ground, just one click at a time instead of one per planet.
+// checkbox-list dialog the main Restrictions menu items use, with
+// Windows' per-planet "toggle this group of moons" buttons.
 
 void ShowMoonRestrictDialogQt()
 {
@@ -6455,7 +6484,7 @@ LAgain:
 // object zero, so the dialog's own validation message fires.
 static void ParseCustomDefQt(CONST QString &str, OBJDEF *pod)
 {
-  QByteArray ba = str.toLocal8Bit();
+  QByteArray ba = BaStrQt(str);
 
   if (!FObjDefParse(ba.constData(), pod)) {
     pod->nTyp = 2; pod->nObj = -1;
@@ -6488,7 +6517,7 @@ static void LookupCustomNamesQt(QVector<QLineEdit *> &rgpeName,
     // web query included, and remembers the name it answers -- so a name
     // this button shows is a name the program accepts back.
     SzObjSelName(S(sz), od.nTyp, od.nObj);
-    rgpeName[i]->setText(sz);
+    rgpeName[i]->setText(StrSzQt(sz));
   }
 }
 
@@ -6522,7 +6551,7 @@ void ShowCustomDialogQt()
     rgpeName.append(peName);
     rgpeDef.append(peDef);
     if (peName != NULL)
-      peName->setText(szObjDisp[i]);
+      peName->setText(StrSzQt(szObjDisp[i]));
     if (peDef == NULL)
       continue;
 
@@ -6530,7 +6559,7 @@ void ShowCustomDialogQt()
     // to be its second open-coded copy.
     ObjDefGet(custLo + j, &od);
     SzObjDefFormat(S(sz), &od);
-    peDef->setText(sz);
+    peDef->setText(StrSzQt(sz));
   }
 
   QPushButton *ppbLookup = (QPushButton *)PwRcFindQt(rgbuilt, "dbCu_l");
@@ -6562,7 +6591,7 @@ LAgain:
     // The store and the glyph rule are ObjDefSet()'s.
     ObjDefSet(i, &od);
 
-    QByteArray baName = rgpeName[j]->text().toLocal8Bit();
+    QByteArray baName = BaStrQt(rgpeName[j]->text());
     SetObjDisp(i, baName.constData());
   }
   RecastAndRedrawQt();
@@ -6671,7 +6700,7 @@ void ShowObjectSelDialogQt()
     if (pcbShow != NULL)
       pcbShow->setChecked(!ignore[iobj]);
     if (peName != NULL)
-      peName->setText(szObjDisp[iobj]);
+      peName->setText(StrSzQt(szObjDisp[iobj]));
     // Remember it, so OK can tell a name the user typed from one that is
     // simply the old body's name sitting there untouched.
     rgstrName0.append(peName != NULL ? peName->text() : QString());
@@ -6684,7 +6713,7 @@ void ShowObjectSelDialogQt()
         pcbDef->addItem(rgObjSel[j].szName);
       // The body, or the midpoint as A/B: SzObjSelDef() knows both.
       SzObjSelDef(S(sz), iobj);
-      pcbDef->setEditText(sz);
+      pcbDef->setEditText(StrSzQt(sz));
       // What the field opened with, for the tab-away auto-show: only a
       // definition the user typed over counts as entered.
       rgstrDef0.append(pcbDef->currentText());
@@ -6795,10 +6824,10 @@ void ShowObjectSelDialogQt()
         // made it look like the button did nothing at all. But a name the
         // user typed, or their own label on a row they have not changed,
         // stays: FObjSelNameKept().
-        QByteArray baDef = rgpcbDef[i2]->currentText().toLocal8Bit();
-        QByteArray baName = rgpeName[i2]->text().toLocal8Bit();
-        QByteArray baName0 = rgstrName0[i2].toLocal8Bit();
-        QByteArray baDef0 = rgstrDefLook[i2].toLocal8Bit();
+        QByteArray baDef = BaStrQt(rgpcbDef[i2]->currentText());
+        QByteArray baName = BaStrQt(rgpeName[i2]->text());
+        QByteArray baName0 = BaStrQt(rgstrName0[i2]);
+        QByteArray baDef0 = BaStrQt(rgstrDefLook[i2]);
 
         if (FObjSelNameKept(baName.constData(), baName0.constData(),
           baDef.constData(), baDef0.constData()))
@@ -6806,7 +6835,7 @@ void ShowObjectSelDialogQt()
         ObjSelLookup(S(szT), S(szD), baDef.constData());
         if (szD[0] != chNull)
           rgpcbDef[i2]->setEditText(szD);
-        rgpeName[i2]->setText(szT);
+        rgpeName[i2]->setText(StrSzQt(szT));
         // What the button wrote is not the user's typing, to it or to OK.
         rgstrName0[i2] = rgpeName[i2]->text();
         rgstrDefLook[i2] = rgpcbDef[i2]->currentText();
@@ -6827,7 +6856,7 @@ void ShowObjectSelDialogQt()
     for (i2 = 0; i2 < cObjSelRow; i2++) {
       if (rgpcbDef[i2] == NULL)
         continue;
-      QByteArray ba = rgpcbDef[i2]->currentText().toLocal8Bit();
+      QByteArray ba = BaStrQt(rgpcbDef[i2]->currentText());
       CONST char *szBad = NULL;
 
       // A slash means a midpoint, and the slot keeps whatever body it had:
@@ -6890,13 +6919,13 @@ void ShowObjectSelDialogQt()
       // Windows: a typed name is kept, an untouched or emptied one
       // follows the definition.
       char szT[cchSzMax];
-      QByteArray baName = rgpeName[i]->text().toLocal8Bit();
-      QByteArray baName0 = rgstrName0[i].toLocal8Bit();
+      QByteArray baName = BaStrQt(rgpeName[i]->text());
+      QByteArray baName0 = BaStrQt(rgstrName0[i]);
       SzObjSelRowName(S(szT), baName.constData(), baName0.constData(),
         &rgod[i], rgforce[i], rgTypSwissSav[i], rgObjSwissSav[i],
         rgforceSav[i]);
-      QString str(szT);
-      QByteArray ba = str.toLocal8Bit();
+      QString str = StrSzQt(szT);
+      QByteArray ba = BaStrQt(str);
       SetObjDisp(iobj, ba.constData());
     }
   }
@@ -6930,14 +6959,14 @@ static void LookupStarNamesQt(QVector<QLineEdit *> &rgpeName,
   for (i = 0; i < rgpeName.size() && i < rgpeDef.size(); i++) {
     if (rgpeName[i] == NULL || rgpeDef[i] == NULL)
       continue;
-    QByteArray baName = rgpeName[i]->text().toLocal8Bit();
+    QByteArray baName = BaStrQt(rgpeName[i]->text());
     if (baName.size() > 0 && !FEqSz(baName.constData(), szObjUnknown))
       continue;
-    QByteArray baDef = rgpeDef[i]->text().toLocal8Bit();
+    QByteArray baDef = BaStrQt(rgpeDef[i]->text());
     sprintf2(S(sz), "%.*s", cchSzMax-1, baDef.constData());
     if (!SwissTestStar(sz))
       sprintf2(S(sz), "%s", szObjUnknown);
-    rgpeName[i]->setText(sz);
+    rgpeName[i]->setText(StrSzQt(sz));
   }
 #endif
 }
@@ -6962,10 +6991,10 @@ void ShowCustomStarDialogQt()
     rgpeName.append(peName);
     rgpeDef.append(peDef);
     if (peName != NULL)
-      peName->setText(szObjDisp[i]);
+      peName->setText(StrSzQt(szObjDisp[i]));
     if (peDef != NULL)
-      peDef->setText(FSzSet(szStarCustom[k]) ? szStarCustom[k] :
-        (*szStarNameSwiss[k] ? szStarNameSwiss[k] : szObjName[i]));
+      peDef->setText(StrSzQt(FSzSet(szStarCustom[k]) ? szStarCustom[k] :
+        (*szStarNameSwiss[k] ? szStarNameSwiss[k] : szObjName[i])));
   }
 
   QPushButton *ppbLookup = (QPushButton *)PwRcFindQt(rgbuilt, "dbCu_l");
@@ -6980,9 +7009,9 @@ void ShowCustomStarDialogQt()
   for (i = starLo; i <= starHi; i++) {
     int row = i - starLo;
     k = i - starLo + 1;
-    QByteArray baName = rgpeName[row]->text().toLocal8Bit();
+    QByteArray baName = BaStrQt(rgpeName[row]->text());
     SetObjDisp(i, baName.constData());
-    QByteArray baDef = rgpeDef[row]->text().toLocal8Bit();
+    QByteArray baDef = BaStrQt(rgpeDef[row]->text());
     FCloneSz(FEqSz(baDef.constData(),
       *szStarNameSwiss[k] ? szStarNameSwiss[k] : szObjName[i]) ?
       NULL : baDef.constData(), &szStarCustom[k]);
