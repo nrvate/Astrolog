@@ -11535,9 +11535,15 @@ this is the note that explains the wall of dialogs.
     nothing a scenario can read. The Windows glue for Lookup Names
     and the aspect sort is compiled and its logic is the shared
     functions the Qt suite tests; neither was driven, for the same
-    reason. Untested still: Recall keeping a typed name (the code
-    path Now's test covers), a bare file name in Enter Command Line,
-    Ephemeris Settings' initial focus.
+    reason.
+
+    *And one more the last test found.* A bare file name in Enter
+    Command Line opened the file only when the name was relative:
+    `FChSwitch()` counts "/" as a switch character, so every absolute
+    path off Windows was read as an unknown switch.
+    `FProcessCommandLine()` tries a line that starts with "/" as a
+    file first (shared core, every build; no switch line names a file
+    that exists).
 
 ## Features this fork adds to both builds
 

@@ -67,6 +67,7 @@
 #include <QtCore/QStringListModel>
 #include <QtWidgets/QMessageBox>
 #include <QtWidgets/QListWidget>
+#include <QtCore/QTemporaryFile>
 #include <QtWidgets/QButtonGroup>
 #include <QtWidgets/QPushButton>
 #include <QtCore/QTimer>
@@ -10512,6 +10513,55 @@ static void TestDialogQuirksQt()
   });
   Check(str == "Typed Name", "Now keeps a name typed into Chart Info "
     "(\"%s\")", str.toLatin1().constData());
+
+  // So does Recall.
+  str.clear();
+  DriveModalQt(ShowChartInfoDialogQt, [&str](QWidget *pw) {
+    QLineEdit *pe = pw->findChild<QLineEdit *>("deInNam");
+    if (pe != NULL) {
+      pe->setText("Typed Name");
+      FClickButtonQt(pw, "dbInSet");
+      str = pe->text();
+    }
+    pw->close();
+  });
+  Check(str == "Typed Name", "Recall keeps a name typed into Chart Info "
+    "(\"%s\")", str.toLatin1().constData());
+
+  // A bare file name in Enter Command Line opens the file, as it does on
+  // a real command line.
+  {
+    CI ciSav = ciCore, ciMainSav = ciMain;
+    QTemporaryFile tmp(QDir::tempPath() + "/astrolog-qt-cmd-XXXXXX.as");
+
+    if (tmp.open()) {
+      tmp.write("@AD800\n-zi \"From File\" \"Somewhere\"\n");
+      tmp.close();
+    }
+    str = tmp.fileName();
+    DriveModalQt(ShowCommandLineDialogQt, [&str](QWidget *pw) {
+      QLineEdit *pe = pw->findChild<QLineEdit *>("deCo");
+      if (pe != NULL)
+        pe->setText(str);
+      if (!FClickButtonQt(pw, "IDOK"))
+        pw->close();
+    });
+    Check(ciCore.nam != NULL && FEqSz(ciCore.nam, "From File"),
+      "a bare file name in Enter Command Line is opened (name \"%s\")",
+      ciCore.nam != NULL ? ciCore.nam : "");
+    ciCore = ciSav; ciMain = ciMainSav;
+  }
+
+  // Ephemeris Settings opens with the focus on the fallback field.
+  str.clear();
+  DriveModalQt(ShowEphemDialogQt, [&str](QWidget *pw) {
+    QWidget *pwF = pw->focusWidget();
+    if (pwF != NULL)
+      str = pwF->objectName();
+    pw->close();
+  });
+  Check(str == "deEp_chain", "Ephemeris Settings opens on the fallback "
+    "order field (\"%s\")", str.toLatin1().constData());
 
   // Every colour a Moon Object Settings list offers is one its OK takes.
   szBad[0] = chNull;

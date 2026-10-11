@@ -454,7 +454,10 @@ flag FProcessCommandLine(CONST char *szLine)
   cCmdDepth++;
 
   // Check for filename on command line.
-  if (!FChSwitch(szLine[0])) {
+  // "/" starts a switch and it starts every absolute path off Windows, so
+  // a line that begins with one is tried as a file first: no switch line
+  // is the name of a file that exists.
+  if (!FChSwitch(szLine[0]) || szLine[0] == '/') {
     fileT = fopen(szLine, "r");
     if (fileT != NULL) {
       fclose(fileT);
