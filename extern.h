@@ -562,6 +562,9 @@ extern void SzObjSelName P((char *, int, int, int));
 extern void SzObjSelLabel P((char *, int, int, int));
 extern void SzObjSelRowName P((char *, int, CONST char *, CONST char *,
   CONST OBJDEF *, real, int, int, real));
+extern void ObjSelLookup P((char *, int, char *, int, CONST char *));
+extern flag FObjSelNameKept P((CONST char *, CONST char *, CONST char *,
+  CONST char *));
 extern flag FObjSelFlagRun P((CONST char *));
 extern void ObjDefGet P((int, OBJDEF *));
 extern void ObjDefSet P((int, CONST OBJDEF *));

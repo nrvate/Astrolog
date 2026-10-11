@@ -67,6 +67,7 @@
 #endif
 #include <QtCore/QHash>
 #include <QtCore/QTimer>
+#include <QtCore/QEventLoop>
 #include <functional>
 #include <QtWidgets/QSpinBox>
 #include <QtWidgets/QScrollArea>
@@ -977,6 +978,22 @@ static void RcBuildDialogQt(QDialog *pdlg, CONST RCCTL *rgctl, int cctl,
     // shoves everything below it off the dialog. Qt sizes its own.
     if (pctl->nType == ctlCombo)
       dyCtl = pw->sizeHint().height();
+    // A combo and a one-line edit on the same row are one height, as they
+    // are on Windows, where a closed combo is as tall as the 12 or 13
+    // unit edit beside it. Sized separately they came out a few pixels
+    // apart, and a row of them read as two columns that did not line up.
+    if (pctl->nType == ctlCombo || (pctl->nType == ctlEdit && pctl->dy <= 14))
+      for (int i2 = 0; i2 < cctl; i2++) {
+        CONST RCCTL *pctl2 = PctlBuiltQt(prgbuilt, i2);
+        QWidget *pw2 = (*prgbuilt)[i2].pw;
+        if (pw2 == NULL || pctl2 == NULL || pctl2->y != pctl->y)
+          continue;
+        if (pctl2->nType == ctlCombo)
+          dyCtl = Max(dyCtl, pw2->sizeHint().height());
+        else if (pctl2->nType == ctlEdit && pctl2->dy <= 14 &&
+          pctl->nType == ctlCombo)
+          dyCtl = Max(dyCtl, pctl2->dy * dyBase / 8);
+      }
     int dxCtl = pctl->dx * dxBase / 4;
     if (pctl->nType == ctlLabel || pctl->nType == ctlCheck ||
       pctl->nType == ctlRadio || pctl->nType == ctlButton) {
@@ -1114,6 +1131,49 @@ static void RcStoreFlagsQt(CONST QVector<RCBUILT> &rgbuilt,
 }
 
 #define CRcFlag(rg) (int)(sizeof(rg) / sizeof(RCFLAG))
+
+
+// A dialog that stays on screen when OK is pressed, until the function
+// that opened it goes out of scope. Windows validates inside IDOK and
+// EnsureN() returns before EndDialog(), so a field out of range leaves the
+// dialog up with everything typed into it; QDialog::exec() hides the
+// dialog on its way out, and every dialog here that validated afterwards
+// threw away all its fields over one typo. With this, a dialog reads and
+// checks its fields after exec() as before, and on a bad one says
+// "goto LAgain" to wait for OK or Cancel again.
+class AstroDialogQt : public QDialog
+{
+public:
+  AstroDialogQt(QWidget *pw) : QDialog(pw), ploop(NULL) {}
+
+  int exec() override
+  {
+    QEventLoop evloop;
+
+    setResult(Rejected);
+    if (!isVisible()) {
+      setWindowModality(Qt::ApplicationModal);
+      show();
+    }
+    ploop = &evloop;
+    evloop.exec(QEventLoop::DialogExec);
+    ploop = NULL;
+    return result();
+  }
+
+  void done(int n) override
+  {
+    if (ploop == NULL || n != Accepted)
+      QDialog::done(n);
+    else
+      setResult(n);
+    if (ploop != NULL)
+      ploop->quit();
+  }
+
+private:
+  QEventLoop *ploop;
+};
 
 
 // Windows' EnsureN(): complain about one out of range field and leave the
@@ -2346,7 +2406,7 @@ void ShowFileSettingsDialogQt()
     {"dxFi_YOO", -1, &us.fSmartSave, fFalse},
     {"dxFi_kh",  -1, &us.fTextHTML,  fFalse},
     {"dxFi_Yo",  -1, &us.fWriteOld,  fFalse} };
-  QDialog dlg(gi.qwind);
+  AstroDialogQt dlg(gi.qwind);
   QVector<RCBUILT> rgbuilt;
   char sz[cchSzMax];
   int nwx, i;
@@ -2392,14 +2452,15 @@ void ShowFileSettingsDialogQt()
 
   RcWireOkCancelQt(&dlg, rgbuilt);
   PrepareDialogQt(&dlg);
+LAgain:
   if (dlg.exec() != QDialog::Accepted)
     return;
 
   nwx = peAnti != NULL ? NFieldQt(peAnti->text()) : NAntialiasQt();
   rI = pcbPct != NULL ?
     RFromSz(pcbPct->currentText().toLocal8Bit().constData()) : gs.rBackPct;
-  if (!FValidAntialias(nwx)) { ErrorEnsureQt(&dlg, nwx, "antialias"); return; }
-  if (!FValidBackPct(rI))    { ErrorEnsureRQt(&dlg, rI, "background transparency"); return; }
+  if (!FValidAntialias(nwx)) { ErrorEnsureQt(&dlg, nwx, "antialias"); goto LAgain; }
+  if (!FValidBackPct(rI))    { ErrorEnsureRQt(&dlg, rI, "background transparency"); goto LAgain; }
 
   RcStoreFlagsQt(rgbuilt, rgflag, CRcFlag(rgflag));
   if (pcbBmpP != NULL) {
@@ -2509,7 +2570,7 @@ void ShowGraphicsSettingsDialogQt()
   CONST int cglyph = (int)(sizeof(rgglyph)/sizeof(rgglyph[0]));
   int *rgpnFont[cFontEntry] = {&gs.nFontTxt, &gs.nFontSig, &gs.nFontHou,
     &gs.nFontObj, &gs.nFontAsp, &gs.nFontNak};
-  QDialog dlg(gi.qwind);
+  AstroDialogQt dlg(gi.qwind);
   QVector<RCBUILT> rgbuilt;
   QComboBox *rgpcbFont[cFontEntry];
   char sz[cchSzMax];
@@ -2644,13 +2705,14 @@ void ShowGraphicsSettingsDialogQt()
   RcWireOkCancelQt(&dlg, rgbuilt);
   PrepareDialogQt(&dlg);
   FocusDialogQt(PwRcFindQt(rgbuilt, "deGr_Xw_x"));
+LAgain:
   if (dlg.exec() != QDialog::Accepted)
     return;
 
   int nx = peX != NULL ? NFieldQt(peX->text()) : gs.xWin;
   int ny = peY != NULL ? NFieldQt(peY->text()) : gs.yWin;
-  if (!FValidGraphX(nx)) { ErrorEnsureQt(&dlg, nx, "horizontal size"); return; }
-  if (!FValidGraphY(ny)) { ErrorEnsureQt(&dlg, ny, "vertical size"); return; }
+  if (!FValidGraphX(nx)) { ErrorEnsureQt(&dlg, nx, "horizontal size"); goto LAgain; }
+  if (!FValidGraphY(ny)) { ErrorEnsureQt(&dlg, ny, "vertical size"); goto LAgain; }
 
   // The other numeric fields, checked the same way and BEFORE anything is
   // stored, so a bad one refuses the dialog instead of half-applying it.
@@ -2671,15 +2733,15 @@ void ShowGraphicsSettingsDialogQt()
   real rRotN = peRot != NULL ? RFieldQt(peRot->text()) : gs.rRot;
   real rTiltN = peTilt != NULL ? RFieldQt(peTilt->text()) : gs.rTilt;
   if (!FValidTimer(nDelay))
-    { ErrorEnsureQt(&dlg, nDelay, "animation delay"); return; }
+    { ErrorEnsureQt(&dlg, nDelay, "animation delay"); goto LAgain; }
   if (!FValidGrid(nGrid))
-    { ErrorEnsureQt(&dlg, nGrid, "grid cell count"); return; }
+    { ErrorEnsureQt(&dlg, nGrid, "grid cell count"); goto LAgain; }
   if (!FValidDecaSize(nDeca))
-    { ErrorEnsureQt(&dlg, nDeca, "wheel corner size"); return; }
+    { ErrorEnsureQt(&dlg, nDeca, "wheel corner size"); goto LAgain; }
   if (!FValidRotation(rRotN))
-    { ErrorEnsureRQt(&dlg, rRotN, "horizon rotation"); return; }
+    { ErrorEnsureRQt(&dlg, rRotN, "horizon rotation"); goto LAgain; }
   if (!FValidTilt(rTiltN))
-    { ErrorEnsureRQt(&dlg, rTiltN, "horizon tilt"); return; }
+    { ErrorEnsureRQt(&dlg, rTiltN, "horizon tilt"); goto LAgain; }
 
   // Five more fields Windows checks here (wdialog.cpp:2993-3002) that this
   // dialog stored unchecked. Two of them are memory safety rather than a
@@ -2707,15 +2769,15 @@ void ShowGraphicsSettingsDialogQt()
     nLeft = NParseSz(sz, pmObject);
   }
   if (!FValidScale(nScaleN))
-    { ErrorEnsureQt(&dlg, nScaleN, "character scale"); return; }
+    { ErrorEnsureQt(&dlg, nScaleN, "character scale"); goto LAgain; }
   if (!FValidScaleText(nScaleTN))
-    { ErrorEnsureQt(&dlg, nScaleTN, "text scale"); return; }
+    { ErrorEnsureQt(&dlg, nScaleTN, "text scale"); goto LAgain; }
   if (!FValidTelescope(nTrack))
-    { ErrorEnsureQt(&dlg, nTrack, "telescope planet"); return; }
+    { ErrorEnsureQt(&dlg, nTrack, "telescope planet"); goto LAgain; }
   if (!FValidZoom(rSpaceN))
-    { ErrorEnsureRQt(&dlg, rSpaceN, "telescope zoom"); return; }
+    { ErrorEnsureRQt(&dlg, rSpaceN, "telescope zoom"); goto LAgain; }
   if (peLeft != NULL && !FItem(nLeft))
-    { ErrorEnsureQt(&dlg, nLeft, "rotation planet"); return; }
+    { ErrorEnsureQt(&dlg, nLeft, "rotation planet"); goto LAgain; }
 
   RcStoreFlagsQt(rgbuilt, rgflag, CRcFlag(rgflag));
   if (pcbNoUpd != NULL)
@@ -4113,7 +4175,7 @@ void ShowTransitDialogQt()
     {"dxTr_r",     -1, &is.fReturn,       fFalse},
     {"dxTr_",       5, &us.fListAuto,     fFalse},
     {"dxTr_g",     -1, &us.fGraphAll,     fFalse} };
-  QDialog dlg(gi.qwind);
+  AstroDialogQt dlg(gi.qwind);
   QVector<RCBUILT> rgbuilt;
   char sz[cchSzMax];
   int mon, day, yea, nty, nd, n1, n2;
@@ -4158,6 +4220,7 @@ void ShowTransitDialogQt()
   RcWireOkCancelQt(&dlg, rgbuilt);
   PrepareDialogQt(&dlg);
   FocusDialogQt(PwRcFindQt(rgbuilt, "dcTrMon"));
+LAgain:
   if (dlg.exec() != QDialog::Accepted)
     return;
 
@@ -4176,13 +4239,13 @@ void ShowTransitDialogQt()
   nty = peYears != NULL ? NFieldQt(peYears->text()) : us.nEphemYears;
   nd = peDiv != NULL ? NFieldQt(peDiv->text()) : us.nDivision;
 
-  if (!FValidMon(mon))           { ErrorEnsureQt(&dlg, mon, "month"); return; }
-  if (!FValidYea(yea))           { ErrorEnsureQt(&dlg, yea, "year"); return; }
-  if (!FValidDay(day, mon, yea)) { ErrorEnsureQt(&dlg, day, "day"); return; }
-  if (!FValidTim(tim))           { ErrorEnsureRQt(&dlg, tim, "time"); return; }
-  if (!FValidDst(dst))           { ErrorEnsureRQt(&dlg, dst, "daylight saving"); return; }
-  if (!FValidZon(zon))           { ErrorEnsureRQt(&dlg, zon, "time zone"); return; }
-  if (!FValidDivision(nd))       { ErrorEnsureQt(&dlg, nd, "searching divisions"); return; }
+  if (!FValidMon(mon))           { ErrorEnsureQt(&dlg, mon, "month"); goto LAgain; }
+  if (!FValidYea(yea))           { ErrorEnsureQt(&dlg, yea, "year"); goto LAgain; }
+  if (!FValidDay(day, mon, yea)) { ErrorEnsureQt(&dlg, day, "day"); goto LAgain; }
+  if (!FValidTim(tim))           { ErrorEnsureRQt(&dlg, tim, "time"); goto LAgain; }
+  if (!FValidDst(dst))           { ErrorEnsureRQt(&dlg, dst, "daylight saving"); goto LAgain; }
+  if (!FValidZon(zon))           { ErrorEnsureRQt(&dlg, zon, "time zone"); goto LAgain; }
+  if (!FValidDivision(nd))       { ErrorEnsureQt(&dlg, nd, "searching divisions"); goto LAgain; }
 
   SetCI(ciTran, mon, day, yea, tim, dst, zon, ciDefa.lon, ciDefa.lat);
   us.nEphemYears = nty;
@@ -4250,7 +4313,7 @@ static CONST char *rgszProgArcQt[4] =
 
 void ShowProgressDialogQt()
 {
-  QDialog dlg(gi.qwind);
+  AstroDialogQt dlg(gi.qwind);
   QVector<RCBUILT> rgbuilt;
   char sz[cchSzMax], szT[cchSzDef];
   int npO, npa, mon, day, yea, i;
@@ -4340,6 +4403,7 @@ void ShowProgressDialogQt()
   RcWireOkCancelQt(&dlg, rgbuilt);
   PrepareDialogQt(&dlg);
   FocusDialogQt(PwRcFindQt(rgbuilt, "dcPrMon"));
+LAgain:
   if (dlg.exec() != QDialog::Accepted)
     return;
 
@@ -4377,16 +4441,16 @@ void ShowProgressDialogQt()
   zon = pcbZon != NULL ?
     RParseSz(pcbZon->currentText().toLocal8Bit().constData(), pmZon) : ZonT;
 
-  if (rd == 0.0)                { ErrorEnsureQt(&dlg, 0, "degree per day"); return; }
-  if (rC == 0.0)                { ErrorEnsureQt(&dlg, 0, "cusp move ratio"); return; }
-  if (!FValidProgArc(npO))      { ErrorEnsureQt(&dlg, npO, "solar arc planet"); return; }
-  if (!FValidProgArcType(npa))  { ErrorEnsureQt(&dlg, npa, "direction arc"); return; }
-  if (!FValidMon(mon))          { ErrorEnsureQt(&dlg, mon, "month"); return; }
-  if (!FValidYea(yea))          { ErrorEnsureQt(&dlg, yea, "year"); return; }
-  if (!FValidDay(day, mon, yea)) { ErrorEnsureQt(&dlg, day, "day"); return; }
-  if (!FValidTim(tim))          { ErrorEnsureRQt(&dlg, tim, "time"); return; }
-  if (!FValidDst(dst))          { ErrorEnsureRQt(&dlg, dst, "daylight saving"); return; }
-  if (!FValidZon(zon))          { ErrorEnsureRQt(&dlg, zon, "time zone"); return; }
+  if (rd == 0.0)                { ErrorEnsureQt(&dlg, 0, "degree per day"); goto LAgain; }
+  if (rC == 0.0)                { ErrorEnsureQt(&dlg, 0, "cusp move ratio"); goto LAgain; }
+  if (!FValidProgArc(npO))      { ErrorEnsureQt(&dlg, npO, "solar arc planet"); goto LAgain; }
+  if (!FValidProgArcType(npa))  { ErrorEnsureQt(&dlg, npa, "direction arc"); goto LAgain; }
+  if (!FValidMon(mon))          { ErrorEnsureQt(&dlg, mon, "month"); goto LAgain; }
+  if (!FValidYea(yea))          { ErrorEnsureQt(&dlg, yea, "year"); goto LAgain; }
+  if (!FValidDay(day, mon, yea)) { ErrorEnsureQt(&dlg, day, "day"); goto LAgain; }
+  if (!FValidTim(tim))          { ErrorEnsureRQt(&dlg, tim, "time"); goto LAgain; }
+  if (!FValidDst(dst))          { ErrorEnsureRQt(&dlg, dst, "daylight saving"); goto LAgain; }
+  if (!FValidZon(zon))          { ErrorEnsureRQt(&dlg, zon, "time zone"); goto LAgain; }
 
   if (pcbOn != NULL)
     us.fProgress = pcbOn->isChecked();
@@ -4441,7 +4505,7 @@ void ShowChartSettingsDialogQt()
     {"dxCh_j",  0, &us.fInfluenceSign, fFalse},
     {"dxCh_L",  0, &us.fLatitudeCross, fFalse},
     {"dxCh_P",  0, &us.fArabicFlip,    fFalse} };
-  QDialog dlg(gi.qwind);
+  AstroDialogQt dlg(gi.qwind);
   QVector<RCBUILT> rgbuilt;
   char sz[cchSzMax];
   int i, nw, nl, nl2, np, nn, yb;
@@ -4496,6 +4560,7 @@ void ShowChartSettingsDialogQt()
 
   RcWireOkCancelQt(&dlg, rgbuilt);
   PrepareDialogQt(&dlg);
+LAgain:
   if (dlg.exec() != QDialog::Accepted)
     return;
 
@@ -4505,12 +4570,12 @@ void ShowChartSettingsDialogQt()
   np = pePart != NULL ? NFieldQt(pePart->text()) : us.nArabicParts;
   nn = peCity != NULL ? NFieldQt(peCity->text()) : us.nAtlasList;
   yb = peBio != NULL ? NFieldQt(peBio->text()) : us.nBioday;
-  if (!FValidWheel(nw))       { ErrorEnsureQt(&dlg, nw, "wheel row"); return; }
-  if (!FValidAstrograph(nl))  { ErrorEnsureQt(&dlg, nl, "astrocartography step"); return; }
-  if (nl2 < 0)                { ErrorEnsureQt(&dlg, nl2, "latitude crossing count"); return; }
-  if (!FValidPart(np))        { ErrorEnsureQt(&dlg, np, "Arabic part"); return; }
-  if (nn < 0)                 { ErrorEnsureQt(&dlg, nn, "nearest city count"); return; }
-  if (!FValidBioday(yb))      { ErrorEnsureQt(&dlg, yb, "Biorhythm days"); return; }
+  if (!FValidWheel(nw))       { ErrorEnsureQt(&dlg, nw, "wheel row"); goto LAgain; }
+  if (!FValidAstrograph(nl))  { ErrorEnsureQt(&dlg, nl, "astrocartography step"); goto LAgain; }
+  if (nl2 < 0)                { ErrorEnsureQt(&dlg, nl2, "latitude crossing count"); goto LAgain; }
+  if (!FValidPart(np))        { ErrorEnsureQt(&dlg, np, "Arabic part"); goto LAgain; }
+  if (nn < 0)                 { ErrorEnsureQt(&dlg, nn, "nearest city count"); goto LAgain; }
+  if (!FValidBioday(yb))      { ErrorEnsureQt(&dlg, yb, "Biorhythm days"); goto LAgain; }
 
   RcStoreFlagsQt(rgbuilt, rgflag, CRcFlag(rgflag));
   us.nWheelRows = nw;
@@ -4737,7 +4802,7 @@ void ShowAboutDialogQt()
 
 void ShowAspectDialogQt()
 {
-  QDialog dlg(gi.qwind);
+  AstroDialogQt dlg(gi.qwind);
   QVector<RCBUILT> rgbuilt;
   QVector<QCheckBox *> rgpcbRes;
   QVector<QLineEdit *> rgpeOrb, rgpeAngle, rgpeInf;
@@ -4795,6 +4860,7 @@ void ShowAspectDialogQt()
 
   RcWireOkCancelQt(&dlg, rgbuilt);
   PrepareDialogQt(&dlg);
+LAgain:
   if (dlg.exec() != QDialog::Accepted)
     return;
 
@@ -4818,11 +4884,11 @@ void ShowAspectDialogQt()
     rAng = RFieldQt(rgpeAngle[i]->text());
     kT = NColorFromComboQt(rgpcbColor[i]);
     if (!FBetween(rOrb, -rDegMax, rDegMax))
-      { ErrorEnsureRQt(&dlg, rOrb, "orb"); return; }
+      { ErrorEnsureRQt(&dlg, rOrb, "orb"); goto LAgain; }
     if (!FBetween(rAng, -rDegMax, rDegMax))
-      { ErrorEnsureRQt(&dlg, rAng, "angle"); return; }
+      { ErrorEnsureRQt(&dlg, rAng, "angle"); goto LAgain; }
     if (!FValidColorA(kT))
-      { ErrorEnsureQt(&dlg, kT, "color"); return; }
+      { ErrorEnsureQt(&dlg, kT, "color"); goto LAgain; }
   }
   for (i = 1; i <= cAspect; i++) {
     if (rgpcbRes[i] == NULL)
@@ -4959,7 +5025,7 @@ static void RcLabelObjRowQt(CONST QVector<RCBUILT> &rgbuilt, int nIdx,
 
 void ShowObjectDialogQt()
 {
-  QDialog dlg(gi.qwind);
+  AstroDialogQt dlg(gi.qwind);
   QVector<RCBUILT> rgbuilt;
   QLineEdit *rgpeOrb[oCore+1], *rgpeAdd[oCore+1], *rgpeInf[oCore+1];
   QComboBox *rgpcbColor[oCore+1];
@@ -4986,6 +5052,7 @@ void ShowObjectDialogQt()
   }
   RcWireOkCancelQt(&dlg, rgbuilt);
   PrepareDialogQt(&dlg);
+LAgain:
   if (dlg.exec() != QDialog::Accepted)
     return;
 
@@ -5009,11 +5076,11 @@ void ShowObjectDialogQt()
     rAdd = RFieldQt(rgpeAdd[i]->text());
     kT = NColorFromComboQt(rgpcbColor[i]);
     if (!FBetween(rOrb, -rDegMax, rDegMax))
-      { ErrorEnsureRQt(&dlg, rOrb, "max orb"); return; }
+      { ErrorEnsureRQt(&dlg, rOrb, "max orb"); goto LAgain; }
     if (!FBetween(rAdd, -rDegMax, rDegMax))
-      { ErrorEnsureRQt(&dlg, rAdd, "orb addition"); return; }
+      { ErrorEnsureRQt(&dlg, rAdd, "orb addition"); goto LAgain; }
     if (!FValidColor2A(kT))
-      { ErrorEnsureQt(&dlg, kT, "color"); return; }
+      { ErrorEnsureQt(&dlg, kT, "color"); goto LAgain; }
   }
   for (i = 0; i <= oCore; i++) {
     if (rgpeOrb[i] == NULL)
@@ -5035,7 +5102,7 @@ void ShowObjectDialogQt()
 
 void ShowObject2DialogQt()
 {
-  QDialog dlg(gi.qwind);
+  AstroDialogQt dlg(gi.qwind);
   QVector<RCBUILT> rgbuilt;
   QVector<int> rgi;
   QVector<QLineEdit *> rgpeOrb, rgpeAdd, rgpeInf;
@@ -5071,6 +5138,7 @@ void ShowObject2DialogQt()
   }
   RcWireOkCancelQt(&dlg, rgbuilt);
   PrepareDialogQt(&dlg);
+LAgain:
   if (dlg.exec() != QDialog::Accepted)
     return;
 
@@ -5095,13 +5163,13 @@ void ShowObject2DialogQt()
     rAdd = RFieldQt(rgpeAdd[j]->text());
     kT = NColorFromComboQt(rgpcbColor[j]);
     if (!FBetween(rOrb, -rDegMax, rDegMax))
-      { ErrorEnsureRQt(&dlg, rOrb, "max orb"); return; }
+      { ErrorEnsureRQt(&dlg, rOrb, "max orb"); goto LAgain; }
     if (!FBetween(rAdd, -rDegMax, rDegMax))
-      { ErrorEnsureRQt(&dlg, rAdd, "orb addition"); return; }
+      { ErrorEnsureRQt(&dlg, rAdd, "orb addition"); goto LAgain; }
     // The stars row takes kStar as well, which the ranges before it do
     // not; Windows picks the validator the same way.
     if (!(i < starLo ? FValidColor2A(kT) : FValidColorSA(kT)))
-      { ErrorEnsureQt(&dlg, kT, "color"); return; }
+      { ErrorEnsureQt(&dlg, kT, "color"); goto LAgain; }
   }
   for (j = 0; j < rgi.size(); j++) {
     if (rgpeOrb[j] == NULL)
@@ -5142,7 +5210,7 @@ void ShowCalcDialogQt()
     {"dxSe_A",   3, &us.fAspect3D,    fFalse},
     {"dxSe_Ap", -1, &us.fAspectLat,   fFalse},
     {"dxSe_c",   3, &us.fHouse3D,     fFalse} };
-  QDialog dlg(gi.qwind);
+  AstroDialogQt dlg(gi.qwind);
   QVector<RCBUILT> rgbuilt;
   char sz[cchSzMax];
   int i, nc, nh, n4, n1;
@@ -5200,6 +5268,7 @@ void ShowCalcDialogQt()
 
   RcWireOkCancelQt(&dlg, rgbuilt);
   PrepareDialogQt(&dlg);
+LAgain:
   if (dlg.exec() != QDialog::Accepted)
     return;
 
@@ -5229,12 +5298,12 @@ void ShowCalcDialogQt()
     SzFieldQt(sz, peSolar->text());
     n1 = NParseSz(sz, pmObject);
   }
-  if (!FValidOffset(rs))      { ErrorEnsureRQt(&dlg, rs, "zodiac offset"); return; }
-  if (!FValidSystem(nc))      { ErrorEnsureQt(&dlg, nc, "house system"); return; }
-  if (!FValidCenter(nh))      { ErrorEnsureQt(&dlg, nh, "central planet"); return; }
-  if (!FValidHarmonic(rx))    { ErrorEnsureRQt(&dlg, rx, "harmonic factor"); return; }
-  if (!FValidDwad(n4))        { ErrorEnsureQt(&dlg, n4, "dwad nesting"); return; }
-  if (!FItem(n1))             { ErrorEnsureQt(&dlg, n1, "Solar chart planet"); return; }
+  if (!FValidOffset(rs))      { ErrorEnsureRQt(&dlg, rs, "zodiac offset"); goto LAgain; }
+  if (!FValidSystem(nc))      { ErrorEnsureQt(&dlg, nc, "house system"); goto LAgain; }
+  if (!FValidCenter(nh))      { ErrorEnsureQt(&dlg, nh, "central planet"); goto LAgain; }
+  if (!FValidHarmonic(rx))    { ErrorEnsureRQt(&dlg, rx, "harmonic factor"); goto LAgain; }
+  if (!FValidDwad(n4))        { ErrorEnsureQt(&dlg, n4, "dwad nesting"); goto LAgain; }
+  if (!FItem(n1))             { ErrorEnsureQt(&dlg, n1, "Solar chart planet"); goto LAgain; }
 
   us.rZodiacOffset = rs;
   us.nHouseSystem = nc;
@@ -5787,7 +5856,7 @@ void ShowDisplayDialogQt()
     {"dxDi_Yu", -1, &us.fEclipse,    fFalse},
     // Windows' box reads "only at location", the flag "anywhere".
     {"dxDi_Yu",  0, &us.fEclipseAny, fTrue} };
-  QDialog dlg(gi.qwind);
+  AstroDialogQt dlg(gi.qwind);
   QVector<RCBUILT> rgbuilt;
   char sz[cchSzMax];
   int na, nro, ni;
@@ -5972,6 +6041,7 @@ void ShowDisplayDialogQt()
 
   RcWireOkCancelQt(&dlg, rgbuilt);
   PrepareDialogQt(&dlg);
+LAgain:
   if (dlg.exec() != QDialog::Accepted)
     return;
 
@@ -5982,20 +6052,9 @@ void ShowDisplayDialogQt()
   int nSizeMen = NFontSizeFieldQt(pcbMenuSize->currentText(),
     szMenuSizeAutoQt);
   if (!FValidFontSizeQt(nSizeCon))
-    { ErrorEnsureQt(&dlg, nSizeCon, "console font size"); return; }
+    { ErrorEnsureQt(&dlg, nSizeCon, "console font size"); goto LAgain; }
   if (!FValidFontSizeQt(nSizeMen))
-    { ErrorEnsureQt(&dlg, nSizeMen, "menu font size"); return; }
-  SetConsoleFontQt(pcbFont->currentText().toLocal8Bit().constData(),
-    nSizeCon);
-  SetConsoleAntialiasQt(pchAa->isChecked());
-  SetMenuFontQt(pcbMenu->currentText().toLocal8Bit().constData(), nSizeMen);
-  SetMenuAntialiasQt(pchMenuAa->isChecked());
-  SetSortObjAlphaQt(prbAlpha->isChecked());
-  // The interface font is applied here rather than at the next start:
-  // QApplication::setFont() reaches every widget that hasn't been given
-  // one of its own, which is the menus and this dialog's own children.
-  ApplyUiFontQt();
-
+    { ErrorEnsureQt(&dlg, nSizeMen, "menu font size"); goto LAgain; }
   // Validate before writing anything, as Windows does, so one bad field
   // can't leave the settings half applied.
   na = us.nAsp; nro = us.objRequire;
@@ -6014,20 +6073,31 @@ void ShowDisplayDialogQt()
     ryw = RFieldQt(peSta->text());
   if (!FValidAspect(na)) {
     ErrorEnsureQt(&dlg, na, "aspect count");
-    return;
+    goto LAgain;
   }
   if (!(FItem(nro) || nro == -1)) {
     ErrorEnsureQt(&dlg, nro, "required object");
-    return;
+    goto LAgain;
   }
   if (!FValidScreen(ni)) {
     ErrorEnsureQt(&dlg, ni, "text columns");
-    return;
+    goto LAgain;
   }
   if (ryw < 0.0) {
     ErrorEnsureRQt(&dlg, ryw, "stationary velocity");
-    return;
+    goto LAgain;
   }
+
+  SetConsoleFontQt(pcbFont->currentText().toLocal8Bit().constData(),
+    nSizeCon);
+  SetConsoleAntialiasQt(pchAa->isChecked());
+  SetMenuFontQt(pcbMenu->currentText().toLocal8Bit().constData(), nSizeMen);
+  SetMenuAntialiasQt(pchMenuAa->isChecked());
+  SetSortObjAlphaQt(prbAlpha->isChecked());
+  // The interface font is applied here rather than at the next start:
+  // QApplication::setFont() reaches every widget that hasn't been given
+  // one of its own, which is the menus and this dialog's own children.
+  ApplyUiFontQt();
 
   RcStoreFlagsQt(rgbuilt, rgflag, CRcFlag(rgflag));
   for (int i = 0; i < 6; i++) {
@@ -6096,7 +6166,7 @@ void ShowMoonRestrictDialogQt()
 
 void ShowMoonObjectDialogQt()
 {
-  QDialog dlg(gi.qwind);
+  AstroDialogQt dlg(gi.qwind);
   QVector<RCBUILT> rgbuilt;
   QVector<QLineEdit *> rgpeOrb, rgpeAdd, rgpeInf;
   QVector<QComboBox *> rgpcbColor;
@@ -6135,15 +6205,10 @@ void ShowMoonObjectDialogQt()
 
   RcWireOkCancelQt(&dlg, rgbuilt);
   PrepareDialogQt(&dlg);
+LAgain:
   if (dlg.exec() != QDialog::Accepted)
     return;
 
-  if (pcbMove != NULL)
-    us.fMoonMove = pcbMove->isChecked();
-  if (pcbSep != NULL)
-    us.fMoonChartSep = pcbSep->isChecked();
-  if (pcbWheel != NULL)
-    gs.fMoonWheel = pcbWheel->isChecked();
   // Windows validates every row BEFORE storing any of them -- its
   // "for (j = 0; j <= 1; j++)" two-pass loop (wdialog.cpp:1600) -- so one
   // bad value refuses the dialog instead of half-applying it. This stored
@@ -6165,12 +6230,18 @@ void ShowMoonObjectDialogQt()
     rAdd = RFieldQt(rgpeAdd[j]->text());
     kT = NColorFromComboQt(rgpcbColor[j]);
     if (!FBetween(rOrb, -rDegMax, rDegMax))
-      { ErrorEnsureRQt(&dlg, rOrb, "max orb"); return; }
+      { ErrorEnsureRQt(&dlg, rOrb, "max orb"); goto LAgain; }
     if (!FBetween(rAdd, -rDegMax, rDegMax))
-      { ErrorEnsureRQt(&dlg, rAdd, "orb addition"); return; }
+      { ErrorEnsureRQt(&dlg, rAdd, "orb addition"); goto LAgain; }
     if (!FValidColorMA(kT))
-      { ErrorEnsureQt(&dlg, kT, "color"); return; }
+      { ErrorEnsureQt(&dlg, kT, "color"); goto LAgain; }
   }
+  if (pcbMove != NULL)
+    us.fMoonMove = pcbMove->isChecked();
+  if (pcbSep != NULL)
+    us.fMoonChartSep = pcbSep->isChecked();
+  if (pcbWheel != NULL)
+    gs.fMoonWheel = pcbWheel->isChecked();
   for (i = moonsLo; i <= cobHi; i++) {
     j = i - moonsLo;
     if (rgpeOrb[j] == NULL)
@@ -6380,7 +6451,7 @@ void ShowObjectSelDialogQt()
   QVector<QCheckBox *> rgpcbShow;
   QVector<QComboBox *> rgpcbDef;
   QVector<QLineEdit *> rgpeName;
-  QVector<QString> rgstrName0, rgstrDef0;
+  QVector<QString> rgstrName0, rgstrDef0, rgstrDefLook;
   real rgforceSav[cObjSelRow];
   int rgTypSwissSav[cObjSelRow], rgObjSwissSav[cObjSelRow];
   // One OBJDEF a row rather than four arrays that have to stay aligned.
@@ -6421,8 +6492,11 @@ void ShowObjectSelDialogQt()
       // What the field opened with, for the tab-away auto-show: only a
       // definition the user typed over counts as entered.
       rgstrDef0.append(pcbDef->currentText());
-    } else
+      rgstrDefLook.append(pcbDef->currentText());
+    } else {
       rgstrDef0.append(QString());
+      rgstrDefLook.append(QString());
+    }
   }
 
   // The three buttons leave the tab order: the grid cycles through
@@ -6510,55 +6584,36 @@ void ShowObjectSelDialogQt()
   QPushButton *ppbLookup = (QPushButton *)PwRcFindQt(rgbuilt, "dbOs_l");
   if (ppbLookup != NULL)
     QObject::connect(ppbLookup, &QPushButton::clicked, &dlg,
-      [&rgpeName, &rgpcbDef]() {
-      char szT[cchSzMax];
-      OBJDEF od2;
-      int i2, j2, k2;
+      [&rgpeName, &rgpcbDef, &rgstrName0, &rgstrDefLook]() {
+      char szT[cchSzMax], szD[cchSzMax + cchSzDef];
+      int i2;
 
       for (i2 = 0; i2 < cObjSelRow; i2++) {
         if (rgpeName[i2] == NULL || rgpcbDef[i2] == NULL)
           continue;
-        // Every row, not just the blank ones. Windows' Custom Objects
-        // dialog only fills a name that is empty or "???", because there
-        // the name column is the user's own label. Here the button's
-        // whole point is turning what is in the definition box into a
-        // name -- type 52872, press it, get Okyrhoe -- so it resolves
-        // every row and overwrites. Skipping the ones that already had a
-        // name made it look like the button did nothing at all.
+        // Every row whose name is not the user's own, not just the blank
+        // ones. Windows' Custom Objects dialog only fills a name that is
+        // empty or "???"; here the button's whole point is turning what
+        // is in the definition box into a name -- type 52872, press it,
+        // get Okyrhoe -- and skipping every row that already had a name
+        // made it look like the button did nothing at all. But a name the
+        // user typed, or their own label on a row they have not changed,
+        // stays: FObjSelNameKept().
         QByteArray baDef = rgpcbDef[i2]->currentText().toLocal8Bit();
+        QByteArray baName = rgpeName[i2]->text().toLocal8Bit();
+        QByteArray baName0 = rgstrName0[i2].toLocal8Bit();
+        QByteArray baDef0 = rgstrDefLook[i2].toLocal8Bit();
 
-        // A midpoint names itself after its two halves; -Fm moves a
-        // position but never touches a name.
-        if (FObjSelMidPair(baDef.constData(), &j2, &k2)) {
-          if (FItem(j2) && FItem(k2))
-            sprintf2(S(szT), "%.3s/%.3s", szObjDisp[j2], szObjDisp[k2]);
-          else
-            sprintf2(S(szT), "%s", szObjUnknown);
-          rgpeName[i2]->setText(szT);
+        if (FObjSelNameKept(baName.constData(), baName0.constData(),
+          baDef.constData(), baDef0.constData()))
           continue;
-        }
-
-        // Otherwise the offered list's name for it, or the ephemeris's
-        // where the list does not offer it: SzObjSelLabel().
-        if (FObjSelParse(baDef.constData(), &od2)) {
-          SzObjSelLabel(S(szT), od2.nTyp, od2.nObj);
-          // Put the number and the name in the body field together, so a
-          // row that has been looked up stops reading as a bare catalogue
-          // number: "10199" becomes "10199 Chariklo". Only for a plain
-          // MPC number with nothing else on it -- the other definition
-          // forms have no number to pair a name with, and a point or flag
-          // suffix already occupies the space after it. FObjSelParse()
-          // reads the pair back, since a trailing run is only taken for
-          // flags when every letter in it is one.
-          if (od2.nTyp == 1 && od2.nPnt <= 0 && od2.nFlg <= 0 &&
-            !FEqSz(szT, szObjUnknown)) {
-            char szD[cchSzMax + cchSzDef];
-            sprintf2(S(szD), "%d %s", od2.nObj, szT);
-            rgpcbDef[i2]->setEditText(szD);
-          }
-        } else
-          sprintf2(S(szT), "%s", szObjUnknown);
+        ObjSelLookup(S(szT), S(szD), baDef.constData());
+        if (szD[0] != chNull)
+          rgpcbDef[i2]->setEditText(szD);
         rgpeName[i2]->setText(szT);
+        // What the button wrote is not the user's typing, to it or to OK.
+        rgstrName0[i2] = rgpeName[i2]->text();
+        rgstrDefLook[i2] = rgpcbDef[i2]->currentText();
       }
     });
 

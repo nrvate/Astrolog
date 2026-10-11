@@ -10429,6 +10429,128 @@ static QList<QLineEdit *> RgpeObjSelNamesQt(QWidget *pw)
   return rgpe;
 }
 
+// A field out of range leaves its dialog OPEN, with everything typed into
+// it, as Windows' EnsureN() does by returning before EndDialog(). Every
+// dialog here used to validate after exec() had already hidden it, so one
+// typo cost the user every other edit in the dialog.
+
+static void TestDialogBadFieldQt()
+{
+  static CONST struct {
+    void (*pfn)();
+    CONST char *szId;    // every control of this name gets the bad text
+    flag fCombo;
+    CONST char *szBad;
+    CONST char *szWhat;
+  } rgt[] = {
+    {ShowFileSettingsDialogQt,     "deFi_Wx", fFalse, "99", "File Settings"},
+    {ShowGraphicsSettingsDialogQt, "deGr_WN", fFalse, "0",
+     "Graphics Settings"},
+    {ShowTransitDialogQt,          "dcTrMon", fTrue,  "99", "Transits"},
+    {ShowProgressDialogQt,         "dcPrMon", fTrue,  "99", "Progressions"},
+    {ShowChartSettingsDialogQt,    "deCh_w",  fFalse, "-5", "Chart Settings"},
+    {ShowAspectDialogQt,           "deo",     fFalse, "9999",
+     "Aspect Settings"},
+    {ShowObjectDialogQt,           "deo",     fFalse, "9999",
+     "Object Settings"},
+    {ShowObject2DialogQt,          "deo",     fFalse, "9999",
+     "More Object Settings"},
+    {ShowMoonObjectDialogQt,       "deo",     fFalse, "9999",
+     "Moon Object Settings"},
+    {ShowCalcDialogQt,             "deSe_",   fFalse, "99999",
+     "Calculation Settings"},
+    {ShowDisplayDialogQt,          "deDi_Yw", fFalse, "-1",
+     "Display Settings"}};
+  int iT, nDelaySav = NAnimDelayQt(), cBox = 0, nState = 0;
+  flag fOpen = fFalse, fAgain = fFalse;
+  CONST char *szId = "", *szBad = "";
+  flag fCombo = fFalse;
+  QString str;
+  QWidget *pwDlg = NULL;
+  QTimer tStep;
+
+  Group("A bad field leaves the dialog open");
+
+  // OK only ends the dialog's wait once the click has returned to it, so
+  // what follows cannot be watched from inside the click: the complaint
+  // and the dialog's return are stepped through from a timer instead.
+  // 1: OK pressed, waiting for the complaint. 2: complaint dismissed,
+  // looking at what is left. 3: done.
+  auto fnText = [&]() -> QString {
+    if (fCombo) {
+      QList<QComboBox *> rg = pwDlg->findChildren<QComboBox *>(szId);
+      return rg.isEmpty() ? QString() : rg[0]->currentText();
+    }
+    QList<QLineEdit *> rg = pwDlg->findChildren<QLineEdit *>(szId);
+    return rg.isEmpty() ? QString() : rg[0]->text();
+  };
+  QObject::connect(&tStep, &QTimer::timeout, [&]() {
+    QWidget *pw = QApplication::activeModalWidget();
+    QMessageBox *pmb = qobject_cast<QMessageBox *>(pw);
+
+    if (nState == 1 && pmb != NULL) {
+      cBox++;
+      nState = 2;
+      pmb->close();
+    } else if (nState == 2 && pmb != NULL) {
+      cBox++;
+      pmb->close();
+    } else if (nState == 2) {
+      nState = 3;
+      fOpen = pw != NULL && pw == pwDlg && pw->isVisible();
+      if (!fOpen)
+        return;
+      str = fnText();
+      if (fAgain) {
+        QLineEdit *pe = pw->findChild<QLineEdit *>(szId);
+        if (pe != NULL)
+          pe->setText("250");
+        if (FClickButtonQt(pw, "IDOK"))
+          return;
+      }
+      pw->close();
+    }
+  });
+  auto fnOn = [&](QWidget *pw) {
+    QList<QLineEdit *> rgpe = pw->findChildren<QLineEdit *>(szId);
+    QList<QComboBox *> rgcb = pw->findChildren<QComboBox *>(szId);
+    int i;
+
+    pwDlg = pw;
+    for (i = 0; i < rgcb.size(); i++)
+      rgcb[i]->setEditText(szBad);
+    for (i = 0; i < rgpe.size(); i++)
+      rgpe[i]->setText(szBad);
+    nState = 1;
+    if (!FClickButtonQt(pw, "IDOK"))
+      pw->close();
+  };
+
+  for (iT = 0; iT < (int)(sizeof(rgt)/sizeof(*rgt)); iT++) {
+    szId = rgt[iT].szId; szBad = rgt[iT].szBad; fCombo = rgt[iT].fCombo;
+    cBox = 0; nState = 0; fOpen = fFalse; str.clear();
+    tStep.start(50 * nScaleTest);
+    DriveModalQt(rgt[iT].pfn, fnOn);
+    tStep.stop();
+    Check(cBox == 1 && fOpen && str == szBad, "%s: refused once, still "
+      "open, the field as typed (complaints %d, open %d, \"%s\")",
+      rgt[iT].szWhat, cBox, fOpen, str.toLatin1().constData());
+  }
+
+  // And the second OK, with the field put right, applies and closes.
+  szId = "deGr_WN"; szBad = "0"; fCombo = fFalse; fAgain = fTrue;
+  cBox = 0; nState = 0; fOpen = fFalse;
+  tStep.start(50 * nScaleTest);
+  DriveModalQt(ShowGraphicsSettingsDialogQt, fnOn);
+  tStep.stop();
+  Check(fOpen && cBox == 1 && NAnimDelayQt() == 250 &&
+    QApplication::activeModalWidget() == NULL, "put right and OK pressed "
+    "again, it applies and closes (open %d, complaints %d, delay %d)",
+    fOpen, cBox, NAnimDelayQt());
+  SetAnimDelayQt(nDelaySav);
+}
+
+
 static void TestObjSelKeysQt()
 {
   CONST int cRow = 4;
@@ -10623,6 +10745,31 @@ static void TestObjSelKeysQt()
     "midpoint is renamed for its body (\"%s\")", szObjDisp[uranLo]);
   Check(FEqSz(szObjDisp[uranLo + 3], "Zeus"), "an emptied name box is the "
     "body's name (\"%s\")", szObjDisp[uranLo + 3]);
+
+  // Lookup Names leaves the user's own names alone: a label of theirs on
+  // a row they did not change, and a name typed this visit. A row whose
+  // body they changed is looked up, or the button would do nothing.
+  SetObjDisp(uranLo + 1, "Mine");
+  str.clear(); str2.clear();
+  QString str3;
+  DriveModalQt(ShowObjectSelDialogQt, [&str, &str2, &str3](QWidget *pw) {
+    QList<QComboBox *> rgcb = pw->findChildren<QComboBox *>();
+    QList<QLineEdit *> rgpe = RgpeObjSelNamesQt(pw);
+    if (rgcb.size() >= 4 && rgpe.size() >= 4) {
+      rgcb[2]->setEditText("10199");
+      rgpe[3]->setText("Typed");
+      for (QPushButton *ppb : pw->findChildren<QPushButton *>())
+        if (ppb->text().contains("Lookup"))
+          ppb->click();
+      str = rgpe[1]->text(); str2 = rgpe[2]->text(); str3 = rgpe[3]->text();
+    }
+    pw->close();
+  });
+  Check(str == "Mine" && str3 == "Typed", "Lookup Names keeps the user's "
+    "own names (\"%s\", \"%s\")", str.toLatin1().constData(),
+    str3.toLatin1().constData());
+  Check(str2 == "Chariklo", "and still names a row whose body changed "
+    "(\"%s\")", str2.toLatin1().constData());
 
   for (i = 0; i < cRow; i++) {
     int iobj = uranLo + i;
@@ -23952,6 +24099,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"objdef-set",           TestObjDefSetQt},
   {"objsel-glyph",         TestObjSelGlyphQt},
   {"objsel-keys",          TestObjSelKeysQt},
+  {"dialog-bad-field",     TestDialogBadFieldQt},
   {"settings-roundtrip",   TestSettingsRoundTripQt},
   {"interface-settings",   TestInterfaceSettingsQt},
   {"graphics-fields",      TestGraphicsFieldsQt},

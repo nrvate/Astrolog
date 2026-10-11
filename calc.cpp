@@ -3546,6 +3546,70 @@ void SzObjSelLabel(char *sz, int cchMax, int nTyp, int nObj)
 }
 
 
+// "Lookup Names" for one row of the Object Selections dialog: the name
+// the definition text "szDef" stands for, and in "szDefNew" the text the
+// definition box should show instead, or an empty string to leave it.
+//
+// A midpoint names itself after its two halves; -Fm moves a position but
+// never touches a name. Anything else is the offered list's name for the
+// body, or the ephemeris's where the list does not offer it. A plain MPC
+// number gets its name put beside it in the definition box, so a row that
+// has been looked up stops reading as a bare catalogue number: "10199"
+// becomes "10199 Chariklo". Only for a number with nothing else on it --
+// the other forms have no number to pair a name with, and a point or flag
+// suffix already occupies the space after it.
+
+void ObjSelLookup(char *szName, int cchName, char *szDefNew, int cchDef,
+  CONST char *szDef)
+{
+  OBJDEF od;
+  int j, k;
+
+  szDefNew[0] = chNull;
+  if (FObjSelMidPair(szDef, &j, &k)) {
+    if (FItem(j) && FItem(k))
+      sprintf2(szName, cchName, "%.3s/%.3s", szObjDisp[j], szObjDisp[k]);
+    else
+      sprintf2(szName, cchName, "%s", szObjUnknown);
+    return;
+  }
+  if (!FObjSelParse(szDef, &od)) {
+    sprintf2(szName, cchName, "%s", szObjUnknown);
+    return;
+  }
+  SzObjSelLabel(szName, cchName, od.nTyp, od.nObj);
+  if (od.nTyp == 1 && od.nPnt <= 0 && od.nFlg <= 0 &&
+    !FEqSz(szName, szObjUnknown))
+    sprintf2(szDefNew, cchDef, "%d %s", od.nObj, szName);
+}
+
+
+// Whether "Lookup Names" leaves a row's name alone. It used to overwrite
+// every row, which cost the user any label of their own: a slot named
+// "S/M" came back as "Sun/Moo" for pressing a button about a different
+// row. A name is the user's when they typed it since the dialog opened, or
+// when it was already their own wording for a definition they have not
+// changed. Everything else is looked up: an empty name, an unknown one, a
+// name that is only the body's own, and a name left over from a body the
+// row no longer holds. "szName0" and "szDef0" are the row as it opened, or
+// as the button last left it.
+
+flag FObjSelNameKept(CONST char *szName, CONST char *szName0,
+  CONST char *szDef, CONST char *szDef0)
+{
+  char szAuto[cchSzMax], szT[cchSzMax];
+
+  if (szName[0] == chNull || FEqSz(szName, szObjUnknown))
+    return fFalse;
+  if (!FEqSz(szName, szName0))
+    return fTrue;
+  if (!FEqSz(szDef, szDef0))
+    return fFalse;
+  ObjSelLookup(S(szAuto), S(szT), szDef0);
+  return !FEqSz(szName0, szAuto);
+}
+
+
 // The name an Object Selections row is left with on OK, for both builds.
 // szName is what the name box holds and szName0 what it held when the
 // dialog opened; the definition and forced position come the same way.

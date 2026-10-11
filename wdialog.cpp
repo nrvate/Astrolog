@@ -1772,6 +1772,8 @@ flag API DlgObjectSel(HWND hdlg, uint message, WORD wParam, LONG lParam)
   // sitting there. Static because this is a dialog proc called once per
   // message, with nowhere else to keep it.
   static char rgszName0[cObjSelRow][cchSzDef];
+  static char rgszDef0[cObjSelRow][cchSzMax];
+  char szN[cchSzMax];
   static int rgnTyp0[cObjSelRow], rgnObj0[cObjSelRow];
   static real rgforce0[cObjSelRow];
 
@@ -1793,6 +1795,7 @@ flag API DlgObjectSel(HWND hdlg, uint message, WORD wParam, LONG lParam)
         SetCombo(dcOs01 + i, rgObjSel[j].szName);
       SzObjSelDef(S(sz), iobj);
       SetEdit(dcOs01 + i, sz);
+      sprintf2(S(rgszDef0[i]), "%s", sz);
     }
     // Focus the first body field rather than letting the dialog
     // manager leave it on OK, which is what the seven dialogs with an
@@ -1803,48 +1806,28 @@ flag API DlgObjectSel(HWND hdlg, uint message, WORD wParam, LONG lParam)
 
   case WM_COMMAND:
     if (wParam == dbOs_l) {
-      // Fill in any name still blank or unknown, from whatever the row's
-      // body says, exactly as Object Customization's own button does. A
-      // row set to a midpoint with no name yet gets "A/B" instead, since
-      // -Fm moves a position but never touches the name.
+      // Look up the name of every row whose name is not the user's own,
+      // not just the rows with none. DlgCustom only fills a blank or
+      // "???"; here the button exists to turn what is in the definition
+      // box into a name -- type 52872, press it, get Okyrhoe -- and
+      // skipping named rows made it look like it did nothing. But a name
+      // the user typed, or their own label on a row they have not changed,
+      // stays: FObjSelNameKept(). What the button leaves behind becomes
+      // the row's starting point, so neither it nor OK takes that for
+      // something the user typed.
       for (i = 0; i < cObjSelRow; i++) {
-        // Every row, not just the ones with no name yet. DlgCustom only
-        // fills a blank or "???" because there the name column is the
-        // user's own label; here the button exists to turn what is in the
-        // definition box into a name -- type 52872, press it, get Okyrhoe
-        // -- so it resolves every row. Skipping named rows made the button
-        // look like it did nothing.
         GetEdit(dcOs01 + i, sz);
-        // A midpoint names itself after its two halves.
-        if (FObjSelMidPair(sz, &j, &k)) {
-          if (FItem(j) && FItem(k))
-            sprintf2(S(sz), "%.3s/%.3s", szObjDisp[j], szObjDisp[k]);
-          else
-            sprintf2(S(sz), "%s", szObjUnknown);
-          SetEdit(deOs01 + i, sz);
+        GetEdit(deOs01 + i, szN);
+        if (FObjSelNameKept(szN, rgszName0[i], sz, rgszDef0[i]))
           continue;
-        }
-        // Otherwise the offered list's name for it, or the ephemeris's
-        // where the list does not offer it: SzObjSelLabel().
-        if (FObjSelParse(sz, &od)) {
-          SzObjSelLabel(S(sz), od.nTyp, od.nObj);
-          // Put the number and the name in the body field together,
-          // so a row that has been looked up stops reading as a bare
-          // catalogue number: "10199" becomes "10199 Chariklo".
-          // Only for a plain MPC number with nothing else on it --
-          // the other definition forms have no number to pair a name
-          // with, and a point or flag suffix already occupies the
-          // space after it. FObjSelParse() reads the pair back, since
-          // a trailing run is only taken for flags when every letter
-          // in it is one.
-          if (od.nTyp == 1 && od.nPnt <= 0 && od.nFlg <= 0 &&
-            !FEqSz(sz, szObjUnknown)) {
-            sprintf2(S(szT), "%d %s", od.nObj, sz);
-            SetEdit(dcOs01 + i, szT);
-          }
+        ObjSelLookup(S(szN), S(szT), sz);
+        if (szT[0] != chNull) {
+          SetEdit(dcOs01 + i, szT);
+          sprintf2(S(rgszDef0[i]), "%s", szT);
         } else
-          sprintf2(S(sz), "%s", szObjUnknown);
-        SetEdit(deOs01 + i, sz);
+          sprintf2(S(rgszDef0[i]), "%s", sz);
+        SetEdit(deOs01 + i, szN);
+        sprintf2(S(rgszName0[i]), "%.*s", cchSzDef-1, szN);
       }
     }
 
