@@ -11545,6 +11545,24 @@ this is the note that explains the wall of dialogs.
     file first (shared core, every build; no switch line names a file
     that exists).
 
+284. **About names the Swiss Ephemeris it runs, and where from.**
+    2026-10-24. A line under "Released": "Swiss Ephemeris 2.10.03,
+    built into /path/to/astrolog-qt", from `swe_version()` and
+    `swe_get_library_path()`, or "..., from <path>" if the library were
+    ever linked as a .so or .dll. **The library's path is not a path
+    here**: it comes from `dladdr()`, which for code in the executable
+    gives argv[0] -- "./astrolog-qt-test" under the runner, a bare name
+    when launched off PATH. So the two are compared canonically and,
+    when they are one file, the line names
+    `QCoreApplication::applicationFilePath()` instead. Also found:
+    `swe_get_library_path()` terminates a path of `AS_MAXCH` bytes at
+    `s[AS_MAXCH]`, one past the buffer size swephexp.h documents, so
+    both callers give it `AS_MAXCH + 1`. Net: `about-swiss`, which finds
+    the label by its object name (the credits say "Swiss Ephemeris"
+    too) and requires the "built into" form; comparing the raw strings
+    instead failed it, with "from ./astrolog-qt-test". The "from"
+    branch cannot be reached by this build and is not tested.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

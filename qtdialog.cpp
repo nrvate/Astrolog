@@ -94,6 +94,9 @@
 #include "astrolog.h"
 #include "qtdriver.h"
 #include "ephproto.h"   // eph::kDefaultPort, the address field's default
+#ifdef SWISS
+#include "swephexp.h"   // swe_version(), swe_get_library_path() for About
+#endif
 
 // The git sha this build came from, shown in the About dialog's version
 // line. Generated at build time by a FORCE rule in every makefile that
@@ -4955,6 +4958,34 @@ void ShowAboutDialogQt()
   plabelVer->setFont(fontBold);
   playout->addWidget(plabelVer);
   playout->addWidget(new QLabel(QString("Released %1").arg(szDateCore)));
+#ifdef SWISS
+  // Which Swiss Ephemeris computed the charts, and from where, so a bug
+  // report can say. The library names the file its code is in through
+  // dladdr(), which for code in the executable is argv[0] -- relative, or a
+  // bare name off PATH -- so when that is this executable, as in every build
+  // here, the line names it by its absolute path instead.
+  {
+    // +1: a path of AS_MAXCH bytes is terminated at s[AS_MAXCH].
+    char szVer[AS_MAXCH], szLib[AS_MAXCH + 1];
+    swe_version(szVer);
+    swe_get_library_path(szLib);
+    QString strLib = QString::fromLocal8Bit(szLib),
+      strExe = QCoreApplication::applicationFilePath(),
+      strSwe = QString("Swiss Ephemeris %1").arg(QString::fromLatin1(szVer)),
+      strCanon = QFileInfo(strExe).canonicalFilePath();
+    if (!strCanon.isEmpty() && QFileInfo(strLib).canonicalFilePath() ==
+      strCanon)
+      strSwe += ", built into " + QDir::toNativeSeparators(strExe);
+    else if (!strLib.isEmpty())
+      strSwe += ", from " + QDir::toNativeSeparators(strLib);
+    QLabel *plabelSwe = new QLabel(strSwe);
+    // Named so a test finds it: the credits say "Swiss Ephemeris" too.
+    plabelSwe->setObjectName("SwissLibrary");
+    plabelSwe->setTextFormat(Qt::PlainText);
+    plabelSwe->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    playout->addWidget(plabelSwe);
+  }
+#endif
 #ifdef EPHEM
   // The backend's one quiet status line (plan §7): address, state, and
   // the server's version from WELCOME -- empty when the backend is not

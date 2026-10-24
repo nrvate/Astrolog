@@ -736,6 +736,53 @@ static void TestAboutVersionQt()
 }
 
 
+// The About dialog names the Swiss Ephemeris this binary runs and where its
+// code lives. Found by object name, since the credits say "Swiss Ephemeris"
+// too. The library reports its path through dladdr(), which for code in the
+// executable itself is argv[0] -- "./astrolog-qt-test" under the runner --
+// so the dialog names the executable by its absolute path when the two are
+// one file, and the test requires that branch: this build compiles the
+// library in statically, and a broken comparison would show "from".
+
+static void TestAboutSwissQt()
+{
+  // swe_get_library_path() terminates a path of AS_MAXCH bytes at
+  // s[AS_MAXCH], one past the buffer size swephexp.h documents.
+  char szVer[AS_MAXCH], szPath[AS_MAXCH + 1];
+  QString strGot;
+  flag fFound = fFalse;
+
+  Group("About names the Swiss Ephemeris");
+  swe_version(szVer);
+  swe_get_library_path(szPath);
+  DriveModalQt(ShowAboutDialogQt, [&strGot, &fFound](QWidget *pw) {
+    QLabel *plabel = pw->findChild<QLabel *>("SwissLibrary");
+    if (plabel != NULL) {
+      fFound = fTrue;
+      strGot = plabel->text();
+    }
+    if (!FClickButtonQt(pw, "IDOK"))
+      pw->close();
+  });
+  QString strExe = QCoreApplication::applicationFilePath();
+  Check(szPath[0] && QFileInfo(QString::fromLocal8Bit(szPath)).
+    canonicalFilePath() == QFileInfo(strExe).canonicalFilePath(),
+    "swe_get_library_path() says \"%s\", which is not this executable, %s",
+    szPath, strExe.toLocal8Bit().constData());
+  Check(fFound, "no label named SwissLibrary in the About dialog");
+  if (!fFound)
+    return;
+  Check(strGot.contains(QString::fromLatin1(szVer)),
+    "the About Swiss line \"%s\" does not carry swe_version()'s \"%s\"",
+    strGot.toLocal8Bit().constData(), szVer);
+  QString strExpected = QString("Swiss Ephemeris %1, built into %2").arg(
+    QString::fromLatin1(szVer), QDir::toNativeSeparators(strExe));
+  Check(strGot == strExpected, "the About Swiss line says \"%s\", "
+    "wanted \"%s\"", strGot.toLocal8Bit().constData(),
+    strExpected.toLocal8Bit().constData());
+}
+
+
 // The Qt build names its charts "Astrolog 8.00 Qt" (szVersionChart), in a
 // graphics chart's sidebar and in a text chart's header, so a screenshot
 // shows which program drew it.
@@ -24526,6 +24573,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"ephemeris-dialog",     TestEphemDialogQt},
   {"popup-net",            TestPopupNetQt},
   {"about-version",        TestAboutVersionQt},
+  {"about-swiss",          TestAboutSwissQt},
   {"chart-header-qt",      TestChartHeaderQt},
   {"context-menus",        TestContextMenusQt},
   {"hotkeys",              TestHotkeysQt},
