@@ -11562,6 +11562,100 @@ this is the note that explains the wall of dialogs.
     too) and requires the "built into" form; comparing the raw strings
     instead failed it, with "from ./astrolog-qt-test". The "from"
     branch cannot be reached by this build and is not tested.
+    **Corrected the same day by item 285**: the line told the truth
+    about a build that was itself the bug.
+
+285. **The Linux Qt builds run the installed Swiss Ephemeris, and About
+    says so.** 2026-10-24, after the maintainer read item 284's line
+    and asked why it said "2.10.03, built into ..." on a machine whose
+    Swiss Ephemeris is the thread-safe fork, 2.10.03-ts.19, installed
+    as `/usr/local/lib/libswe.so`. The line was not lying: every build
+    here compiled the vendored `SRC_SWISS` copy into the executable, so
+    `swe_version()` was upstream's string and `dladdr()` named the
+    executable. The installed library was never used.
+
+    *The build.* `SWE=system|bundled` at the end of `Makefile.srcs`,
+    read by the four Linux Qt makefiles only (console, Windows and
+    ephsrv are untouched). `system` compiles none of `SRC_SWISS` and
+    links `pkg-config --libs swe`; `bundled` is the old build. **The
+    default is `system` wherever it can work and `bundled` elsewhere**,
+    so a stock checkout, CI and macOS build as before; `SWE=system`
+    where it cannot work stops with the reason, and a machine with a
+    `swe.pc` that is not usable gets a warning naming why instead of a
+    quiet fall back -- the quiet fall back being what this item is
+    about. Every object depends on `$(OBJDIR)/.swe-stamp`, rewritten only
+    when the choice (or the installed version, or `SWE_FALLBACK`)
+    changes, so a flip rebuilds the dir. Not `prometheia-stamp`'s
+    delete at parse time: the first draft did that, and
+    `tools/warning_audit.py`, which reads `Makefile.qt` for its flags
+    with no `OBJDIR` under `SWE=bundled`, emptied `obj-qt/` every run.
+
+    *What "can work" means, which is more than a .so.* calc.cpp and the
+    shared `ephsrv/ephsidplane.h`, `ephstarorb.h`, `ephnodrate.h` use
+    Swiss internals: `swi_precess()`, `swi_epsiln()`, `swi_nutation()`,
+    `swi_bias()`, `swi_precess_speed()` and sweph.h's `J2000` and
+    `SSY_PLANE_*`. The fork exports those from libswe.so, but they take
+    a context first, and it installs only the public headers. So the
+    internal headers come from the fork's checkout, `SWE_HOME`
+    (default `/shares/swisseph`, as for `Makefile.ephsrv`), and the
+    checkout's `SE_VERSION` must equal the installed
+    `swe_full_version` exactly -- otherwise a prototype would not
+    match the library it links, and that compiles, links, and reads
+    the wrong arguments. calc.cpp includes them in `extern "C"`, as
+    eph_srv.cpp does, and gives the five context-taking functions
+    overloads with the vendored spelling on `swi_default_ctx()`, the
+    context every legacy `swe_X()` resolves to; the shared headers are
+    unchanged.
+
+    *The header, which no include path can reach.* `#include
+    "swephexp.h"` finds the vendored `./swephexp.h` first from every
+    root file (the quote form searches the includer's directory before
+    any `-I`), and gcc ignores `-I /usr/local/include` because it is a
+    system directory. So the system build names the installed header by
+    absolute path with `-include`; it shares the vendored one's include
+    guard, and every later include of it is a no-op. calc.o's `.d`
+    lists `/usr/local/include/swephexp.h` and `/shares/swisseph/sweph.h`.
+    `tools/system-header-check.sh` still holds -- it guards the search
+    order, which the system build does not use -- and its header says
+    so.
+
+    *A behaviour the fork changed, kept as Astrolog expects it.* The
+    fork does not substitute Moshier for a missing `.se1` file unless
+    asked; it returns an error where upstream answers from Moshier and
+    says so ("... not found in PATH ..."). The first suite run against
+    it failed `run-qt-tests.sh`'s ephemeris-path probe for exactly
+    that: no such line, and an error in its place. `SwissEnsurePath()`
+    calls `swe_set_ephe_fallback(SWE_EPHE_FALLBACK)`, 1 by default;
+    `SWE_FALLBACK=0` at make time keeps the fork's refusal.
+
+    *The About line.* The version is `swe_version()`'s runtime answer,
+    the library's full string. A path from a shared library is the
+    name the loader opened, which can be a symlink (`libswe.so` ->
+    `libswe.so.2.10.3` in a packaged install), so the line names the
+    file it resolves to -- the file actually mapped, the one
+    `/proc/self/maps` lists -- and the raw name only if that no longer
+    resolves. Here: "Swiss Ephemeris 2.10.03-ts.19, from
+    /usr/local/lib/libswe.so" (not a symlink on this machine). `bundled`
+    still shows "built into <executable>".
+
+    *Net.* `about-swiss` requires the form the binary was built for:
+    linked, `swe_version()` carries "-ts.", `/proc/self/maps` lists
+    exactly one libswe file, `swe_get_library_path()` resolves to it,
+    it is not the executable, and the label is exactly "Swiss
+    Ephemeris <version>, from <that file>"; compiled in, the item 284
+    checks. `tools/warning_audit.py`, `tools/clang-gate.sh` and the
+    coverage report's suite build pin `SWE=bundled`, because they
+    must read the same on every machine and CI compiles the vendored
+    files. Measured: `about-swiss` 9 of 9 linked (also under
+    `astrolog-qt-asan`), and the whole suite 6387 passed, 0 failed,
+    against the bundled build's 6384 -- the three are the linked
+    form's extra checks. One run of the linked suite failed an
+    Object Selections Tab-order check while two builds ran beside it;
+    alone and in a quiet rerun it passed. `-v =b0` text charts for
+    1971, 1600, 2090, -500 and 1776 are identical to the second
+    between the two builds; the fork's sub-arcsecond changes do not
+    reach a printed digit there. `ldd astrolog-qt`: `libswe.so =>
+    /usr/local/lib/libswe.so`.
 
 ## Features this fork adds to both builds
 

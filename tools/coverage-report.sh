@@ -71,7 +71,12 @@ awk -F'\t' '{printf "   %6s%%  %6s lines  %s\n", $1, $2, $3}' "$out/coverage.txt
 # console build's, which land in the tree root.
 if [ "${COVERAGE_SKIP_SUITE:-0}" != "1" ] && [ -f Makefile.qt.test ]; then
   echo "== building and running the Qt suite under coverage"
-  make -f Makefile.qt.test NAME=astrolog-qt-cov OBJDIR=obj-qt-cov \
+  # SWE=bundled: the CPPFLAGS below replace the makefile's, which carry
+  # the installed fork's -include and -D's when it defaults to linking
+  # libswe.so (end of Makefile.srcs), so without it calc.cpp would compile
+  # for the vendored copy and link the fork. Coverage was always measured
+  # over the vendored Swiss too.
+  make -f Makefile.qt.test NAME=astrolog-qt-cov OBJDIR=obj-qt-cov SWE=bundled \
     CPPFLAGS='-MMD -MP -DQT -DQTTEST -O0 -g -fPIC -std=gnu++17 --coverage \
       -Wno-write-strings -Wno-narrowing -Wno-comment $(QT_CFLAGS)' \
     LDEXTRA='--coverage' -j4 >/dev/null 2>&1 || true

@@ -64,6 +64,14 @@ import sys
 # the symlink, /nvmraid/shares/Astrolog. One key per spelling meant a cold
 # cache and a full recompile whenever the spelling changed between runs.
 ROOT = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+
+# The Qt builds compile the vendored Swiss Ephemeris only with SWE=bundled;
+# where the installed fork is found they default to linking its libswe.so
+# and compile none of SRC_SWISS (end of Makefile.srcs). This audit is a
+# ledger that must read the same on every machine, and the vendored files
+# are what CI compiles, so it always asks for those. From the environment,
+# so every make it starts -- the object list and the build -- sees it.
+os.environ['SWE'] = 'bundled'
 BASELINE = os.path.join(ROOT, 'tools', 'warnings.txt')
 
 # -j4 and no higher: the maintainer's machine shares this NAS with other
