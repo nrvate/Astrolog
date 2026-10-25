@@ -24858,6 +24858,11 @@ static void TestEphemDialogQt()
       FPickEphQt(pw, "jpl");
       if (PeEphRowQt(pw, strJpl) != NULL)
         PeEphRowQt(pw, strJpl)->setText("");
+      Check(PeEphRowQt(pw, strJpl) != NULL &&
+        PeEphRowQt(pw, strJpl)->placeholderText() == "empty: uses de431.eph",
+        "an empty JPL field says it uses the file found (\"%s\")",
+        PeEphRowQt(pw, strJpl) == NULL ? "" : PeEphRowQt(pw, strJpl)->
+        placeholderText().toLocal8Bit().constData());
       str = StrEphTestQt(pw);
       Check(str.startsWith("Works. Sun "), "then Test on JPL with the "
         "field empty finds de431.eph in the folders (\"%s\")",
@@ -24870,33 +24875,58 @@ static void TestEphemDialogQt()
       if (!FClickButtonQt(pw, "IDCANCEL"))
         pw->close();
     });
-  } else
+  } else {
     printf("  skipped: no de431.eph in the -Yi folders, so JPL is tested "
       "only failing\n");
+    DriveModalQt(ShowEphemDialogQt, [&](QWidget *pw) {
+      FPickEphQt(pw, "jpl");
+      if (PeEphRowQt(pw, strJpl) != NULL)
+        PeEphRowQt(pw, strJpl)->setText("");
+      Check(PeEphRowQt(pw, strJpl) != NULL &&
+        PeEphRowQt(pw, strJpl)->placeholderText() ==
+        "empty: de431.eph, not found", "an empty JPL field with no file to "
+        "find says so (\"%s\")", PeEphRowQt(pw, strJpl) == NULL ? "" :
+        PeEphRowQt(pw, strJpl)->placeholderText().toLocal8Bit().constData());
+      if (!FClickButtonQt(pw, "IDCANCEL"))
+        pw->close();
+    });
+  }
 #ifdef PROMETHEIA
   {
     char szEphe[cchSzMax], szCat[cchSzMax];
     if (FEphPromFindFile("linux_p1550p2650.440", S(szEphe))) {
       flag fCat = FEphPromFindFile("sbdb-full-20260916.epm", S(szCat));
-      QString strDir = QFileInfo(QString::fromLocal8Bit(szEphe)).path();
       DriveModalQt(ShowEphemDialogQt, [&](QWidget *pw) {
         QLineEdit *peCat, *peEph;
         QString str;
         int cLong = 0;
 
         FPickEphQt(pw, "prometheia");
-        if (PeEphRowQt(pw, strFolder) != NULL)
-          PeEphRowQt(pw, strFolder)->setText(strDir);
+        Check(PeEphRowQt(pw, strFolder) == NULL, "Prometheia names its "
+          "files one by one, with no folder row above them to confuse "
+          "with the first (\"%s\")", StrEphRowsQt(pw).toLocal8Bit().
+          constData());
         peCat = PeEphRowQt(pw, QString("%1:").arg(
           rgephparam[epPrometheiaCatalog].ep.szLabel));
         peEph = PeEphRowQt(pw, QString("%1:").arg(
           rgephparam[epPrometheiaEphemeris].ep.szLabel));
+        // Empty, the field says which file it means: the one found.
+        if (peEph != NULL)
+          peEph->setText("");
+        Check(peEph != NULL && peEph->placeholderText() == QString(
+          "empty: uses ") + QFileInfo(QString::fromLocal8Bit(szEphe)).
+          fileName() && peEph->toolTip().contains(QString::fromLocal8Bit(
+          szEphe)), "an empty planets field names the file it will use "
+          "(\"%s\"), and its tooltip where it is (\"%s\")",
+          peEph == NULL ? "" : peEph->placeholderText().toLocal8Bit().
+          constData(), peEph == NULL ? "" : peEph->toolTip().toLocal8Bit().
+          constData());
         if (peCat != NULL)
           peCat->setText("");
         str = StrEphTestQt(pw);
         Check(str.startsWith("Works, except for Chiron. Sun ") &&
-          str.contains("Small-body Catalog"), "Prometheia over its folder "
-          "with no catalog works and says what Chiron needs (\"%s\")",
+          str.contains("Asteroid Catalog"), "Prometheia with no catalog "
+          "works and says what Chiron needs (\"%s\")",
           str.toLocal8Bit().constData());
         cLong += !FEphFitsQt(pw, "dsEp_st");
         if (fCat && peCat != NULL) {

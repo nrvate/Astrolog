@@ -508,24 +508,49 @@ double REphPromElemDiff(CONST char *szFile)
 static CONST char *rgszEphe[] = {"linux_p1550p2650.440", "de440s.bsp"};
 static CONST char szEphPromLongDefault[] = "linux_m13000p17000.441";
 
+// What an empty field means, said with the file it actually is: the
+// search runs here, so the field names what it found, or says nothing was.
+// "empty: a DE440 file in the folders" said neither which file nor which
+// folders (2026-10-25, the maintainer: "what??!!?").
 void SzEphPromEmpty(int iep, flag fLong, char *sz, int cch)
 {
-  if (iep == epPrometheiaEphemeris && !fLong)
-    sprintf2(sz, cch, "%s", "empty: a DE440 file in the folders");
-  else if (iep == epPrometheiaEphemeris)
-    sprintf2(sz, cch, "Left empty, %s or %s is looked for in the ephemeris "
-      "folders.", rgszEphe[0], rgszEphe[1]);
-  else if (iep == epPrometheiaLongspan && !fLong)
-    sprintf2(sz, cch, "%s", "empty: the DE441 file, if found");
-  else if (iep == epPrometheiaLongspan)
-    sprintf2(sz, cch, "Left empty, %s is used if it is in the ephemeris "
-      "folders; it covers -13000 to 17000.", szEphPromLongDefault);
-  else if (iep == epPrometheiaCatalog)
+  char szPath[cchSzMax];
+  CONST char *pchName;
+  int i;
+
+  szPath[0] = chNull;
+  if (iep == epPrometheiaEphemeris || iep == epPrometheiaLongspan) {
+    if (iep == epPrometheiaEphemeris) {
+      for (i = 0; i < (int)(sizeof(rgszEphe)/sizeof(CONST char *)); i++)
+        if (FEphPromFindFile(rgszEphe[i], S(szPath)))
+          break;
+    } else
+      FEphPromFindFile(szEphPromLongDefault, S(szPath));
+    for (pchName = szPath + CchSz(szPath); pchName > szPath &&
+      pchName[-1] != chDirSep && pchName[-1] != '/'; pchName--)
+      ;
+    if (FSzSet(szPath))
+      sprintf2(sz, cch, !fLong ? "empty: uses %s" : "Left empty, %s is "
+        "used: it was found where the program looks. Browse to pick "
+        "another.", !fLong ? pchName : szPath);
+    else if (iep == epPrometheiaEphemeris)
+      sprintf2(sz, cch, !fLong ? "%s" : "Left empty, %s or %s is looked "
+        "for, and neither was found. Browse for a DE440 file.",
+        !fLong ? "empty: none found; Browse for one" : rgszEphe[0],
+        rgszEphe[1]);
+    else
+      sprintf2(sz, cch, !fLong ? "%s" : "Left empty, only 1550 to 2650 is "
+        "computed: %s, which covers -13000 to 17000, was not found.",
+        !fLong ? "empty: none, so 1550-2650 only" : szEphPromLongDefault);
+  } else if (iep == epPrometheiaCatalog)
     sprintf2(sz, cch, "%s", !fLong ? "empty: none, so no asteroids" :
-      "Left empty, no catalog is read, so no asteroids or centaurs.");
+      "Left empty, no catalog is read, so no asteroids or centaurs, Chiron "
+      "among them.");
   else
-    sprintf2(sz, cch, "%s", !fLong ? "empty: none" :
-      "Left empty, no perturber kernel is read.");
+    sprintf2(sz, cch, "%s", !fLong ? "empty: asteroids within 100 years" :
+      "Left empty, an asteroid is computed only within 100 years of its "
+      "catalog date. A file of the 16 largest asteroids' paths, such as "
+      "sb441-n16.bsp, lifts that limit.");
 }
 
 static flag FEphPromResolve(char *szWhy, int cch)
@@ -535,11 +560,12 @@ static flag FEphPromResolve(char *szWhy, int cch)
   if (FSzSet(SzEphPromParam(epPromEphemeris))) {
     if (!FEphPromFindFile(SzEphPromParam(epPromEphemeris), szEphPromEphe,
       (int)sizeof(szEphPromEphe))) {
-      sprintf2(S(szEphPromState), "ephemeris '%s' not found",
+      // In the dialog's words, row by row: "ephemeris '...' not found"
+      // was the engine's word for a field labelled otherwise.
+      sprintf2(S(szEphPromState), "the planets file '%s' was not found",
         SzEphPromParam(epPromEphemeris));
       if (szWhy != NULL)
-        sprintf2(szWhy, cch, "ephemeris '%s' not found",
-          SzEphPromParam(epPromEphemeris));
+        sprintf2(szWhy, cch, "%s", szEphPromState);
       return fFalse;
     }
   } else {
@@ -551,9 +577,9 @@ static flag FEphPromResolve(char *szWhy, int cch)
       // Said for both places it can be fixed from: the dialog's field
       // and the switch. The file names are the ones searched for, so the
       // reader knows what "a DE440 ephemeris" means here.
-      sprintf2(S(szEphPromState), "no DE440 ephemeris (%s or %s) in the "
-        "ephemeris folders; set Ephemeris File, or -bP prometheia.ephemeris",
-        rgszEphe[0], rgszEphe[1]);
+      sprintf2(S(szEphPromState), "no planets file was found (%s or %s "
+        "was looked for); pick one in \"Planets, 1550-2650\", or set -bP "
+        "prometheia.ephemeris", rgszEphe[0], rgszEphe[1]);
       if (szWhy != NULL)
         sprintf2(szWhy, cch, "%s", szEphPromState);
       return fFalse;
@@ -563,11 +589,10 @@ static flag FEphPromResolve(char *szWhy, int cch)
   if (FSzSet(SzEphPromParam(epPromCatalog)) &&
     !FEphPromFindFile(SzEphPromParam(epPromCatalog), szEphPromCat,
       (int)sizeof(szEphPromCat))) {
-    sprintf2(S(szEphPromState), "catalog '%s' not found",
+    sprintf2(S(szEphPromState), "the asteroid catalog '%s' was not found",
       SzEphPromParam(epPromCatalog));
     if (szWhy != NULL)
-      sprintf2(szWhy, cch, "catalog '%s' not found",
-        SzEphPromParam(epPromCatalog));
+      sprintf2(szWhy, cch, "%s", szEphPromState);
     return fFalse;
   }
   // The long-span file, behind the first and consulted outside its span.
@@ -579,11 +604,10 @@ static flag FEphPromResolve(char *szWhy, int cch)
   if (FSzSet(SzEphPromParam(epPromLongspan))) {
     if (!FEphPromFindFile(SzEphPromParam(epPromLongspan), szEphPromLong,
       (int)sizeof(szEphPromLong))) {
-      sprintf2(S(szEphPromState), "long-span ephemeris '%s' not found",
-        SzEphPromParam(epPromLongspan));
+      sprintf2(S(szEphPromState), "the planets file for other years '%s' "
+        "was not found", SzEphPromParam(epPromLongspan));
       if (szWhy != NULL)
-        sprintf2(szWhy, cch, "long-span ephemeris '%s' not found",
-          SzEphPromParam(epPromLongspan));
+        sprintf2(szWhy, cch, "%s", szEphPromState);
       return fFalse;
     }
   } else if (!FEphPromFindFile(szEphPromLongDefault, szEphPromLong,
@@ -593,11 +617,10 @@ static flag FEphPromResolve(char *szWhy, int cch)
   if (FSzSet(SzEphPromParam(epPromPerturbers)) &&
     !FEphPromFindFile(SzEphPromParam(epPromPerturbers), szEphPromPert,
       (int)sizeof(szEphPromPert))) {
-    sprintf2(S(szEphPromState), "perturbers '%s' not found",
-      SzEphPromParam(epPromPerturbers));
+    sprintf2(S(szEphPromState), "the asteroid perturbers file '%s' was not "
+      "found", SzEphPromParam(epPromPerturbers));
     if (szWhy != NULL)
-      sprintf2(szWhy, cch, "perturbers '%s' not found",
-        SzEphPromParam(epPromPerturbers));
+      sprintf2(szWhy, cch, "%s", szEphPromState);
     return fFalse;
   }
   return fTrue;
@@ -1620,8 +1643,8 @@ static int NLookupProm(CONST char *sz, EPHMATCH *rgm, int cMax)
 
 EPHSRCDEF ephsrcPrometheia = {
   "prometheia", "Ephemeris Prometheia",
-  "The Ephemeris Prometheia engine over JPL DE files, with asteroids "
-  "from a small-body catalog.",
+  "The Ephemeris Prometheia engine: the planets from JPL DE files, the "
+  "asteroids from a catalog.",
   FAvailableProm, GetCapsProm, StateProm, StartProm, StopProm,
   FSubmitProm, FReadProm, HintProm, NLookupProm
 };

@@ -34,12 +34,12 @@ enum {
 #define EphParamRowsGenerated() \
   { \
     {"jpl", {"file", "JPL File", epkFile, ""}}, \
-    {"prometheia", {"ephemeris", "Ephemeris File", epkFile, ""}}, \
-    {"prometheia", {"catalog", "Small-body Catalog", epkFile, ""}}, \
-    {"prometheia", {"perturbers", "Perturber Kernel", epkFile, ""}}, \
+    {"prometheia", {"ephemeris", "Planets, 1550-2650", epkFile, ""}}, \
+    {"prometheia", {"catalog", "Asteroid Catalog", epkFile, ""}}, \
+    {"prometheia", {"perturbers", "Asteroid Perturbers", epkFile, ""}}, \
     {"server", {"url", "Server Address", epkUrl, ""}}, \
     {"server", {"token", "Server Token", epkToken, ""}}, \
-    {"prometheia", {"longspan", "Long-span Ephemeris", epkFile, ""}} \
+    {"prometheia", {"longspan", "Planets, Other Years", epkFile, ""}} \
   }
 
 #endif // _EPHPARAM_H

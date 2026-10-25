@@ -657,6 +657,7 @@ extern real RObliquityTrue P((real));
 extern void SwissEnsurePath P((void));
 extern CONST char *SzSwissPathSet P((void));
 extern void SzSwissPathShown P((char *, int));
+extern flag FSwissFindFile P((CONST char *, char *, int));
 extern flag FDirHasEphem P((CONST char *));
 extern CONST char *SzJplFileDefault P((void));
 extern flag FSwissEphSubstituted P((flag));

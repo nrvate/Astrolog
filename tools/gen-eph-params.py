@@ -46,16 +46,16 @@ PARAMS = [
     # free text while a second, divergent copy of the same three lived
     # inside ephprom.cpp saying epkFile -- and nothing read either one,
     # so a dialog's Browse button depended on which table it asked.
-    ("prometheia", "ephemeris",  "Ephemeris File",     "epkFile", ""),
-    ("prometheia", "catalog",    "Small-body Catalog", "epkFile", ""),
-    ("prometheia", "perturbers", "Perturber Kernel",   "epkFile", ""),
+    ("prometheia", "ephemeris",  "Planets, 1550-2650", "epkFile", ""),
+    ("prometheia", "catalog",    "Asteroid Catalog",   "epkFile", ""),
+    ("prometheia", "perturbers", "Asteroid Perturbers", "epkFile", ""),
     ("server", "url",   "Server Address", "epkUrl",   ""),
     ("server", "token", "Server Token",   "epkToken", ""),
     # Appended, never inserted: the index space is the settings file's.
     # A second planetary file behind the first, consulted outside its span
     # (prometheia_engine_add_ephemeris(), Prometheia's DE441 support, their
     # bbc38f2). Empty searches the -Yi paths for JPL's DE441 file name.
-    ("prometheia", "longspan", "Long-span Ephemeris", "epkFile", ""),
+    ("prometheia", "longspan", "Planets, Other Years", "epkFile", ""),
 ]
 
 

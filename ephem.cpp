@@ -446,7 +446,7 @@ int CEphParamRows(int *rgiep, int cMax)
 
 // The rows Ephemeris Settings shows for ONE source: the folder its data
 // files are searched for in, when it searches the -Yi folders for them --
-// Swiss, JPL, Moshier, Prometheia and Horizons (iepRowPath) -- then its own
+// Swiss, JPL, Moshier and Horizons (iepRowPath) -- then its own
 // parameters. Swiss had no row at all before, so the dialog's commonest
 // source showed "Parameters:" over nothing and the one setting that
 // decides whether it works -- where its files are -- could only be typed
@@ -463,10 +463,28 @@ int CEphDialogRowsOf(CONST char *szKey, int *rgiep, int cMax)
   // with none there Chiron reads 0Ari00 under it. And Horizons: what it
   // has no target for -- the nodes, Lilith, most asteroids -- the Swiss
   // Ephemeris computes (FEphSubmit()), from these folders.
+  //
+  // Not Prometheia. Its files are named one by one, and the folder row
+  // above "Ephemeris File" read as two ways to say one thing -- it is the
+  // Swiss folder, and it only fed a search the dialog never showed
+  // (2026-10-25, the maintainer: "ephemeris folder then ephemeris file is
+  // confusing"). An empty Prometheia field now says which file that
+  // search finds (SzEphPromEmpty()).
   if (FEqSz(szKey, "swiss") || FEqSz(szKey, "jpl") ||
-    FEqSz(szKey, "moshier") || FEqSz(szKey, "prometheia") ||
-    FEqSz(szKey, "horizons"))
+    FEqSz(szKey, "moshier") || FEqSz(szKey, "horizons"))
     rgiep[cRow++] = iepRowPath;
+  if (FEqSz(szKey, "prometheia")) {
+    // In the order a reader wants them: the planets, the planets outside
+    // that file's years, then the asteroids. The table's own order is
+    // the settings file's index space and is appended to, never sorted.
+    CONST int rgiepProm[] = {epPrometheiaEphemeris, epPrometheiaLongspan,
+      epPrometheiaCatalog, epPrometheiaPerturbers};
+    int i;
+    for (i = 0; i < (int)(sizeof(rgiepProm)/sizeof(int)) && cRow < cMax;
+      i++)
+      rgiep[cRow++] = rgiepProm[i];
+    return cRow;
+  }
   return cRow + CEphParamRowsOf(szKey, rgiep + cRow, cMax - cRow);
 }
 
@@ -486,9 +504,20 @@ void SzEphRowEmpty(int iep, flag fLong, char *sz, int cch)
       "Left empty, the program's own folder and the current folder are "
       "searched, and any other folders the settings name (-Yi).");
 #ifdef SWISS
-  else if (iep == epJplFile)
-    sprintf2(sz, cch, !fLong ? "empty: %s" : "Left empty, %s is looked for "
-      "in the ephemeris folders.", SzJplFileDefault());
+  else if (iep == epJplFile) {
+    // The file it will be, found, or that it is not there -- not the
+    // name looked for, which said neither (2026-10-25).
+    char szFound[cchSzMax];
+    if (FSwissFindFile(SzJplFileDefault(), S(szFound)))
+      sprintf2(sz, cch, !fLong ? "empty: uses %s" : "Left empty, %s is "
+        "used: it was found where the program looks. Browse to pick "
+        "another.", !fLong ? SzJplFileDefault() : szFound);
+    else
+      sprintf2(sz, cch, !fLong ? "empty: %s, not found" : "Left empty, %s "
+        "is looked for in the ephemeris folders, and it is not there, so "
+        "the Swiss files answer instead. Browse for a JPL DE file.",
+        SzJplFileDefault());
+  }
 #endif
   else if (iep == epServerUrl)
     sprintf2(sz, cch, !fLong ? "empty: localhost:%d" : "Left empty, the "
@@ -782,8 +811,8 @@ flag FEphTestSource(CONST char *szKey, char *sz, int cch)
       // exactly this, and the reader should be told it is the fix.
       if (eq.rgrow[0].nErr == ephErrOutsideCover &&
         FEqSz(szKey, "prometheia"))
-        EphTestAdd(sz, cch, "A Long-span Ephemeris such as "
-          "linux_m13000p17000.441 (JPL DE441) covers -13000 to 17000");
+        EphTestAdd(sz, cch, "A DE441 file in \"Planets, Other Years\", "
+          "such as linux_m13000p17000.441, covers -13000 to 17000");
     }
   } else {
     // Some answered: say what each one that did not lacked.
@@ -792,9 +821,8 @@ flag FEphTestSource(CONST char *szKey, char *sz, int cch)
         continue;
       if (eq.rgrow[i].nErr == ephErrUnknownBody && FEqSz(szKey, "prometheia")
         && !FSzSet(us.rgszEphParam[epPrometheiaCatalog]))
-        sprintf2(S(szT), "%s: no data -- Prometheia computes asteroids and "
-          "centaurs from a Small-body Catalog, and none is set",
-          szObjDisp[rgobj[i]]);
+        sprintf2(S(szT), "%s: no data -- asteroids and centaurs come from "
+          "the Asteroid Catalog, and none is set", szObjDisp[rgobj[i]]);
       else if (FSzSet(szCap)) {
         char szR[cchSzMax*2];
         SzEphTestReason(szCap, S(szR));

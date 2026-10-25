@@ -11808,6 +11808,25 @@ this is the note that explains the wall of dialogs.
       sentence in its tooltip (Windows: the line under the rows while it
       has focus); Swiss's "file not found in PATH" becomes "X is not in
       the folders searched", followed by the folders, by name.
+    - *Prometheia's rows read as two names for one thing* (the
+      maintainer, 10-25: "ephemeris folder then ephemeris file is
+      confusing", and of "empty: a DE440 file in the folders",
+      "what??!!?"). The folder row was the Swiss folder and only fed a
+      search the dialog never showed. Prometheia now has no folder row;
+      its files are labelled by what they supply -- "Planets, 1550-2650"
+      (DE440), "Planets, Other Years" (DE441), "Asteroid Catalog",
+      "Asteroid Perturbers" -- in that order, and an empty field names the
+      file the search finds ("empty: uses linux_p1550p2650.440", the full
+      path in its tooltip) or what is missing ("empty: none, so 1550-2650
+      only"; "empty: asteroids within 100 years", which is what no
+      perturber kernel means). The JPL File field says "empty: uses
+      de431.eph" or "empty: de431.eph, not found" the same way
+      (`FSwissFindFile()`), and Prometheia's failures name the file in the
+      same words ("the planets file '...' was not found"). The label
+      column is 90 dialog units, from 80, for "Planets, Other Years:".
+      The Win32 build draws no cue banner at all -- it has no common
+      controls 6 manifest -- so there the text is the line under the rows
+      while the field has focus, as before.
     - *Bare mnemonic letters.* Windows acts on an underlined letter
       without Alt in a dialog whose focus is on a button; the port did
       only for buttons, so "e" did not reach the list. Labels with a

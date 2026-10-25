@@ -3030,9 +3030,13 @@ alone: its old lines keep loading.
   writes it alone -- the dialog has no fallback order any more, though
   `-bE a,b` still takes one;
 - the picked source's own rows (`CEphDialogRowsOf()`): its search folder
-  (`-Yi1`) for swiss, jpl, moshier, prometheia and horizons, then its
-  parameters; a label, an edit field greying its default when empty, and
-  Browse for paths;
+  (`-Yi1`) for swiss, jpl, moshier and horizons, then its parameters; a
+  label, an edit field greying what an empty value means, and Browse for
+  paths. Prometheia has no folder row: its four files are named one by
+  one -- "Planets, 1550-2650", "Planets, Other Years", "Asteroid Catalog",
+  "Asteroid Perturbers" -- and an empty file field names the file the
+  search actually finds ("empty: uses linux_p1550p2650.440"), or says what
+  is missing; the JPL File field does the same (`FSwissFindFile()`);
 - a status line: the source's live state, then a Test result;
 - Test: `FEphTestSource()`, the picked source alone with the values typed,
   for the Sun, Moon and Chiron at the chart's moment.

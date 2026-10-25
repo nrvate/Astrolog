@@ -3282,6 +3282,38 @@ void SzSwissPathShown(char *sz, int cch)
 }
 
 
+// Where the Swiss Ephemeris finds a file by name: the first folder of its
+// search path that holds it, walked as SzSwissPathShown() walks it. An
+// empty JPL field in Ephemeris Settings names what this finds, rather than
+// the name it looks for.
+
+flag FSwissFindFile(CONST char *szFile, char *szPath, int cch)
+{
+  char szT[cchSzMax];
+  CONST char *pch, *pchEnd;
+  int cchT;
+
+  *szPath = chNull;
+  if (!FSzSet(szFile))
+    return fFalse;
+  for (pch = SzSwissPathSet(); *pch; pch = pchEnd + (*pchEnd != chNull)) {
+    for (pchEnd = pch; *pchEnd && *pchEnd != chEphemSep; pchEnd++)
+      ;
+    cchT = (int)(pchEnd - pch);
+    while (cchT > 1 && (pch[cchT-1] == chDirSep || pch[cchT-1] == '/'))
+      cchT--;
+    if (cchT <= 0)
+      continue;
+    sprintf2(S(szT), "%.*s%c%s", cchT, pch, chDirSep, szFile);
+    if (FFileExists(szT)) {
+      sprintf2(szPath, cch, "%s", szT);
+      return fTrue;
+    }
+  }
+  return fFalse;
+}
+
+
 // Whether a body was answered by a DIFFERENT ephemeris than the one asked
 // for since the last reset: the library substitutes Moshier for a missing
 // Swiss file (and the Swiss files for a missing JPL one) and still
