@@ -203,26 +203,14 @@ fi
 # outside this file's remit until 2026-09-20, which is how ephsrv-soak.sh's
 # --selftest came to be written, documented, and then RUN BY NOTHING -- the
 # same shape as the prose falsifications it was written to replace, one level
-# up. Only the ones that need no server belong here; the rest are named below
-# so the gap is visible rather than assumed.
-if [ -x tools/ephsrv-cache.sh ]; then
-  expect 0 "ephsrv-cache: the cache gate's own decisions" tools/ephsrv-cache.sh --selftest
-else
-  skip "ephsrv-cache: not present"
-fi
-if [ -x tools/ephsrv-rates.sh ]; then
-  expect 0 "ephsrv-rates: the three rate legs' own decisions" tools/ephsrv-rates.sh --selftest
-else
-  skip "ephsrv-rates: not present"
-fi
+# up. Only the ones that need no server belong here. The server gates went
+# with astrolog-ephd on 2026-10-25 (the cache, rates and soak selftests with
+# them); what is left grades house points, which tools/ephsrv-prometheia.sh
+# asks of Prometheia's daemon.
 expect 0 "system-header-check: a decoy system header loses only with -I ." tools/system-header-check.sh --selftest
 expect 0 "raw-sprintf-check: refuses a bare sprintf, accepts sprintf2 and comments" tools/raw-sprintf-check.sh --selftest
-expect 0 "ephsrv-houses: the houses gate's own decisions" tools/ephsrv-houses.sh --selftest
+expect 0 "ephsrv_houses: the houses grading's own decisions" python3 tools/ephsrv_houses.py --selftest
 expect 0 "houses_ref: the reference implementation's own arithmetic" python3 tools/houses_ref.py --selftest
-expect 0 "star-rates-xengine: the two-engine star rate grading's own decisions" python3 tools/star-rates-xengine.py --selftest
-# ephsrv-soak.sh --selftest is NOT here on purpose: it starts a real server
-# and takes a minute, and trebling the pre-commit command is how a check
-# stops being run (CLAUDE.md). It is a by-hand gate like the other nine.
 
 echo "== $n cases, $skipped skipped"
 [ "$fail" -eq 0 ] || { echo "SELFTEST FAILED: a CI assertion script accepted input it must refuse (or refused good input)"; exit 1; }

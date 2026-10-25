@@ -4452,7 +4452,9 @@ LRestore:
 // equinox, and placing it on the mean ecliptic of t0 moves the origin by the
 // nutation in longitude there (-3.311" for Fagan/Bradley). The server made
 // exactly that mistake and the other project's cross-test found it in an
-// hour; tools/sidplane-anchor.sh is the gate that holds it on that side.
+// hour. The server went on 2026-10-25, its gate with it; the live server
+// group's sidereal-plane scenario still asks this of Prometheia's daemon,
+// and 3.3" is eleven times that group's 0.3" bound.
 static void ApplySidPlaneLocal(double *xx)
 {
   static EPHSIDPLANE sp;
@@ -4941,8 +4943,8 @@ flag FSwissStar(char *sz, real jd, real *rg)
   //
   // Nothing saw it because nothing compared a star with a planet: the suite's
   // server-versus-local leg asks about bodies, the numeric oracle asks Swiss
-  // the same question this asked, so it agreed, and tools/ephsrv-golden.sh has
-  // no star legs at all.
+  // the same question this asked, so it agreed, and the server's golden gate
+  // had no star legs at all.
   if (us.fSidereal && us.fSidereal2)
     iflag = (iflag & ~(int32)SEFLG_SIDEREAL) | SEFLG_J2000 | SEFLG_NONUT;
   // swe_fixstar2() rewrites the name to the star's canonical form in

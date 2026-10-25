@@ -335,6 +335,12 @@ typedef struct _EphTrans {
   flag (*FRead)(CONST EPHQUERY *pq, int iObj, EPHROW *prow);
 } EPHTRANS;
 
+// The fictitious bodies' elements as Astrolog reads them (seorbel.txt on the
+// Swiss path, else the stock set): every build, for the one v4 translation
+// (ephreq.h) that asks any v4 engine for those bodies by their elements.
+extern flag FEphElemGet(int i, double *pjdEpoch, int *pnEquinox,
+  double *pjdEquinox, int *pnCentre, double rgel[6][5], CONST char **pszName);
+
 // The Prometheia source (phase 7) is compiled in only when PROMETHEIA is
 // defined -- the makefiles' pkg-config detection -- and sits in the table
 // before none, so the five indexes above never move.

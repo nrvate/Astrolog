@@ -48,8 +48,10 @@
 // A0 is the MEAN ayanamsa at t0 -- the arc from the MEAN equinox. Handing it
 // the true one instead moves the origin by the nutation in longitude at t0,
 // which is zodiac-dependent (-3.311" Fagan/Bradley, +16.777" Lahiri) and so
-// looks exactly like the defect this code exists to remove. See
-// tools/sidplane-anchor.sh, which is the gate that holds it.
+// looks exactly like the defect this code exists to remove. Its gate,
+// tools/sidplane-anchor.sh, went with the server on 2026-10-25; the live
+// server group's sidereal-plane scenario still asks it of Prometheia's
+// daemon, to a 0.3" bound, under a tenth of the smallest of those shifts.
 typedef struct _EPHSIDPLANE {
   int plane;          // 1 = mean ecliptic of t0, 2 = the invariable plane
   double t0Et;        // the anchor epoch, TT

@@ -94,6 +94,84 @@ typedef struct _EphReqMap {
 } EPHREQMAP;
 
 
+// The Delta T, in seconds, a version 4 question states (3.5) for the UT1
+// instant jd: one function, so every route into a v4 engine states the
+// same one. The user's -Yz value when set; else Swiss's model with the
+// lunar tidal acceleration rTidAcc of the ephemeris that will answer.
+// Swiss adjusts its model to that term, before 1955, so that UT and THAT
+// Moon agree, and a Delta T paired with another Moon is a position error
+// at the wire: 0.0375 s at 1900 between DE431's -25.80 and DE441's -25.936,
+// 0.022" on the Moon (QT_GUI_PLAN.md item 289). 0 keeps whatever term
+// Swiss last loaded. Set around the one call and automatic restored
+// straight after, as ephprom.cpp's hook has done since the Swiss fork's
+// session advised it: nothing runs between the two.
+inline real RDeltaTV4Sec(real jd, double rTidAcc)
+{
+  real r;
+
+  if (us.rDeltaT != rInvalid)
+    return us.rDeltaT;
+  if (rTidAcc != 0.0)
+    swe_set_tid_acc(rTidAcc);
+  r = swe_deltat(jd) * 86400.0;
+  if (rTidAcc != 0.0)
+    swe_set_tid_acc(SE_TIDAL_AUTOMATIC);
+  return r;
+}
+
+
+// One Swiss call -- FSwissPlanetSpec()'s -- as the version 4 profile and
+// object to ask for it with. Every route into a v4 engine comes here: this
+// header's query translation below, the server route's own cast loop
+// (qtdriver.cpp) and the Prometheia library (ephprom.cpp), so no two of
+// them can ask the same engine different questions. They did until
+// 2026-10-25, when the library had a copy of its own: it asked a chart
+// centred on Mars for every correction where this asks light time alone,
+// as swe_calc_pctr() computes it (6-18" apart, Mars's own aberration), and
+// it sent Vulcan as elements where this sent a token prometheiad does not
+// define, refused on every cast.
+//
+// A fictitious body goes as its ELEMENTS (kind 4), the ones Swiss itself
+// reads -- seorbel.txt on its path, else the stock set (ephprom.cpp) -- so
+// a user's edited file is the body every engine computes, and a server
+// needs no token for it. Only a body Astrolog has no elements for goes as
+// its A.15 token (kind 3). Which ephemeris a server reads is the server's
+// business, and its datasetId says which it was: the question carries no
+// ephemeris bit of ours.
+inline flag FEphV4FromSwiss(CONST SWISSSPEC *pss, eph::Profile *ppf,
+  eph::Object *pobj)
+{
+  int32 iflag = (pss->iflag & ~(SEFLG_JPLEPH | SEFLG_MOSEPH)) | SEFLG_SWIEPH;
+  double topo[3], jdEpoch, jdEquinox, rgel[6][5];
+  int nEquinox, nCentre, ie, it;
+  CONST char *szName;
+
+  topo[0] = pss->topoLon; topo[1] = pss->topoLat; topo[2] = pss->topoElv;
+  if (!eph::swiss::ProfileFromSwiss(iflag, pss->iobjCent, pss->nSidMode,
+    topo, ppf))
+    return fFalse;
+  if (pss->nPnt <= 0 && pss->iobj >= SE_FICT_OFFSET &&
+    pss->iobj <= SE_FICT_MAX && FEphElemGet(pss->iobj - SE_FICT_OFFSET,
+    &jdEpoch, &nEquinox, &jdEquinox, &nCentre, rgel, &szName)) {
+    *pobj = eph::Object();
+    pobj->kind = eph::kObjElements;
+    pobj->name = szName;
+    pobj->epoch.jd1 = jdEpoch;
+    pobj->equinox = (uint8_t)nEquinox;
+    pobj->equinoxJd = jdEquinox;
+    pobj->centre = (uint8_t)nCentre;
+    pobj->nTerms = 5;
+    pobj->coef.assign(30, 0.0);
+    for (ie = 0; ie < 6; ie++)
+      for (it = 0; it < 5; it++)
+        pobj->coef[ie * 5 + it] = rgel[ie][it];
+    return fTrue;
+  }
+  return eph::swiss::ObjectFromSwiss(pss->iobj, pss->nPnt > 0 ?
+    pss->nPnt - 1 : -1, pss->nNodMethod, pobj);
+}
+
+
 // Build the request. Returns the number of objects it carries, which is 0
 // when nothing in the query has a version 4 form -- a caller with 0 has
 // no request to send, which is not an error but the end of the matter.
@@ -132,7 +210,6 @@ inline int CEphRequestFromQuery(CONST EPHQUERY *pq, real rDeltaTSec,
     eph::Profile pf;
     eph::Object obj;
     std::vector<uint8_t> rgbThis;
-    double topo[3];
     int ip;
 
     // A star is named rather than numbered, but it is computed with the
@@ -157,17 +234,8 @@ inline int CEphRequestFromQuery(CONST EPHQUERY *pq, real rDeltaTSec,
         ssStar.nSidMode, topoStar, &pf))
         continue;
     } else {
-      if (!FSwissPlanetSpec(pq->rgobj[i], pq->rgcent[i], &ss))
-        continue;
-      // Which ephemeris a server reads is the server's business, and its
-      // datasetId says which it was; the request carries the QUESTION,
-      // not our local backend's bit.
-      ss.iflag = (ss.iflag & ~(SEFLG_JPLEPH | SEFLG_MOSEPH)) | SEFLG_SWIEPH;
-      topo[0] = ss.topoLon; topo[1] = ss.topoLat; topo[2] = ss.topoElv;
-      if (!eph::swiss::ProfileFromSwiss(ss.iflag, ss.iobjCent, ss.nSidMode,
-        topo, &pf) ||
-        !eph::swiss::ObjectFromSwiss(ss.iobj, ss.nPnt > 0 ? ss.nPnt - 1 : -1,
-        ss.nNodMethod, &obj))
+      if (!FSwissPlanetSpec(pq->rgobj[i], pq->rgcent[i], &ss) ||
+        !FEphV4FromSwiss(&ss, &pf, &obj))
         // No version 4 form for this call. Not silent: the object stays
         // open and the chain walk offers it to the next source.
         continue;

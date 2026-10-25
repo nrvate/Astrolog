@@ -1,5 +1,13 @@
 # Ephemeris Server Plan
 
+> **Retired, 2026-10-25.** `astrolog-ephd` was removed from this tree
+> (`QT_GUI_PLAN.md` work log item 289): Ephemeris Prometheia's `prometheiad`
+> serves the same protocol version 4, and the maintainer chose it over
+> keeping a Swiss-backed server. This document is the record of building
+> it and what that taught, not a plan; the server's source is in git
+> history before that date. The protocol files under `ephsrv/` stay, and
+> the client this plan's Part II specifies is `EPHEMERIS_CLIENT_PLAN.md`.
+
 Astrolog's ephemeris positions come from data files on local disk (Swiss
 Ephemeris `-bs`/`-b`, JPL files `-bj`) or live web queries (JPL Horizons
 `-bJ`, one body per HTTP fetch with a 64-entry reply cache). This plan adds a

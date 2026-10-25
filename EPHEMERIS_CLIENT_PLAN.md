@@ -1,5 +1,11 @@
 # Ephemeris Client Plan
 
+> **Since 2026-10-25 the server is `prometheiad`.** This tree's own,
+> `astrolog-ephd`, was retired (`QT_GUI_PLAN.md` work log item 289); the
+> client is unchanged in what it asks, and its live tests start Ephemeris
+> Prometheia's daemon and hold every cast to the bit against Prometheia's
+> library on the same files. References below to astrolog-ephd are history.
+
 The client half of the ephemeris server project. The server's design and
 protocol are the authority in EPHEMERIS_SERVER_PLAN.md -- the protocol
 itself is EPHEMERIS_PLUGINS_PLAN.md §3 since version 4, with

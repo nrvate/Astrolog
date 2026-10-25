@@ -20,200 +20,16 @@
 // Thread safety: one engine handle, one cast at a time, like the Swiss
 // path -- the library's engine is not safe for concurrent use, and
 // nothing here takes a second one.
-#ifdef PROMETHEIA
-
+// The fictitious bodies' elements are compiled into every build, not only
+// one with the library: the server route asks a v4 server for those bodies
+// with the same elements this source computes them from (ephreq.h,
+// FEphV4FromSwiss), so the two routes cannot ask different questions.
 #include "astrolog.h"
 #include "swephexp.h"
-#include "ephprom.h"
 #include "ephpromelem.h"
-#include <prometheia/prometheia.h>
-#include <math.h>
-#include <string.h>
 #include <sys/stat.h>
-
-// --------------------------------------------------------------------------
-// Parameters (4.2/4.3). The DECLARATIONS are rows of the generated table
-// (ephparam.h) and the VALUES are us.rgszEphParam[], both shared with
-// every other source -- this file holds neither, and that is the fix:
-// holding its own copy of either is what made the command line, the
-// settings file and the dialog all miss this source entirely.
-
-static CONST int rgiepPromShared[cepPromParam] = {
-  epPrometheiaEphemeris, epPrometheiaCatalog, epPrometheiaPerturbers,
-  epPrometheiaLongspan
-};
-
-// This source's index 0..2 to the shared parameter space. The one place
-// the two numberings meet.
-static int IepPromShared(int iParam)
-{
-  return FBetween(iParam, 0, cepPromParam-1) ? rgiepPromShared[iParam] : -1;
-}
-
-void EphPromSetParam(int iParam, CONST char *szValue)
-{
-  int iep = IepPromShared(iParam);
-
-  if (iep < 0)
-    return;
-  // FEphParamSet() drops what the owning source has open when the value
-  // actually changes, so the reopen this used to do by hand is the
-  // shared path's business now and happens however the value was set.
-  FEphParamSet(iep, szValue);
-}
-
-CONST char *SzEphPromParam(int iParam)
-{
-  int iep = IepPromShared(iParam);
-
-  return iep < 0 ? "" : SzSet(us.rgszEphParam[iep]);
-}
-
-// --------------------------------------------------------------------------
-// The engine.
-
-static prometheia_engine *pephProm = NULL;
-static flag fEphPromOpen = fFalse;      // resolved and opened
-static char szEphPromState[512];        // the current state text
-static char szEphPromEphe[300], szEphPromCat[300], szEphPromPert[300],
-  szEphPromLong[300];
-
-// What the open engine was opened FROM, so a parameter that has moved
-// since is noticed here rather than announced from elsewhere. A
-// notification can be missed by any path that writes the value another
-// way; comparing at the point of use cannot.
-// Not a fixed buffer: the values are us.rgszEphParam[] entries, which are
-// FCloneSz'd and unbounded, and a truncated COPY can never compare equal
-// to its original -- so a path of 256 characters or more, which an
-// absolute path easily is, would take the reopen branch on every single
-// call for the life of the process (phase 8 review, D6). Cloned, so the
-// comparison is against the whole value.
-static char *rgszEphPromOpenedFrom[cepPromParam] = {NULL, NULL, NULL, NULL};
-
-// The Delta T hook, bound to Astrolog's own: a finite per-cast value
-// when the question carries one, else the user's -Yz override, else the
-// chart's model -- swe_deltat(), iterated once so the answer is
-// Astrolog's value AT the instant asked and not at that instant's UT
-// guess of it. What calc_ut asks is TT - UT1 in seconds at a TT Julian
-// date, which is what both of those are.
-static real g_rDeltaTSec = rInvalid;
-
-// The lunar tidal acceleration that belongs with the ephemeris this
-// engine answers from, or 0 when it is not known. Swiss's Delta-T model
-// is adjusted to the tidal term of the lunar ephemeris answering, so UT
-// and that Moon agree (swi_adjust_for_tidacc); the term is therefore part
-// of the PAIRING, not a property of Swiss. This hook used to take whatever
-// term Swiss had last loaded -- DE431's from the semo files, or DE441's if
-// a JPL file had just been opened -- so Prometheia's DE441 Moon at the
-// year 1000 read 203.4918752 or 203.4934645 depending on what ran before
-// it (an 11.3 s Delta-T, 5.7"), measured 2026-10-24 and confirmed with the
-// Swiss Ephemeris fork's session: 203.4934645 is the self-consistent
-// DE441 Moon, the other DE441 at DE431's TT.
-static double rEphPromTidAcc = 0.0;
-
-// Swiss's DE number to tidal term, as swi_get_tid_acc() maps it (ts.20
-// swephlib.c; the constants are swephexp.h's). 0 for a DE number it does
-// not list, which leaves Swiss's own term in force as before.
-static double RTidAccOfDenum(int denum)
-{
-  switch (denum) {
-  case 200: return SE_TIDAL_DE200;
-  case 403: return SE_TIDAL_DE403;
-  case 404: return SE_TIDAL_DE404;
-  case 405: return SE_TIDAL_DE405;
-  case 406: return SE_TIDAL_DE406;
-  case 421: return SE_TIDAL_DE421;
-  case 422: return SE_TIDAL_DE422;
-  case 430: return SE_TIDAL_DE430;
-  case 431: return SE_TIDAL_DE431;
-  case 440: case 441: return SE_TIDAL_DE441;
-  }
-  return 0.0;
-}
-
-static double FEnumDeltaTProm(void *puser, double jd)
-{
-  double r;
-
-  (void)puser;
-  if (g_rDeltaTSec != rInvalid)
-    return (double)g_rDeltaTSec;
-  // The user's -Yz0 override binds both sources to the same TT instant:
-  // FSwissPlanet applies it as us.rDeltaT/86400 (calc.cpp), so the same
-  // seconds, not the model's, are what this hook must answer too.
-  if (us.rDeltaT != rInvalid)
-    return (double)us.rDeltaT;
-  // swe_deltat() answers in DAYS; the hook is seconds of TT - UT1. With
-  // this engine's own tidal term set around the call and automatic
-  // restored straight after, as the fork's session advised: nothing runs
-  // between the two, so no other calculation sees the term.
-  if (rEphPromTidAcc != 0.0)
-    swe_set_tid_acc(rEphPromTidAcc);
-  r = swe_deltat(jd - swe_deltat(jd) / 86400.0) * 86400.0;
-  if (rEphPromTidAcc != 0.0)
-    swe_set_tid_acc(SE_TIDAL_AUTOMATIC);
-  return r;
-}
-
-void EphPromStop(void)
-{
-  int iep;
-
-  prometheia_engine_close(pephProm);
-  pephProm = NULL;
-  fEphPromOpen = fFalse;
-  rEphPromTidAcc = 0.0;
-  // What the engine was opened from describes an OPEN engine, so it goes
-  // with it. Held past the close, these were three of Astrolog's own
-  // allocations that nothing ever released: every cast through this
-  // source ended in "Number of memory allocations not freed: 3".
-  for (iep = 0; iep < cepPromParam; iep++) {
-    DeallocatePIf(rgszEphPromOpenedFrom[iep]);
-    rgszEphPromOpenedFrom[iep] = NULL;
-  }
-  sprintf2(S(szEphPromState), "closed");
-}
-
-// Search a bare file name over Astrolog's own -Yi ephemeris directories
-// -- the same list SwissEnsurePath() walks -- then over ephe/ beside the
-// program, which is where a Prometheia checkout keeps its kernels. A
-// name with a directory in it is tried as given. The first hit wins;
-// fFalse leaves szPath empty.
-flag FEphPromFindFile(CONST char *szFile, char *szPath, int cch)
-{
-  char szTry[300];
-  int i;
-
-  if (!FSzSet(szFile))
-    return fFalse;
-  if (strchr(szFile, chDirSep) != NULL) {
-    if (!FFileExists(szFile))
-      return fFalse;
-    sprintf2(szPath, cch, "%s", szFile);
-    return fTrue;
-  }
-  for (i = 0; i < 10; i++) {
-    char szDir[cchSzMax];
-    if (!FSzSet(us.rgszPath[i]))
-      continue;
-    // Resolved as SwissEnsurePath() resolves it: a relative directory is
-    // the executable's, not the working directory's. Read as given, the
-    // default "-Yi1 ephem" found the kernels only when the program was
-    // started from its own folder.
-    SzPathDirAbs(us.rgszPath[i], S(szDir));
-    sprintf2(S(szTry), "%s%c%s", szDir, chDirSep, szFile);
-    if (FFileExists(szTry)) {
-      sprintf2(szPath, cch, "%s", szTry);
-      return fTrue;
-    }
-  }
-  sprintf2(S(szTry), "ephe%c%s", chDirSep, szFile);
-  if (FFileExists(szTry)) {
-    sprintf2(szPath, cch, "%s", szTry);
-    return fTrue;
-  }
-  return fFalse;
-}
+#include <string.h>
+#include <stdlib.h>
 
 // --------------------------------------------------------------------------
 // The fictitious bodies' elements: Swiss's seorbel.txt, read here.
@@ -434,8 +250,9 @@ static CONST EPHPROMELEM *PeEphPromElem(int i)
       if (c < 0) {
         char szT[cchSzMax + 16 + 120];
 
-        sprintf2(S(szT), "%s has a line the Prometheia source cannot read; "
-          "the fictitious bodies use the stock elements instead.", szFile);
+        sprintf2(S(szT), "%s has a line Astrolog cannot read as elements; "
+          "a v4 engine is given the stock elements for the fictitious bodies "
+          "instead.", szFile);
         PrintWarning(szT);
       }
     }
@@ -456,6 +273,29 @@ int CEphPromElemSets(char *szFile, int cch)
 
   sprintf2(szFile, cch, "%s", fElemUser ? szElemFile : "");
   return pe == NULL ? 0 : fElemUser ? cElemUser : cEphPromElem;
+}
+
+// Element set i of fictitious body SE_FICT_OFFSET + i -- the set
+// PeEphPromElem() gives this source -- as plain values, for the one v4
+// translation (ephreq.h, FEphV4FromSwiss) that puts a kind 4 object on
+// every route into a v4 engine. fFalse when there is no such set.
+flag FEphElemGet(int i, double *pjdEpoch, int *pnEquinox, double *pjdEquinox,
+  int *pnCentre, double rgel[6][5], CONST char **pszName)
+{
+  CONST EPHPROMELEM *pe = PeEphPromElem(i);
+  int ie, it;
+
+  if (pe == NULL)
+    return fFalse;
+  *pjdEpoch = pe->epoch;
+  *pnEquinox = pe->equinox;
+  *pjdEquinox = pe->equinoxJd;
+  *pnCentre = pe->centre;
+  for (ie = 0; ie < 6; ie++)
+    for (it = 0; it < 5; it++)
+      rgel[ie][it] = pe->el[ie][it];
+  *pszName = pe->szName;
+  return fTrue;
 }
 
 // Two names are the same if they agree up to the first non-ASCII byte in
@@ -496,6 +336,198 @@ double REphPromElemDiff(CONST char *szFile)
   }
   return rMax;
 }
+
+#ifdef PROMETHEIA
+
+#include "ephprom.h"
+#include "ephreq.h"
+#include <prometheia/prometheia.h>
+#include <math.h>
+
+// --------------------------------------------------------------------------
+// Parameters (4.2/4.3). The DECLARATIONS are rows of the generated table
+// (ephparam.h) and the VALUES are us.rgszEphParam[], both shared with
+// every other source -- this file holds neither, and that is the fix:
+// holding its own copy of either is what made the command line, the
+// settings file and the dialog all miss this source entirely.
+
+static CONST int rgiepPromShared[cepPromParam] = {
+  epPrometheiaEphemeris, epPrometheiaCatalog, epPrometheiaPerturbers,
+  epPrometheiaLongspan
+};
+
+// This source's index 0..2 to the shared parameter space. The one place
+// the two numberings meet.
+static int IepPromShared(int iParam)
+{
+  return FBetween(iParam, 0, cepPromParam-1) ? rgiepPromShared[iParam] : -1;
+}
+
+void EphPromSetParam(int iParam, CONST char *szValue)
+{
+  int iep = IepPromShared(iParam);
+
+  if (iep < 0)
+    return;
+  // FEphParamSet() drops what the owning source has open when the value
+  // actually changes, so the reopen this used to do by hand is the
+  // shared path's business now and happens however the value was set.
+  FEphParamSet(iep, szValue);
+}
+
+CONST char *SzEphPromParam(int iParam)
+{
+  int iep = IepPromShared(iParam);
+
+  return iep < 0 ? "" : SzSet(us.rgszEphParam[iep]);
+}
+
+// --------------------------------------------------------------------------
+// The engine.
+
+static prometheia_engine *pephProm = NULL;
+static flag fEphPromOpen = fFalse;      // resolved and opened
+static char szEphPromState[512];        // the current state text
+static char szEphPromEphe[300], szEphPromCat[300], szEphPromPert[300],
+  szEphPromLong[300];
+
+// What the open engine was opened FROM, so a parameter that has moved
+// since is noticed here rather than announced from elsewhere. A
+// notification can be missed by any path that writes the value another
+// way; comparing at the point of use cannot.
+// Not a fixed buffer: the values are us.rgszEphParam[] entries, which are
+// FCloneSz'd and unbounded, and a truncated COPY can never compare equal
+// to its original -- so a path of 256 characters or more, which an
+// absolute path easily is, would take the reopen branch on every single
+// call for the life of the process (phase 8 review, D6). Cloned, so the
+// comparison is against the whole value.
+static char *rgszEphPromOpenedFrom[cepPromParam] = {NULL, NULL, NULL, NULL};
+
+// The Delta T hook, bound to Astrolog's own: a finite per-cast value
+// when the question carries one, else the user's -Yz override, else the
+// chart's model -- swe_deltat(), iterated once so the answer is
+// Astrolog's value AT the instant asked and not at that instant's UT
+// guess of it. What calc_ut asks is TT - UT1 in seconds at a TT Julian
+// date, which is what both of those are.
+static real g_rDeltaTSec = rInvalid;
+
+// The lunar tidal acceleration that belongs with the ephemeris this
+// engine answers from, or 0 when it is not known. Swiss's Delta-T model
+// is adjusted to the tidal term of the lunar ephemeris answering, so UT
+// and that Moon agree (swi_adjust_for_tidacc); the term is therefore part
+// of the PAIRING, not a property of Swiss. This hook used to take whatever
+// term Swiss had last loaded -- DE431's from the semo files, or DE441's if
+// a JPL file had just been opened -- so Prometheia's DE441 Moon at the
+// year 1000 read 203.4918752 or 203.4934645 depending on what ran before
+// it (an 11.3 s Delta-T, 5.7"), measured 2026-10-24 and confirmed with the
+// Swiss Ephemeris fork's session: 203.4934645 is the self-consistent
+// DE441 Moon, the other DE441 at DE431's TT.
+static double rEphPromTidAcc = 0.0;
+
+// Swiss's DE number to tidal term, as swi_get_tid_acc() maps it (ts.20
+// swephlib.c; the constants are swephexp.h's). 0 for a DE number it does
+// not list, which leaves Swiss's own term in force as before.
+static double RTidAccOfDenum(int denum)
+{
+  switch (denum) {
+  case 200: return SE_TIDAL_DE200;
+  case 403: return SE_TIDAL_DE403;
+  case 404: return SE_TIDAL_DE404;
+  case 405: return SE_TIDAL_DE405;
+  case 406: return SE_TIDAL_DE406;
+  case 421: return SE_TIDAL_DE421;
+  case 422: return SE_TIDAL_DE422;
+  case 430: return SE_TIDAL_DE430;
+  case 431: return SE_TIDAL_DE431;
+  case 440: case 441: return SE_TIDAL_DE441;
+  }
+  return 0.0;
+}
+
+static double FEnumDeltaTProm(void *puser, double jd)
+{
+  double r;
+
+  (void)puser;
+  if (g_rDeltaTSec != rInvalid)
+    return (double)g_rDeltaTSec;
+  // The user's -Yz0 override binds both sources to the same TT instant:
+  // FSwissPlanet applies it as us.rDeltaT/86400 (calc.cpp), so the same
+  // seconds, not the model's, are what this hook must answer too.
+  if (us.rDeltaT != rInvalid)
+    return (double)us.rDeltaT;
+  // swe_deltat() answers in DAYS; the hook is seconds of TT - UT1. With
+  // this engine's own tidal term set around the call and automatic
+  // restored straight after, as the fork's session advised: nothing runs
+  // between the two, so no other calculation sees the term.
+  if (rEphPromTidAcc != 0.0)
+    swe_set_tid_acc(rEphPromTidAcc);
+  r = swe_deltat(jd - swe_deltat(jd) / 86400.0) * 86400.0;
+  if (rEphPromTidAcc != 0.0)
+    swe_set_tid_acc(SE_TIDAL_AUTOMATIC);
+  return r;
+}
+
+void EphPromStop(void)
+{
+  int iep;
+
+  prometheia_engine_close(pephProm);
+  pephProm = NULL;
+  fEphPromOpen = fFalse;
+  rEphPromTidAcc = 0.0;
+  // What the engine was opened from describes an OPEN engine, so it goes
+  // with it. Held past the close, these were three of Astrolog's own
+  // allocations that nothing ever released: every cast through this
+  // source ended in "Number of memory allocations not freed: 3".
+  for (iep = 0; iep < cepPromParam; iep++) {
+    DeallocatePIf(rgszEphPromOpenedFrom[iep]);
+    rgszEphPromOpenedFrom[iep] = NULL;
+  }
+  sprintf2(S(szEphPromState), "closed");
+}
+
+// Search a bare file name over Astrolog's own -Yi ephemeris directories
+// -- the same list SwissEnsurePath() walks -- then over ephe/ beside the
+// program, which is where a Prometheia checkout keeps its kernels. A
+// name with a directory in it is tried as given. The first hit wins;
+// fFalse leaves szPath empty.
+flag FEphPromFindFile(CONST char *szFile, char *szPath, int cch)
+{
+  char szTry[300];
+  int i;
+
+  if (!FSzSet(szFile))
+    return fFalse;
+  if (strchr(szFile, chDirSep) != NULL) {
+    if (!FFileExists(szFile))
+      return fFalse;
+    sprintf2(szPath, cch, "%s", szFile);
+    return fTrue;
+  }
+  for (i = 0; i < 10; i++) {
+    char szDir[cchSzMax];
+    if (!FSzSet(us.rgszPath[i]))
+      continue;
+    // Resolved as SwissEnsurePath() resolves it: a relative directory is
+    // the executable's, not the working directory's. Read as given, the
+    // default "-Yi1 ephem" found the kernels only when the program was
+    // started from its own folder.
+    SzPathDirAbs(us.rgszPath[i], S(szDir));
+    sprintf2(S(szTry), "%s%c%s", szDir, chDirSep, szFile);
+    if (FFileExists(szTry)) {
+      sprintf2(szPath, cch, "%s", szTry);
+      return fTrue;
+    }
+  }
+  sprintf2(S(szTry), "ephe%c%s", chDirSep, szFile);
+  if (FFileExists(szTry)) {
+    sprintf2(szPath, cch, "%s", szTry);
+    return fTrue;
+  }
+  return fFalse;
+}
+
 
 // The ephemeris, catalog and perturbers resolved to paths. An empty
 // ephemeris parameter is the source's own default: the DE440 files the
@@ -1346,22 +1378,26 @@ static void StopProm()
 }
 
 // One EPHQUERY: one instant, objects by Astrolog index, settings by the
-// program's own fields. The internal layer answers each object through
-// one profile built from FSwissPlanetSpec()'s decisions; the row is the
-// answer's first six in the protocol's order, longitude carrying
-// is.rSid subtracted like FSwissPlanet()'s own output.
+// program's own fields. The question is the one every route into a v4
+// engine asks (ephreq.h, CEphRequestFromQuery()): the same eph::Request the
+// server route sends prometheiad, with the same Delta T, computed here by
+// the same engine. This had a translation of its own until 2026-10-25,
+// and the two had parted -- a Mars-centred chart, Vulcan, the Delta T
+// before 1955 (QT_GUI_PLAN.md item 289) -- so now there is one, and the
+// only difference between the two routes is the transport. The row is the
+// answer's first six in the protocol's order, longitude carrying is.rSid
+// subtracted like FSwissPlanet()'s own output.
 static flag FSubmitProm(EPHQUERY *pq)
 {
-  char szWhy[256], szStar[cchSzDef];
-  char *pch;
-  eph::Profile rgpf[objMax];
-  eph::Object rgobj[objMax];
+  char szWhy[256];
+  eph::Request req;
+  EPHREQMAP rgmap[objMax];
   double rgval[objMax * kEphPromStride];
   EPHPROMANSWER rga[objMax];
   EPHPROMQ q;
-  SWISSSPEC ss;
   EPHROW *prow;
-  int i, naif, naifCent;
+  flag rgfAsked[objMax];
+  int cMap, iM, i, iO;
 
   if (!FEphPromStart(szWhy, (int)sizeof(szWhy))) {
     // Why, in the plugin's words, for the walk to report if nothing
@@ -1371,196 +1407,44 @@ static flag FSubmitProm(EPHQUERY *pq)
     return fFalse;               // the walk asks the next source
   }
 
-  for (i = 0; i < pq->cobj; i++) {
-    rgpf[i] = eph::Profile();
-    rgobj[i] = eph::Object();
-    // Each object names ITS OWN profile. The question carries one
-    // profile per object (q.cprof = pq->cobj), and this was never
-    // assigned -- eph::Object::profile defaults to 0, so every object in
-    // the cast was computed under OBJECT 0's profile, and the bounds
-    // check passed because 0 is always in range. A heliocentric chart
-    // computed the lunar node heliocentrically (FSwissPlanetSpec strips
-    // SEFLG_HELCTR for nodal objects, so the node's own profile is
-    // geocentric and object 0's is not), and the same for a custom
-    // object whose own flags invert the chart's, a topocentric object
-    // beside a non-topocentric one, and a star beside bodies. Wrong
-    // positions, no error, nothing said (phase 8 review, E2).
-    rgobj[i].profile = (uint8_t)i;
-    rga[i].prgVal = rgval + i * kEphPromStride;
-    prow = &pq->rgrow[i];
-    if (pq->rgisrc[i] != ephSrcNone)
-      continue;                  // another source in the walk won it
+  // The Delta T paired with THIS engine's Moon: rEphPromTidAcc is the
+  // tidal term of the file it opened, which the server route has to
+  // assume for a server (qtdriver.cpp, JdeSrvQt()).
+  cMap = CEphRequestFromQuery(pq, RDeltaTV4Sec(pq->rJD, rEphPromTidAcc),
+    &req, rgmap);
+  for (i = 0; i < pq->cobj; i++)
+    rgfAsked[i] = fFalse;
+  for (iM = 0; iM < cMap; iM++)
+    rgfAsked[rgmap[iM].iObjQuery] = fTrue;
+  // An object with no version 4 form -- the South Node, a custom body that
+  // maps to nothing, a sidereal mode or flag the protocol cannot spell --
+  // is unsupported here, and the walk offers it to the next source.
+  for (i = 0; i < pq->cobj; i++)
+    if (pq->rgisrc[i] == ephSrcNone && !rgfAsked[i])
+      pq->rgrow[i].nErr = ephErrUnsupported;
+  if (cMap == 0)
+    return fTrue;
 
-    if (pq->rgszName[i] != NULL) {
-      // A fixed star. rgszName carries the Swiss canonical form,
-      // "Name,bayer"; the plugin resolves the name part in Prometheia's
-      // own namespace, which knows the same IAU names. The center and
-      // the corrections are FSwissStar()'s: GetSwissFlags() and the
-      // heliocentric bit it adds for a non-Earth center.
-      sprintf2(S(szStar), "%s", pq->rgszName[i]);
-      pch = strchr(szStar, ',');
-      if (pch != NULL)
-        *pch = chNull;           // the name alone
-      rgobj[i].kind = eph::kObjStar;
-      rgobj[i].name = szStar;
-      if (us.objCenter == oEar)
-        rgpf[i].observer = eph::kObsGeo;
-      else
-        rgpf[i].observer = us.fBarycenter ? eph::kObsBary : eph::kObsHelio;
-      rgpf[i].corrections = us.fTruePos ? 0 : eph::kCorrMask;
-      rgpf[i].frame = us.fNoNutation ? eph::kFrameMeanOfDate :
-        eph::kFrameTrueOfDate;
-      if (us.fSidereal) {
-        // "-Ys" is Fagan/Bradley either way; "-Yss" moves the PLANE, not
-        // the zodiac, which is a profile field since C ABI 6.
-        rgpf[i].zodiac = "fagan-bradley";
-        if (us.fSidereal2)
-          rgpf[i].siderealPlane = eph::kSidPlaneInvariable;
-      }
-      continue;
-    }
-
-    if (!FSwissPlanetSpec(pq->rgobj[i], pq->rgcent[i], &ss)) {
-      // A body the program itself cannot map: the South Node, a custom
-      // body that maps to nothing. ephswiss.cpp answers these
-      // "data unavailable" because its delegation cannot tell; this
-      // conversion can -- nothing was mapped, so it is unsupported.
-      prow->nErr = ephErrUnsupported;
-      continue;
-    }
-    // The two sidereal modes this program spells are Fagan/Bradley and
-    // Fagan/Bradley on the solar-system plane, and C ABI 6 serves both.
-    // Any OTHER base ayanamsa would come back as Fagan/Bradley without
-    // saying so, which is a silently wrong zodiac, so it is refused.
-    if ((ss.iflag & SEFLG_SIDEREAL) &&
-      (ss.nSidMode & ~SE_SIDBIT_SSY_PLANE) != SE_SIDM_FAGAN_BRADLEY) {
-      prow->nErr = ephErrUnsupported;
-      continue;
-    }
-
-    if (ss.iobj == SE_TRUE_NODE || ss.iobj == SE_MEAN_NODE) {
-      // The Moon's named node bodies are kind 1 here: the ascending
-      // node, osculating or mean as the setting chose.
-      rgobj[i].kind = eph::kObjOrbitPoint;
-      rgobj[i].naif = PROMETHEIA_MOON;
-      rgobj[i].point = eph::kPtAscNode;
-      rgobj[i].method = ss.iobj == SE_TRUE_NODE ? eph::kMethOsculating :
-        eph::kMethMean;
-    } else if (ss.iobj == SE_OSCU_APOG || ss.iobj == SE_MEAN_APOG) {
-      rgobj[i].kind = eph::kObjOrbitPoint;
-      rgobj[i].naif = PROMETHEIA_MOON;
-      rgobj[i].point = eph::kPtApo;
-      rgobj[i].method = ss.iobj == SE_OSCU_APOG ? eph::kMethOsculating :
-        eph::kMethMean;
-    } else if (ss.iobj == SE_INTP_APOG || ss.iobj == SE_INTP_PERG) {
-      // The "natural" apogee and perigee: Prometheia serves no
-      // interpolated points (A.14's method 2 is unanswered).
-      prow->nErr = ephErrUnsupported;
-      continue;
-    } else if (ss.nPnt > 0) {
-      // A node or apsis of a planet, through a customized object.
-      rgobj[i].kind = eph::kObjOrbitPoint;
-      naif = NNaifFromSwiss(ss.iobj);
-      if (naif == ephNativeNone) {
-        prow->nErr = ephErrUnsupported;
-        continue;
-      }
-      rgobj[i].naif = naif;
-      rgobj[i].point = (uint8_t)(ss.nPnt - 1);
-      rgobj[i].method = ss.nNodMethod == SE_NODBIT_OSCU ? eph::kMethOsculating :
-        eph::kMethMean;
-    } else if (ss.iobj >= SE_FICT_OFFSET &&
-      PeEphPromElem(ss.iobj - SE_FICT_OFFSET) != NULL) {
-      // A fictitious body: its elements from the seorbel.txt Swiss would
-      // read, else the stock set compiled in (ephpromelem.h), and every set
-      // is served -- Vulcan included, which the engine's shipped token set
-      // does not define.
-      CONST EPHPROMELEM *pe = PeEphPromElem(ss.iobj - SE_FICT_OFFSET);
-      int ie, it;
-      rgobj[i].kind = eph::kObjElements;
-      rgobj[i].name = pe->szName;
-      rgobj[i].epoch.jd1 = pe->epoch;
-      rgobj[i].equinox = (uint8_t)pe->equinox;
-      rgobj[i].equinoxJd = pe->equinoxJd;
-      rgobj[i].centre = (uint8_t)pe->centre;
-      rgobj[i].nTerms = 5;
-      rgobj[i].coef.assign(30, 0.0);
-      for (ie = 0; ie < 6; ie++)
-        for (it = 0; it < 5; it++)
-          rgobj[i].coef[ie * 5 + it] = pe->el[ie][it];
-    } else {
-      rgobj[i].kind = eph::kObjBody;
-      naif = NNaifFromSwiss(ss.iobj);
-      if (naif == ephNativeNone) {
-        prow->nErr = ephErrUnsupported;
-        continue;
-      }
-      rgobj[i].naif = naif;
-    }
-
-    // The profile the spec's flags spell.
-    if (ss.iobjCent >= 0) {
-      rgpf[i].observer = eph::kObsBody;
-      naifCent = NNaifFromSwiss(ss.iobjCent);
-      if (naifCent == ephNativeNone) {
-        prow->nErr = ephErrUnsupported;
-        continue;
-      }
-      rgpf[i].observerBody = naifCent;
-    } else if (ss.iflag & SEFLG_HELCTR)
-      rgpf[i].observer = eph::kObsHelio;
-    else if (ss.iflag & SEFLG_BARYCTR)
-      rgpf[i].observer = eph::kObsBary;
-    else if (ss.iflag & SEFLG_TOPOCTR) {
-      rgpf[i].observer = eph::kObsTopo;
-      rgpf[i].siteLonEastDeg = -ciCore.lon;
-      rgpf[i].siteLatDeg = ciCore.lat;
-      rgpf[i].siteHeightM = us.elvDef;
-    }
-    // Swiss's TRUEPOS is no corrections at all -- the protocol's mask 0
-    // (ephswiss.h's own mapping, case 0 = SEFLG_TRUEPOS), not light time
-    // alone, which is the astrometric quantity Swiss never computes there.
-    rgpf[i].corrections = (ss.iflag & SEFLG_TRUEPOS) ? 0 : eph::kCorrMask;
-    rgpf[i].frame = (ss.iflag & SEFLG_NONUT) ? eph::kFrameMeanOfDate :
-      eph::kFrameTrueOfDate;
-    rgpf[i].speeds = (ss.iflag & SEFLG_SPEED) != 0;
-    if (ss.iflag & SEFLG_SIDEREAL) {
-      rgpf[i].zodiac = "fagan-bradley";
-      if (ss.nSidMode & SE_SIDBIT_SSY_PLANE)
-        rgpf[i].siderealPlane = eph::kSidPlaneInvariable;
-    }
-  }
-
-  // One internal question: one row per object, at the query's instant,
-  // on the UT1 scale rJD already is (it is the instant FSwissPlanet()
-  // consumes, and the plugin's delta T hook is bound to the chart's own
-  // model).
-  q.nTs = eph::kTimeUT1; q.fList = fFalse;
-  q.jd1 = pq->rJD; q.jd2 = 0.0; q.stepNs = 0; q.cRow = 1;
+  // One internal question, as the request states it: one row, at its TT
+  // instant, with its Delta T, which the engine's hook answers for
+  // anything that needs UT (FEnumDeltaTProm()).
+  for (iO = 0; iO < (int)req.objs.size(); iO++)
+    rga[iO].prgVal = rgval + iO * kEphPromStride;
+  q.nTs = eph::kTimeTT; q.fList = fFalse;
+  q.jd1 = req.start.jd1; q.jd2 = req.start.jd2; q.stepNs = 0; q.cRow = 1;
   q.prgJd = NULL;
-  q.rDeltaTSec = rInvalid;
-  q.cprof = pq->cobj; q.pargprof = rgpf;
-  q.cobj = pq->cobj; q.pargobj = rgobj;
+  q.rDeltaTSec = req.deltaTSec;
+  q.cprof = (int)req.profiles.size(); q.pargprof = req.profiles.data();
+  q.cobj = (int)req.objs.size(); q.pargobj = req.objs.data();
   if (!FEphPromCompute(&q, rga))
     return fFalse;               // the engine could not serve the cast
 
-  for (i = 0; i < pq->cobj; i++) {
-    if (pq->rgisrc[i] != ephSrcNone)
-      continue;
+  for (iM = 0; iM < cMap; iM++) {
+    i = rgmap[iM].iObjQuery;
+    iO = rgmap[iM].iObjReq;
     prow = &pq->rgrow[i];
-    // A row the FIRST loop already refused stays refused. It skipped
-    // only on rgisrc, which the walk does not set until FSubmit returns
-    // -- so an object this conversion had declared unsupported was
-    // handed to the engine anyway, with a default or half-built object,
-    // and if the engine answered it the refusal was overwritten with
-    // ephErrNone and a computed row. The walk then CLAIMS that row and
-    // never asks the source behind it. Worst with a naif of 0, which is
-    // the solar-system barycentre and which the engine does serve: the
-    // South Node could come back as the SSB's position, marked answered.
-    if (prow->nErr != ephErrNone)
-      continue;
-    if (rga[i].rowsOk < 1) {
-      prow->nErr = rga[i].errCode;   // the A.17 values are the ephErr* ones
+    if (rga[iO].rowsOk < 1) {
+      prow->nErr = rga[iO].errCode;   // the A.17 values are the ephErr* ones
       continue;
     }
     // Star rows are the entry point's own six (ephem.h), and they carry
@@ -1583,16 +1467,16 @@ static flag FSubmitProm(EPHQUERY *pq)
     // degrees out -- which is exactly the defect the server source had
     // as P1. The prometheia group's star-parity leg is the net, and it
     // checks provenance so a swiss fallback cannot answer for both.
-    prow->rg[0] = rgobj[i].kind == eph::kObjStar ? rga[i].prgVal[0] :
-      rga[i].prgVal[0] - is.rSid;
-    prow->rg[1] = rga[i].prgVal[1];
-    prow->rg[2] = rga[i].prgVal[2];
-    prow->rg[3] = rga[i].prgVal[3];
-    prow->rg[4] = rga[i].prgVal[4];
-    prow->rg[5] = rga[i].prgVal[5];
+    prow->rg[0] = req.objs[iO].kind == eph::kObjStar ? rga[iO].prgVal[0] :
+      rga[iO].prgVal[0] - is.rSid;
+    prow->rg[1] = rga[iO].prgVal[1];
+    prow->rg[2] = rga[iO].prgVal[2];
+    prow->rg[3] = rga[iO].prgVal[3];
+    prow->rg[4] = rga[iO].prgVal[4];
+    prow->rg[5] = rga[iO].prgVal[5];
     prow->nErr = ephErrNone;
-    prow->nNativeRes = rga[i].naif == eph::kNaifNone ? ephNativeNone :
-      rga[i].naif;
+    prow->nNativeRes = rga[iO].naif == eph::kNaifNone ? ephNativeNone :
+      rga[iO].naif;
     prow->fApprox = fFalse;
   }
   return fTrue;

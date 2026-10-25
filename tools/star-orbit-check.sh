@@ -17,8 +17,8 @@
 #      the request asked for, the star placed from another's line.
 #
 # Leg 2 compiles against the VENDORED Swiss sources, which is the no-context
-# branch of the header -- the one Astrolog's own star path takes. The server
-# compiles the context-taking branch, and "make ephsrv" is what covers that.
+# branch of the header -- the one Astrolog's own star path takes, and since
+# the server went (2026-10-25) the only one anything compiles.
 #
 # The star data has to be on the path, and sefstars.txt lives at the top of
 # this tree rather than in ephem/, so the path is both.

@@ -282,7 +282,7 @@ inline uint16_t MapObject(const Object &o, int32_t nNative, const Profile &pf,
       //
       // GEOCENTRIC ANSWERS ARE UNTOUCHED and still come from the named
       // bodies, whose direction is the one an independent engine agrees
-      // with to 0.003 arcsec -- so ephsrv-golden's legs stay bit-exact and
+      // with to 0.003 arcsec -- so the server's golden legs stayed bit-exact and
       // this costs nothing where Swiss was right.
       //
       // Found by the Ephemeris Prometheia rate sweep, which asked for
@@ -311,9 +311,9 @@ inline uint16_t MapObject(const Object &o, int32_t nNative, const Profile &pf,
           // there too would hand back the ascending node under the
           // descending one's name. Setting this before the named lookup
           // had succeeded did exactly that the moment the mean node
-          // started falling through -- caught by ephsrv-golden's
-          // descending-node leg on the next run, which is what that gate
-          // is for.
+          // started falling through -- caught by the server's golden
+          // gate's descending-node leg on the next run, which is what that
+          // gate was for.
           if (named >= 0)
             c->fOpposite = o.point == kPtDescNode;
         } else if (o.point == kPtApo) {

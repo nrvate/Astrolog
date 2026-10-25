@@ -26,8 +26,7 @@ if [ "${1:-}" = "--selftest" ]; then
   echo "raw-sprintf-check selftest ok"; exit 0
 fi
 FILES=$(ls *.cpp *.h ephsrv/*.cpp ephsrv/*.h 2>/dev/null |
-  grep -vE '^(swe|sweph|swecl|swedate|swehel|swehouse|swejpl|swemmoon|swemplan|swephlib|sweconfig|cgif)' |
-  grep -vE '^ephsrv/(uSockets|uWebSockets)')
+  grep -vE '^(swe|sweph|swecl|swedate|swehel|swehouse|swejpl|swemmoon|swemplan|swephlib|sweconfig|cgif)')
 OUT=$(scan $FILES)
 if [ -n "$OUT" ]; then
   echo "bare sprintf() in our own sources (use sprintf2(S(sz), ...)):"

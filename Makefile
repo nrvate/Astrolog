@@ -107,7 +107,7 @@ endif
 # surprising before. (The UBSan build was missing from the list until
 # 2026-09-05, so "removes every build" was one short of true.)
 clean: clean-console
-	$(RM) ephproto_test
+	$(RM) ephproto_test eph_wsclient
 	$(MAKE) -f Makefile.qt clean
 	$(MAKE) -f Makefile.qt.test clean
 	$(MAKE) -f Makefile.qt.asan clean
@@ -196,23 +196,20 @@ win:
 wcli:
 	$(MAKE) -f Makefile.wcli
 
-# The ephemeris WebSocket server and its wire client. Deliberately NOT part
-# of "all", like qt6: it wants the thread-safe Swiss Ephemeris fork and its
-# libswe.a built (SWE_HOME in Makefile.ephsrv says where), which a stock
-# checkout does not have -- and there the failure should name that
-# prerequisite, not break every build. "make ephsrv" also builds uSockets
-# (vendored, ephsrv/uSockets) when its static library is missing.
-# .PHONY because a directory named ephsrv/ sits in the tree and would
-# otherwise satisfy the target on sight -- make's mtime logic has no
-# idea it is looking at a source directory.
-.PHONY: ephsrv
-ephsrv:
-	$(MAKE) -f Makefile.ephsrv
+# The standalone protocol version 4 wire client, which the by-hand gates
+# against Ephemeris Prometheia's daemon drive (tools/ephsrv-prometheia.sh's
+# houses leg, tools/crosstest-prom.sh). This tree had its own server too,
+# astrolog-ephd, until 2026-10-25: prometheiad serves the same protocol,
+# and the server went (work log item 289 in QT_GUI_PLAN.md). Not in "all":
+# it wants OpenSSL's headers, which nothing else here does.
+eph_wsclient: ephsrv/eph_wsclient.cpp ephsrv/ephproto.h
+	g++ -std=gnu++17 -O2 -Wall -I ephsrv -o $@ ephsrv/eph_wsclient.cpp \
+	  -lssl -lcrypto
 
 # The protocol version 4 codec against its conformance fixtures
-# (EPHEMERIS_PLUGINS_PLAN.md 3.9). Unlike the server it needs no Swiss
-# fork -- the codec is header-only -- so make check runs it on any
-# checkout, under AddressSanitizer and UBSan: the truncation sweep in it is
+# (EPHEMERIS_PLUGINS_PLAN.md 3.9). The codec is header-only, so make check
+# runs it on any checkout, under AddressSanitizer and UBSan: the truncation
+# sweep in it is
 # only a memory-safety check with a sanitizer behind it.
 ephproto_test: ephsrv/ephproto_test.cpp ephsrv/ephproto.h ephsrv/ephswiss.h
 	g++ -std=gnu++17 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined \

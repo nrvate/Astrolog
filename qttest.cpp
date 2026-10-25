@@ -215,6 +215,7 @@ extern void SetChunkRowsSrvTestQt(int);
 extern int CRecastSrvTestQt();
 extern void SetWelcMaxObjsSrvTestQt(uint32_t);
 extern int CCoverageSrvTestQt(void);
+extern double JdCoverageMinSrvTestQt(void);
 static double RCpuSecTestQt(void);
 extern void SetCoverageSrvTestQt(double, double);
 extern void SetWelcMaxCellsSrvTestQt(uint32_t);
@@ -19799,6 +19800,12 @@ static void TestEphSrvQt()
     FILE *file = FileOpen(szPath, 1, NULL, 0);
     Check(file != NULL, "and it can be read back");
     while (file != NULL && FReadSzLineSkip(file, szLine, cchSzLine)) {
+      // The writer puts the dialog's label beside each ephemeris line
+      // since 2026-10-25 ("-bP server.url ... ; Server Address"), as it
+      // does every other line: the setting is what comes before it.
+      char *pchCmt = strstr(szLine, " ;");
+      if (pchCmt != NULL)
+        *pchCmt = chNull;
       if (FEqSz(szLine, "-bE \"server,swiss\""))
         fSawE = fTrue;
       if (FEqSz(szLine, "-bP server.url \"example.com:1234\""))
@@ -20409,24 +20416,26 @@ static void TestEphSrvQt()
 
 // ---- Ephemeris Server backend, live parity ----
 //
-// Increment 2's acceptance (EPHEMERIS_CLIENT_PLAN.md section 9): a chart
-// cast on the server backend lands BIT-IDENTICAL to the same cast on the
-// local Swiss path. The server is the real astrolog-ephd, launched here on
-// a scratch port over the ephemeris directory this run was started with,
-// so the two paths read the same files; the local cast is the oracle. Not
-// a loopback mock: a mock would answer whatever the test told it to, and
-// the question here is whether the real server, asked the real question,
-// gives the number Swiss gives locally. Skipped, with a printed reason,
-// when the server binary is not built -- "make ephsrv" needs the
-// thread-safe fork -- so a bare checkout's suite stays green.
+// Increment 2's acceptance (EPHEMERIS_CLIENT_PLAN.md section 9), against a
+// real server: Ephemeris Prometheia's prometheiad, launched here on a
+// scratch port over its own checkout's kernels (FPromdArgsQt). Not a
+// loopback mock: a mock would answer whatever the test told it to, and the
+// question is whether the real server, asked the real question, gives the
+// real number. Skipped, with a printed reason, when the other project's
+// build or its kernels are not there, so a bare checkout's suite stays
+// green. Until 2026-10-25 the server was this tree's own astrolog-ephd,
+// Swiss on both sides of the wire, and every leg compared bytes with the
+// local Swiss cast; it went, and the group has two oracles since (see
+// TestEphSrvLiveQt): the local Swiss cast to the cross-engine bounds, and
+// Prometheia's library on the daemon's files to the bit.
 //
 // Every scenario casts locally, snapshots the six position arrays, casts
-// on the server, and compares the arrays as bytes. The scenarios are the
-// flag paths FSwissPlanetSpec() takes: tropical geocentric, sidereal,
-// heliocentric, topocentric, true node, an unusual center (swe_calc_pctr),
-// a custom node/apsis object (swe_nod_aps), and a pre-1955 instant where
-// delta-t's tidal term is live. Then the window cache, a drop and a
-// reconnect, and -0n.
+// on the server, and compares. The scenarios are the flag paths
+// FSwissPlanetSpec() takes: tropical geocentric, sidereal, heliocentric,
+// topocentric, true node, an unusual center (swe_calc_pctr), a custom
+// node/apsis object (swe_nod_aps), and a pre-1955 instant where delta-t's
+// tidal term is live. Then the window cache, animation, a drop and a
+// reconnect, wss, and -0n.
 
 typedef struct _EphSnapshot {
   // The six arrays are macros over cp0 (extern.h), so the members here
@@ -20635,9 +20644,16 @@ static real RMaxDiffEphQt(CONST EPHSNAPSHOT *p1, CONST EPHSNAPSHOT *p2,
   return rMax;
 }
 
+// The exact oracle the live server group's client legs compare against: the
+// source chain that gives, on this side of the wire, the answer the server
+// gives on the other. "swiss" names none -- a cast falling back to the local
+// files is compared with them -- and the group sets Prometheia's library,
+// opened on the daemon's own files, while it runs (see TestEphSrvLiveQt).
+static CONST char *szOracleSrvQt = "swiss";
+
 // One animation run on the server backend: nFrame ticks at a rate and
-// direction, each frame compared with the local Swiss cast of the same
-// chart. Returns the largest difference seen, the requests each frame sent
+// direction, each frame compared with the oracle's cast of the same chart.
+// Returns the largest difference seen, the requests each frame sent
 // (rgcReq, nFrame long) and the warnings raised across the run.
 static real RAnimRunSrvQt(int nAnim, int nDir, int nFrame, int *rgcReq,
   int *pcWarn, char *szWorst, int cchMax)
@@ -20671,7 +20687,7 @@ static real RAnimRunSrvQt(int nAnim, int nDir, int nFrame, int *rgcReq,
     AnimTickTestQt();
     rgcReq[iFrame] = CReqSentEphSrvTestQt() - cReq;
     SnapshotEphQt(&snSrv);
-    EphSourceSet("swiss");
+    EphSourceSet(szOracleSrvQt);
     ciCore = ciMain;
     CastChart(0);
     SnapshotEphQt(&snLocal);
@@ -20688,10 +20704,56 @@ static real RAnimRunSrvQt(int nAnim, int nDir, int nFrame, int *rgcReq,
   return rMax;
 }
 
-// Wait for the launched server to log that it is listening, which it does
-// once the port is bound -- its "ephemeris path" line comes before that,
-// and a client that connects on it can be refused.
-static flag FWaitEphdQt(QProcess *pproc, QByteArray *pbaLog, int msMax)
+// prometheiad, Ephemeris Prometheia's protocol version 4 server: the one
+// the live server legs start, since this tree's own went (2026-10-25,
+// QT_GUI_PLAN.md item 289). Found in the Prometheia checkout this build was
+// configured with (PROMETHEIA_HOME in Makefile.srcs, which the test builds
+// compile in) or at $ASTROLOG_PROMETHEIAD, and run over that checkout's own
+// kernels -- the files tools/ephsrv-prometheia.sh starts it with, returned
+// in rgstrFile[3] (planets, catalog, perturbers) so the caller can open the
+// library on the same ones. fFalse, with the reason, when any of it is
+// missing: a checkout without the other project's build skips these legs
+// rather than failing them.
+static flag FPromdArgsQt(int port, QString *pstrBin, QStringList *prgstrArg,
+  QString *rgstrFile, char *szWhy, int cch)
+{
+#ifdef PROMETHEIA_HOME_DIR
+  QString strHome = QString::fromLocal8Bit(PROMETHEIA_HOME_DIR);
+#else
+  QString strHome;
+#endif
+  QByteArray baBin = qgetenv("ASTROLOG_PROMETHEIAD");
+  int i;
+
+  *pstrBin = !baBin.isEmpty() ? QString::fromLocal8Bit(baBin) :
+    strHome.isEmpty() ? QString() : strHome + "/build/prometheiad";
+  if (pstrBin->isEmpty() || !QFileInfo(*pstrBin).isExecutable()) {
+    sprintf2(szWhy, cch, "no prometheiad to start (\"%s\": build the "
+      "Prometheia checkout, or set ASTROLOG_PROMETHEIAD)",
+      pstrBin->toLocal8Bit().constData());
+    return fFalse;
+  }
+  rgstrFile[0] = strHome + "/ephe/linux_p1550p2650.440";
+  rgstrFile[1] = strHome + "/sbdb-full-20260916.epm";
+  rgstrFile[2] = strHome + "/ephe/sb441-n16-de440span.bsp";
+  for (i = 0; i < 3; i++)
+    if (!QFileInfo::exists(rgstrFile[i])) {
+      sprintf2(szWhy, cch, "%s is not there for prometheiad to serve",
+        rgstrFile[i].toLocal8Bit().constData());
+      return fFalse;
+    }
+  *prgstrArg = QStringList() << "--ephemeris" << rgstrFile[0] <<
+    "--catalog" << rgstrFile[1] << "--perturbers" << rgstrFile[2] <<
+    "--bind" << "127.0.0.1" << "--port" << QString::number(port) <<
+    "--threads" << "1";
+  return fTrue;
+}
+
+// Wait for the launched daemon to say it is listening, which it does once
+// every loop has bound the port -- "listening on port N (ws://, ...)", the
+// line tools/ephsrv-prometheia.sh waits for too. Its dataset line comes
+// before that, and a client that connects on it can be refused.
+static flag FWaitPromdQt(QProcess *pproc, QByteArray *pbaLog, int msMax)
 {
   QElapsedTimer tim;
 
@@ -20699,7 +20761,7 @@ static flag FWaitEphdQt(QProcess *pproc, QByteArray *pbaLog, int msMax)
   while (tim.elapsed() < msMax) {
     QApplication::processEvents(QEventLoop::AllEvents, 20);
     pbaLog->append(pproc->readAllStandardOutput());
-    if (pbaLog->contains("evt=listen port="))
+    if (pbaLog->contains("listening on port "))
       return fTrue;
     if (pproc->state() == QProcess::NotRunning)
       return fFalse;
@@ -22460,11 +22522,18 @@ static void TestEphSrvLiveQt()
     nObjSav = rgObjSwiss[0], nTypSav = rgTypSwiss[0], nPntSav = rgPntSwiss[0],
     nFlgSav = rgFlgSwiss[0];
   CI ciSav = ciCore, ciMainSav = ciMain;
-  QString strBin, strEphe;
+  QString strBin, rgstrFile[3];
+  QStringList rgstrArgs;
   QProcess proc;
-  QByteArray baLog, strUrlEnv;
-  EPHSNAPSHOT snLocal, snSrv;
-  char sz[cchSzMax], szDiff[cchSzMax];
+  QByteArray baLog, strUrlEnv,
+    rgbaPromSav[4] = {SzSet(us.rgszEphParam[epPrometheiaEphemeris]),
+    SzSet(us.rgszEphParam[epPrometheiaCatalog]),
+    SzSet(us.rgszEphParam[epPrometheiaPerturbers]),
+    SzSet(us.rgszEphParam[epPrometheiaLongspan])};
+  static CONST int rgepProm[4] = {epPrometheiaEphemeris,
+    epPrometheiaCatalog, epPrometheiaPerturbers, epPrometheiaLongspan};
+  EPHSNAPSHOT snLocal, snSrv, snExact;
+  char sz[cchSzMax], szDiff[cchSzMax], szWhy[cchSzMax] = "";
   // port is set only when this group starts its own daemon; with
   // ASTROLOG_EPHSRV_URL it never is, and Qt6's optimiser noticed the
   // uninitialised read in the sprintf below.
@@ -22473,102 +22542,61 @@ static void TestEphSrvLiveQt()
   Group("Ephemeris server, live parity");
   SetNoPopupQt(fTrue);
 
-  // ASTROLOG_EPHSRV_URL points this group at a server that is ALREADY
-  // RUNNING instead of starting astrolog-ephd. It exists for the
-  // cross-project work: the whole group is "cast the same chart through a
-  // v4 server and through the local Swiss files, and compare", which is
-  // exactly the application-level question the Prometheia project asked
-  // for, and there is no reason the server at the other end has to be
-  // ours. Their daemon serves the protocol; that is the point of it.
+  // The server is Ephemeris Prometheia's daemon, started here on a scratch
+  // port over its own checkout's kernels (FPromdArgsQt) -- or, with
+  // ASTROLOG_EPHSRV_URL, one that is ALREADY RUNNING. This tree had its own
+  // server, astrolog-ephd, until 2026-10-25 (QT_GUI_PLAN.md item 289). It
+  // was Swiss on both sides of the wire, so this group compared the server
+  // cast with the local Swiss cast byte for byte; every server is a
+  // different engine now, so there are two oracles:
   //
-  // The parity tolerance is NOT relaxed when this is set, deliberately.
-  // Against astrolog-ephd the comparison is bit-identical because both
-  // sides are the same Swiss; against a different engine it will not be,
-  // and the group will say so in the numbers rather than being told in
-  // advance what to forgive.
+  // - The local Swiss cast holds every scenario to the cross-engine bounds
+  //   (RBoundMainEphQt() and its siblings): the application-level question
+  //   the Prometheia project asked for, and the one a fault both engines
+  //   share cannot hide from.
+  // - Prometheia's own library, linked into this build and opened on the
+  //   daemon's three files, is the same engine on this side of the wire.
+  //   The two agree to the last bit (measured 2026-10-25), so it is the
+  //   exact oracle that a client defect smaller than the bounds -- a row
+  //   misread, a frame read from the wrong window -- shows against, and
+  //   the only one the client's own legs below (a cast inside another's
+  //   wait, the window cache, animation, reconnecting, wss) can use. Only
+  //   for a daemon this group started: an outside one's files are not known
+  //   here, and those legs then say they are skipped.
   strUrlEnv = qgetenv("ASTROLOG_EPHSRV_URL");
   if (!strUrlEnv.isEmpty()) {
     printf("  (ASTROLOG_EPHSRV_URL: using the server already at %s, not "
       "starting one)\n", strUrlEnv.constData());
+    sprintf2(S(szWhy), "ASTROLOG_EPHSRV_URL names a server this group did "
+      "not start, whose files are not known here");
   } else {
-  strBin = QCoreApplication::applicationDirPath() + "/astrolog-ephd";
-  if (!QFileInfo(strBin).isExecutable()) {
-    printf("  skipped: %s is not built (make ephsrv needs the thread-safe "
-      "Swiss Ephemeris fork)\n", strBin.toLocal8Bit().constData());
-    goto LRestore;
-  }
-  // Every -Yi directory, in the order SwissEnsurePath() searches them and
-  // relative to the executable as it resolves them: an explicit --ephe is
-  // the server's whole search path, so -Yi1 alone left out the files the
-  // local cast found further along. "-i nrvate.as -Yi1 ephem" failed 23
-  // checks that way -- seorbel.txt, and with it Vulcan, is on -Yi2 there
-  // and not in the bundled ephem/ -- while "-Yi1 ephem" alone enables no
-  // fictitious body and passed.
-  for (int i = 0; i < 10; i++) {
-    CONST char *pchDir = us.rgszPath[i];
-    QString strDir;
-    if (!FSzSet(pchDir))
-      continue;
-    strDir = QString::fromLocal8Bit(pchDir);
-    if (!QDir::isAbsolutePath(strDir))
-      strDir = QCoreApplication::applicationDirPath() + "/" + strDir;
-    if (!strEphe.isEmpty())
-      strEphe += ";";
-    strEphe += strDir;
-  }
-  // And the tree root, because sefstars.txt lives THERE and not in the
-  // bundled ephem/. An explicit --ephe is the server's whole search path,
-  // so without this the daemon has no star catalogue and answers every
-  // star "data unavailable" -- which is exactly why P1's regression test
-  // could not be written when P1 was fixed, and why the plan carried it
-  // as an outstanding gap. The local cast finds the file regardless,
-  // because Swiss falls back to the working directory; the server, with
-  // its path stated, does not.
-  if (!strEphe.isEmpty())
-    strEphe += ";";
-  strEphe += QCoreApplication::applicationDirPath();
-  if (strEphe.isEmpty()) {
-    printf("  skipped: no -Yi ephemeris directory to point the server at\n");
-    goto LRestore;
-  }
-  // The server next to this binary must be built from the sources next to
-  // it: nothing rebuilds it when ephsrv/ changes, and a stale one answered
-  // this group's questions with yesterday's server (review T10).
-  {
-    QDateTime dtBin = QFileInfo(strBin).lastModified(), dtSrc;
-    QString strNewest;
-    for (CONST char *szSrc : {"ephsrv/eph_srv.cpp", "ephsrv/ephproto.h",
-      "ephsrv/eph_cache.h", "ephsrv/uSockets/src/socket.c"}) {
-      QFileInfo fi(QCoreApplication::applicationDirPath() + "/" + szSrc);
-      if (fi.exists() && fi.lastModified() > dtSrc) {
-        dtSrc = fi.lastModified();
-        strNewest = szSrc;
-      }
+    // Below the kernel's ephemeral range (32768 up): a port inside it can
+    // be held by some client connection's TIME_WAIT and refused to the
+    // server, which the old server's robustness gate measured.
+    port = 27000 + (int)(QCoreApplication::applicationPid() % 400);
+    if (!FPromdArgsQt(port, &strBin, &rgstrArgs, rgstrFile, S(szWhy))) {
+      printf("  skipped: %s\n", szWhy);
+      goto LRestore;
     }
-    Check(!dtSrc.isValid() || dtSrc <= dtBin, "astrolog-ephd is newer than "
-      "its sources (%s is newer: make ephsrv)",
-      strNewest.toLocal8Bit().constData());
-  }
-
-  // The real server, on a scratch port, over this run's ephemeris.
-  // Below the kernel's ephemeral range (32768 up): a port inside it can be
-  // held by some client connection's TIME_WAIT and refused to the server
-  // (tools/ephsrv-robust.sh measured it). The gates use 28000-29399.
-  port = 27000 + (int)(QCoreApplication::applicationPid() % 400);
-  proc.setProcessChannelMode(QProcess::MergedChannels);
-  proc.start(strBin, QStringList() << "--port" << QString::number(port)
-    << "--ephe" << strEphe << "--threads" << "1");
-  Check(FWaitEphdQt(&proc, &baLog, 10000),
-    "astrolog-ephd started on port %d over %s", port,
-    strEphe.toLocal8Bit().constData());
-  if (proc.state() == QProcess::NotRunning)
-    goto LRestore;
-  // Asked positively: the line must be there and name a path, or a change
-  // to the log's wording passes this vacuously -- the "<none found" form it
-  // replaced did, for a whole make check, when the log became logfmt.
-  Check(baLog.contains(" evt=ephe path=") &&
-    !baLog.contains(" evt=ephe path=\"\""),
-    "the server found the ephemeris directory");
+    proc.setProcessChannelMode(QProcess::MergedChannels);
+    proc.start(strBin, rgstrArgs);
+    Check(FWaitPromdQt(&proc, &baLog, 10000), "prometheiad started on port "
+      "%d (%.200s)", port, baLog.constData());
+    if (proc.state() == QProcess::NotRunning)
+      goto LRestore;
+#ifdef PROMETHEIA
+    // The exact oracle: the library on the daemon's three files, with
+    // nothing behind the planets file, as the daemon has nothing behind
+    // it. Behind the library, Swiss, as behind the server: what neither
+    // engine answers (Vulcan, from seorbel.txt) is then Swiss on both sides.
+    for (int i = 0; i < 3; i++)
+      FEphParamSet(rgepProm[i], rgstrFile[i].toLocal8Bit().constData());
+    FEphParamSet(epPrometheiaLongspan, NULL);
+    szOracleSrvQt = "prometheia,swiss";
+#else
+    sprintf2(S(szWhy), "this build has no Prometheia library to be the "
+      "exact oracle");
+#endif
   }
 
   // The chart: a fixed UT instant at a fixed place, no zone, no DST.
@@ -22588,37 +22616,39 @@ static void TestEphSrvLiveQt()
   EphSourceSet("swiss");
   CastChart(0);
   SnapshotEphQt(&snLocal);
+  EphSourceSet(szOracleSrvQt);
+  CastChart(0);
+  SnapshotEphQt(&snExact);
   EphSourceSet("server,swiss");
   EphSrvStartupQt();
   Check(NEphSrvStateTestQt() == 1, "the backend is connecting");
   cWarn = NCastWarnSrvTestQt();
   CastChart(0);
   SnapshotEphQt(&snSrv);
-  if (!strUrlEnv.isEmpty()) {
+  {
     // A different engine: the cast must wait and land, agreeing to the
-    // cross-engine bounds of the scenarios below rather than on the bytes.
+    // cross-engine bounds of the scenarios below -- and, where there is an
+    // exact oracle, to its bytes.
     int iW, iWS, iSp, iSpS;
     real rSp, rSpS, rMain = RMaxSepEphQt(&snLocal, &snSrv, fTrue, &iW, &rSp,
       &iSp), rSepSmall = RMaxSepEphQt(&snLocal, &snSrv, fFalse, &iWS, &rSpS,
       &iSpS);
 
-    // The one warning a foreign server is allowed: prometheiad has no
-    // "vulcan" token (the stock seorbel.txt's set 2), so Vulcan is refused
-    // and the chain's next source answers it. Named, so that it cannot
-    // excuse another.
-    Check((NCastWarnSrvTestQt() == cWarn ||
-      (NCastWarnSrvTestQt() == cWarn + 1 &&
-      strstr(SzWarnSrvTestQt(), "Vulcan") != NULL)) &&
+    // No warning at all. Vulcan used to be the one a foreign server was
+    // allowed -- prometheiad has no "vulcan" token, and the request named
+    // the body by token -- until 2026-10-25, when a fictitious body went on
+    // the wire as its elements (ephreq.h, FEphV4FromSwiss()).
+    Check(NCastWarnSrvTestQt() == cWarn &&
       rMain <= RBoundMainEphQt() && rSepSmall <= RBoundSmallEphQt(),
       "a cast made while connecting waits for the connection and lands "
       "within the cross-engine bounds (%d warnings: %.100s; planets %.4f\", "
       "small bodies %.4f\")", NCastWarnSrvTestQt() - cWarn,
       SzWarnSrvTestQt(), rMain, rSepSmall);
-  } else {
-  cDiff = CDiffEphQt(&snLocal, &snSrv, 0.0, S(szDiff));
-  Check(NCastWarnSrvTestQt() == cWarn && cDiff == 0, "a cast made while "
-    "connecting waits for the connection and lands bit-identical (%d "
-    "warnings, %d differ: %s)", NCastWarnSrvTestQt() - cWarn, cDiff, szDiff);
+    if (!FEqSz(szOracleSrvQt, "swiss")) {
+      cDiff = CDiffEphQt(&snExact, &snSrv, 0.0, S(szDiff));
+      Check(cDiff == 0, "and to the bit with Prometheia's library on the "
+        "daemon's files (%d differ: %s)", cDiff, szDiff);
+    }
   }
   if (!FWaitEstQt(2, 10000)) {
     FErrEphSrvTestQt(S(sz));
@@ -22632,7 +22662,6 @@ static void TestEphSrvLiveQt()
   // The scenarios. Each: settings, local cast, server cast, compare.
   for (iScen = 0; iScen < 11; iScen++) {
     CONST char *szScen;
-    real rTol = 0.0;
     us.fSidereal = fFalse; us.fSidereal2 = fFalse; us.objCenter = oEar;
     us.fTopoPos = fFalse; us.fProgress = fFalse;
     us.fTrueNode = fFalse; ignore[custLo] = fTrue;
@@ -22647,21 +22676,23 @@ static void TestEphSrvLiveQt()
     case 2: szScen = "heliocentric"; us.objCenter = oSun; break;
     case 3: szScen = "topocentric"; us.fTopoPos = fTrue; break;
     case 4: szScen = "true node"; us.fTrueNode = fTrue; break;
-    case 5: szScen = "centered on Mars (swe_calc_pctr, within 1e-5 deg)";
-      // The one KNOWING divergence, and the server is the right side of
-      // it: the fork fixed swe_calc_pctr() transforming to the ecliptic of
-      // date through caches its own inner calls had re-keyed (its
-      // notes/REVIEW.md, the swe_calc_pctr row), and the library this
-      // build vendors is upstream 2.10.03, kept untouched on purpose.
-      // Measured with a probe against both libraries, fresh and after
-      // other calls: the same 5e-9 degrees for the Earth every time, so
-      // it is not history but the fix; under the maintainer's settings
-      // the largest is Pluto's speed, 1.2e-6 degrees a day. The tolerance
-      // is ten times that; the other seven scenarios stay on the bytes.
-      us.objCenter = oMar; rTol = 1e-5; break;
-    case 6: szScen = "a custom object that is Jupiter's perihelion "
-      "(swe_nod_aps)";
+    case 5: szScen = "centered on Mars (swe_calc_pctr)";
+      us.objCenter = oMar; break;
+    case 6: szScen = "a custom object that is Jupiter's osculating "
+      "perihelion (swe_nod_aps)";
+      // OSCULATING, because that is one quantity in every engine: the
+      // perihelion of the orbit the ephemeris itself says Jupiter is on.
+      // The MEAN one is a theory's -- Swiss's mean elements against
+      // Prometheia's, fitted to DE440 -- and the two were 587.6" apart at
+      // this instant, measured 2026-10-25, where the cross-engine bounds
+      // are about engines and not about definitions. Held to its own bound
+      // below, the measured worst with a third on top; the exact oracle
+      // holds it to the bit regardless. Under -i nrvate.as the slot is
+      // also Vulcan's (custLo IS oVul) and seorbel.txt names Vulcan, which
+      // is why this scenario passed there against the old server while
+      // never once putting the perihelion on the wire.
       ignore[custLo] = fFalse;
+      us.fTrueNode = fTrue;
       rgTypSwiss[0] = 2; rgObjSwiss[0] = oJup; rgPntSwiss[0] = 3;
       rgFlgSwiss[0] = 0;
       // is.nObj is the highest object cast, and it is derived from the
@@ -22706,9 +22737,12 @@ static void TestEphSrvLiveQt()
       ciCore.lon = 122.3; ciCore.lat = 47.6;
       break;
     }
-    EphSourceSet("swiss");   // The local Swiss path: the oracle.
+    EphSourceSet("swiss");   // The local Swiss path: the cross-engine oracle.
     CastChart(0);
     SnapshotEphQt(&snLocal);
+    EphSourceSet(szOracleSrvQt);   // The exact oracle, where there is one.
+    CastChart(0);
+    SnapshotEphQt(&snExact);
     EphSourceSet("server,swiss");   // The server.
     cWarn = NCastWarnSrvTestQt();
     CastChart(0);
@@ -22716,26 +22750,37 @@ static void TestEphSrvLiveQt()
     Check(NCastWarnSrvTestQt() == cWarn,
       "%s: the server cast raised no warning (\"%.100s\")", szScen,
       SzWarnSrvTestQt());
-    // Scenario 8 was special for a day and is not any more, which is the
-    // point of recording it: A.8's fixed sidereal planes went in-house on the
-    // server first, so the server and the application disagreed by the 31.5"
-    // the zodiac's zero point had been out by, and this leg asserted the
-    // divergence -- every served body moved by ONE angle, every locally
-    // computed point bit-identical, and the angle the one registry 4.1
-    // documents. That assertion caught two real defects while it stood: a
-    // node handed SEFLG_J2000 (its LATITUDE moved, which an origin shift
-    // cannot do) and, when the application caught up, the same node defect
-    // reintroduced on the local side for the same reason.
-    //
-    // Now that both paths share ephsrv/ephsidplane.h the gap is zero and
-    // bit-identity is the right assertion again. If this ever fails on
-    // scenario 8 again, the two paths have diverged, and the shared header
-    // is where to look first.
-    if (!strUrlEnv.isEmpty()) {
-      // A server that is not ours: a different engine, so the bytes are
-      // the wrong question and the separation is the right one. Reported
-      // per scenario with the body that is worst, because a bound with no
-      // name beside it cannot be argued with either way.
+    if (iScen == 6) {
+      // The orbit point to its own bound (see case 6), then out of the
+      // main comparison, which is about bodies and the Moon's points.
+      real rCust = RSepArcsecQt(snLocal.rgobj[custLo], snLocal.rgalt[custLo],
+        snSrv.rgobj[custLo], snSrv.rgalt[custLo]);
+      printf("  %-52.52s the perihelion %7.4f\"\n", szScen, rCust);
+      Check(rCust <= 1.3 * RXScaleEphQt(), "%s: the osculating perihelion "
+        "agrees with the foreign server to %.2f\" (%.4f\")", szScen,
+        1.3 * RXScaleEphQt(), rCust);
+      snLocal.rgobj[custLo] = snSrv.rgobj[custLo];
+      snLocal.rgalt[custLo] = snSrv.rgalt[custLo];
+      snLocal.rgdir[custLo] = snSrv.rgdir[custLo];
+      snLocal.rgdiralt[custLo] = snSrv.rgdiralt[custLo];
+      snLocal.rgdirlen[custLo] = snSrv.rgdirlen[custLo];
+      snLocal.rgpt[custLo] = snSrv.rgpt[custLo];
+    }
+    // Scenario 8 has a history worth keeping. A.8's fixed sidereal planes
+    // went in-house on this tree's old server first, so it and the
+    // application disagreed by the 31.5" the zodiac's zero point had been
+    // out by, and this leg asserted that divergence -- which caught two
+    // real defects while it stood: a node handed SEFLG_J2000 (its LATITUDE
+    // moved, which an origin shift cannot do) and, when the application
+    // caught up, the same node defect reintroduced on the local side.
+    // Against prometheiad the planes are another engine's code, held to the
+    // bounds like everything else; an origin out by a nutation (3.3" at
+    // the least, ephsidplane.h) is eleven times the main bound.
+    {
+      // A different engine, so the bytes are the wrong question and the
+      // separation is the right one. Reported per scenario with the body
+      // that is worst, because a bound with no name beside it cannot be
+      // argued with either way.
       int iWorst, iWorstSp, iWorstS, iWorstSpS;
       real rSp, rSpS, rSep = RMaxSepEphQt(&snLocal, &snSrv, fTrue, &iWorst,
         &rSp, &iWorstSp), rSepS = RMaxSepEphQt(&snLocal, &snSrv, fFalse,
@@ -22779,11 +22824,16 @@ static void TestEphSrvLiveQt()
         printf("      %s: local %.6f %.6f, server %.6f %.6f\n",
           szObjName[iWorst], snLocal.rgobj[iWorst], snLocal.rgalt[iWorst],
           snSrv.rgobj[iWorst], snSrv.rgalt[iWorst]);
-    } else {
-    cDiff = CDiffEphQt(&snLocal, &snSrv, rTol, S(szDiff));
-    Check(cDiff == 0, "%s: server cast %s the local one "
-      "(%d objects differ; first: %s)", szScen,
-      rTol == 0.0 ? "bit-identical to" : "agrees with", cDiff, szDiff);
+    }
+    if (!FEqSz(szOracleSrvQt, "swiss")) {
+      cDiff = CDiffEphQt(&snExact, &snSrv, 0.0, S(szDiff));
+      // The 1900 scenario too, where Delta T's tidal term is live: the
+      // two routes state one Delta T since 2026-10-25 (ephreq.h,
+      // RDeltaTV4Sec()). Before, the server route paired it with the local
+      // Swiss's Moon and this differed by 0.022" on the Moon.
+        Check(cDiff == 0, "%s: the server cast is Prometheia's library on "
+          "the daemon's files to the bit (%d objects differ; first: %s)",
+          szScen, cDiff, szDiff);
     }
     Check(planet[oSun] != 0.0 || planet[oMoo] != 0.0,
       "%s: the cast computed something at all", szScen);
@@ -22868,12 +22918,13 @@ static void TestEphSrvLiveQt()
         // RSepArcsecQt(), not SphDistance(): the acos in the latter cannot
         // resolve below about 0.003 arcsec, and this once "passed" a star
         // placed delta T early (1e-4 arcsec) because the number it printed
-        // was that floor (STARS_BACKLOG.md item 9). Same engine, the same
-        // Swiss on the same TT instant, so a millionth of an arcsecond.
+        // was that floor (STARS_BACKLOG.md item 9). Against this tree's old
+        // server the same Swiss answered both sides, to a millionth of an
+        // arcsecond; another engine's star catalogue, to an arcsecond.
         rD = RSepArcsecQt(p1, p2, s1, s2);
         printf("  P1 star %-9s %-9s server vs swiss: %11.6f\"\n",
           rgszP1[iSt], iZod ? "sidereal" : "tropical", rD);
-        Check(rD < (strUrlEnv.isEmpty() ? 1e-6 : 1.0), "the %s %s star "
+        Check(rD < 1.0, "the %s %s star "
           "through the server agrees with the local one (%.6f\")",
           iZod ? "sidereal" : "tropical", rgszP1[iSt], rD);
 
@@ -22885,13 +22936,11 @@ static void TestEphSrvLiveQt()
         // an orbit star and Aldebaran is not, so the correction's rate is
         // graded too; Toliman (alpha Cen B) is placed from A's line but keeps
         // its own distance, so its distance rate is B's own, and it is the
-        // one where the server's inline path and the shared header's can
-        // part. Same engine: the difference of two identical
-        // computations; a foreign one: the cross-engine bounds.
+        // one where an engine's star path and its orbit correction can
+        // part. Another engine, so the cross-engine bounds.
         {
-          CONST flag fSame = strUrlEnv.isEmpty();
-          CONST real rTolAng = fSame ? 1e-9 : RBoundRateEphQt();
-          CONST real rTolDist = fSame ? 1e-12 : 1e-9;
+          CONST real rTolAng = RBoundRateEphQt();
+          CONST real rTolDist = 1e-9;
           // FEphRead()'s order: lon, lat, lon rate, distance, lat rate,
           // distance rate. The distance rate is graded against the
           // distance, as the wire's bound is (A.3 0x0013).
@@ -22912,17 +22961,16 @@ static void TestEphSrvLiveQt()
     CastChart(0);
   }
 
-  // Everything below asks a question that only has an answer when both
-  // sides are the same engine: bit-identity of a recast, of an animation
-  // frame, of a window served from the cache, and request counts that hold
-  // only when the server answers every object of the cast (a foreign one
-  // has no Vulcan). Against a foreign server the scenarios above are the
-  // cross-engine gate; 22 of these failed on their first run against
-  // prometheiad and all were that (CLIENT_SERVER_REVIEW.md C1a).
-  if (!strUrlEnv.isEmpty()) {
-    printf("  (the bit-identity, animation and cache legs are skipped: "
-      "ASTROLOG_EPHSRV_URL names a server that is not this project's engine)"
-      "\n");
+  // Everything below asks a question that only has an answer against the
+  // same engine on this side of the wire: bit-identity of a recast, of an
+  // animation frame, of a window served from the cache. Against the local
+  // Swiss files 22 of these failed on their first run against prometheiad
+  // and all were that (CLIENT_SERVER_REVIEW.md C1a); against Prometheia's
+  // library on the daemon's files they hold, and that is what they ask.
+  if (FEqSz(szOracleSrvQt, "swiss")) {
+    printf("  (the client's own legs -- a cast inside another's wait, the "
+      "window cache, animation, reconnecting, wss -- are skipped: %s)\n",
+      szWhy);
     goto LRestore;
   }
 
@@ -22932,7 +22980,7 @@ static void TestEphSrvLiveQt()
   // (EPHEMERIS_REVIEW.md C1).
   OraclePinUtQt(1990, 7, 4, 3.0);
   ciCore.lon = 122.3; ciCore.lat = 47.6;
-  EphSourceSet("swiss");
+  EphSourceSet(szOracleSrvQt);
   CastChart(0);
   SnapshotEphQt(&snLocal);
   EphSourceSet("server,swiss");
@@ -23050,7 +23098,7 @@ static void TestEphSrvLiveQt()
     // A cast outside a tick, animation or not, is still asked exactly.
     {
       EPHSNAPSHOT snL, snS;
-      EphSourceSet("swiss"); ciCore = ciMain; CastChart(0); SnapshotEphQt(&snL);
+      EphSourceSet(szOracleSrvQt); ciCore = ciMain; CastChart(0); SnapshotEphQt(&snL);
       EphSourceSet("server,swiss"); CastChart(0); SnapshotEphQt(&snS);
       cDiff = CDiffEphQt(&snL, &snS, 0.0, S(szDiff));
       Check(cDiff == 0, "animation: a cast outside a tick stays bit-identical "
@@ -23064,7 +23112,7 @@ static void TestEphSrvLiveQt()
     // pass with no recast at all, which is how its first draft passed.
     {
       EPHSNAPSHOT snL, snS;
-      EphSourceSet("swiss"); ciCore = ciMain; CastChart(0); SnapshotEphQt(&snL);
+      EphSourceSet(szOracleSrvQt); ciCore = ciMain; CastChart(0); SnapshotEphQt(&snL);
       EphSourceSet("server,swiss");
       gs.nAnim = 2; gi.nDir = 5;
       SetAnimFrameSrvTestQt(fTrue);
@@ -23076,7 +23124,7 @@ static void TestEphSrvLiveQt()
         "the approximate one before the stop (%d objects differ)", cDiff);
       SetAnimRunningTestQt(fFalse);
       SnapshotEphQt(&snS);
-      EphSourceSet("swiss"); ciCore = ciMain; CastChart(0); SnapshotEphQt(&snL);
+      EphSourceSet(szOracleSrvQt); ciCore = ciMain; CastChart(0); SnapshotEphQt(&snL);
       EphSourceSet("server,swiss");
       cDiff = CDiffEphQt(&snL, &snS, 0.0, S(szDiff));
       Check(cDiff == 0 && !FApproxSrvTestQt(), "animation: stopping leaves "
@@ -23157,26 +23205,24 @@ static void TestEphSrvLiveQt()
     // only a frame whose nearest row is NaN is asked exactly -- no frame
     // fails and nothing warns (EPHEMERIS_REVIEW.md A2, S9). Protocol 1
     // failed the object for the whole window here, which is why this
-    // check once asserted every frame exact. The bundled files begin on
-    // 1 January 1800 (JD 2378497, measured): nine days a frame backward
-    // from 1 March 1800 is six frames inside them, and the window
-    // anchored below the first frame reaches 1799. (The END of the files
-    // cannot stage this: the fork answers rows past the end inside a
-    // window that began before it -- EPHEMERIS_REVIEW.md F11.)
-    // Only where the path HAS that edge: a directory reaching before 1800
-    // (nrvate.as puts /swe on -Yi2) leaves nothing to stage, and the
-    // frames are then read from a window whose rows before 1800 came from
-    // an older file than the local cast's -- the two differ by 2e-4 there.
+    // check once asserted every frame exact. The edge is the start of the
+    // earliest span the server declares (A.3 0x000A), which for the
+    // daemon's DE440 file is December 1549: nine days a frame backward
+    // from 70 days after it is six frames inside, and the window anchored
+    // below the first frame reaches past it. Against this tree's old
+    // server the leg staged the bundled Swiss files' 1800 edge instead,
+    // and skipped where -Yi reached before 1800.
     {
-      double xEdge[6];
-      char szEdge[AS_MAXCH];
-      int32 retEdge = swe_calc(2378490.5, SE_SUN, SEFLG_SWIEPH, xEdge, szEdge);
-      if (retEdge >= 0 && (retEdge & SEFLG_SWIEPH)) {
-        printf("  (animation up to the ephemeris edge skipped: the ephemeris "
-          "path reaches before 1800, so there is no edge to stage)\n");
+      double jdEdge = JdCoverageMinSrvTestQt(), rHrEdge;
+      int nYEdge, nMEdge, nDEdge;
+      if (jdEdge <= 0.0) {
+        printf("  (animation up to the ephemeris edge skipped: the server "
+          "declares no coverage, so there is no edge to stage)\n");
       } else {
+        swe_revjul(jdEdge + 70.0, SE_GREG_CAL, &nYEdge, &nMEdge, &nDEdge,
+          &rHrEdge);
         ClearWinSrvTestQt();
-        OraclePinUtQt(1800, 3, 1, 12.0);
+        OraclePinUtQt(nYEdge, nMEdge, nDEdge, 12.0);
         ciCore.lon = 122.3; ciCore.lat = 47.6;
         ciMain = ciCore;
         rMax = RAnimRunSrvQt(4, -9, 6, rgcReq, &cWarnRun, S(szWorst));
@@ -23205,7 +23251,7 @@ static void TestEphSrvLiveQt()
       gs.nAnim = -2;          // What PrintWarningQt() does.
       AnimTickTestQt();
       SnapshotEphQt(&snS);
-      EphSourceSet("swiss"); ciCore = ciMain; CastChart(0); SnapshotEphQt(&snL);
+      EphSourceSet(szOracleSrvQt); ciCore = ciMain; CastChart(0); SnapshotEphQt(&snL);
       EphSourceSet("server,swiss");
       cDiff = CDiffEphQt(&snL, &snS, 0.0, S(szDiff));
       Check(cDiff == 0 && !FApproxSrvTestQt(), "animation stopped by a "
@@ -23222,7 +23268,7 @@ static void TestEphSrvLiveQt()
     SetWindowCapSrvTestQt(1);
     {
       EPHSNAPSHOT snL, snS;
-      EphSourceSet("swiss"); ciCore = ciMain; CastChart(0); SnapshotEphQt(&snL);
+      EphSourceSet(szOracleSrvQt); ciCore = ciMain; CastChart(0); SnapshotEphQt(&snL);
       EphSourceSet("server,swiss"); CastChart(0); SnapshotEphQt(&snS);
       cDiff = CDiffEphQt(&snL, &snS, 0.0, S(szDiff));
       Check(CWinSrvTestQt() >= 2 && cDiff == 0, "a cast split over more "
@@ -23243,13 +23289,11 @@ static void TestEphSrvLiveQt()
 
   // A drop mid-session: the cast fails soft, once in words; the server
   // comes back and the next cast is bit-identical again. Only a server
-  // this group started can be dropped and restarted: under
+  // this group started can be dropped and restarted -- under
   // ASTROLOG_EPHSRV_URL these legs used to FAIL rather than say they did
-  // not apply (CLIENT_SERVER_REVIEW.md C1c).
-  if (!strUrlEnv.isEmpty())
-    printf("  (drop and reconnect legs skipped: ASTROLOG_EPHSRV_URL names a "
-      "server this group did not start)\n");
-  else {
+  // not apply (CLIENT_SERVER_REVIEW.md C1c) -- and the skip above sees to
+  // that: an exact oracle is only set for a daemon started here.
+  {
   proc.kill();
   proc.waitForFinished(2000);
   Check(FWaitEstQt(0, 5000), "the backend sees the server go");
@@ -23267,9 +23311,8 @@ static void TestEphSrvLiveQt()
     "again (%d)", NCastWarnSrvTestQt() - cWarn);
   cReq = CRecastSrvTestQt();
   baLog.clear();
-  proc.start(strBin, QStringList() << "--port" << QString::number(port)
-    << "--ephe" << strEphe << "--threads" << "1");
-  Check(FWaitEphdQt(&proc, &baLog, 10000), "the server restarted");
+  proc.start(strBin, rgstrArgs);
+  Check(FWaitPromdQt(&proc, &baLog, 10000), "the server restarted");
   Check(FWaitEstQt(2, 15000), "the backend reconnected on its ladder");
   // The chart that failed for want of the server is cast again by the
   // WELCOME, not left at 0 Aries until the user does something
@@ -23282,7 +23325,7 @@ static void TestEphSrvLiveQt()
   }
   Check(CRecastSrvTestQt() == cReq + 1, "the WELCOME recast the chart that "
     "missed the server (%d recasts)", CRecastSrvTestQt() - cReq);
-  EphSourceSet("swiss");
+  EphSourceSet(szOracleSrvQt);
   CastChart(0);
   SnapshotEphQt(&snLocal);
   EphSourceSet("server,swiss");
@@ -23302,7 +23345,7 @@ static void TestEphSrvLiveQt()
   ClearWinSrvTestQt();
   OraclePinUtQt(1990, 6, 19, 12.0);
   ciCore.lon = 122.3; ciCore.lat = 47.6;
-  EphSourceSet("swiss");
+  EphSourceSet(szOracleSrvQt);
   CastChart(0);
   SnapshotEphQt(&snLocal);
   EphSourceSet("server,swiss");
@@ -23478,9 +23521,9 @@ static void TestEphSrvLiveQt()
   // TLS (EPHEMERIS_SERVER_PRODUCTION_PLAN.md Phase 1): the same server
   // started with a certificate from a throwaway CA. While that CA is not
   // trusted the backend must refuse the certificate and say why; once it
-  // is, a cast over wss:// must land bit-identical to the local one. This
-  // is the check that THIS build's Qt TLS stack works end to end -- the
-  // server's own gate (tools/ephsrv-tls.sh) cannot say that about Qt.
+  // is, a cast over wss:// must land bit-identical to the exact oracle's.
+  // This is the check that THIS build's Qt TLS stack works end to end,
+  // which no server's own gate can say about Qt.
   {
     QString strOpenssl = QStandardPaths::findExecutable("openssl");
     QTemporaryDir dirTls;
@@ -23491,14 +23534,9 @@ static void TestEphSrvLiveQt()
     char szErr[cchSzMax];
     flag fCerts, fRefused;
 
-    if (!strUrlEnv.isEmpty() || strOpenssl.isEmpty() || !dirTls.isValid() ||
+    if (strOpenssl.isEmpty() || !dirTls.isValid() ||
       !QSslSocket::supportsSsl()) {
-      // Under ASTROLOG_EPHSRV_URL this leg has no server of its own to
-      // start: strBin and port are only set when the group starts
-      // astrolog-ephd, and the leg is about that server's TLS.
-      printf("  (TLS leg skipped: %s)\n", !strUrlEnv.isEmpty() ?
-        "it starts its own astrolog-ephd, and ASTROLOG_EPHSRV_URL names a "
-        "server this group did not start" : strOpenssl.isEmpty() ?
+      printf("  (TLS leg skipped: %s)\n", strOpenssl.isEmpty() ?
         "no openssl on PATH to make a test certificate" :
         !QSslSocket::supportsSsl() ? "this Qt has no TLS support" :
         "no temporary directory");
@@ -23534,19 +23572,25 @@ static void TestEphSrvLiveQt()
       Check(fCerts, "openssl made the TLS leg's throwaway CA and certificate");
       if (!fCerts)
         goto LRestore;
-      procTls.setProcessChannelMode(QProcess::MergedChannels);
-      procTls.start(strBin, QStringList() << "--port" <<
-        QString::number(portTls) << "--ephe" << strEphe << "--threads" << "1"
-        << "--tls-cert" << strDir + "/srv.pem" << "--tls-key" <<
-        strDir + "/srv.key");
-      Check(FWaitEphdQt(&procTls, &baTlsLog, 10000) &&
-        baTlsLog.contains(" scheme=wss "), "astrolog-ephd started over wss:// on "
-        "port %d", portTls);
+      // The same daemon, on the TLS leg's own port, with the certificate.
+      {
+        QStringList rgstrTls = rgstrArgs;
+        int iPort = rgstrTls.indexOf("--port");
+        if (iPort >= 0 && iPort + 1 < rgstrTls.size())
+          rgstrTls[iPort + 1] = QString::number(portTls);
+        rgstrTls << "--tls-cert" << strDir + "/srv.pem" << "--tls-key" <<
+          strDir + "/srv.key";
+        procTls.setProcessChannelMode(QProcess::MergedChannels);
+        procTls.start(strBin, rgstrTls);
+      }
+      Check(FWaitPromdQt(&procTls, &baTlsLog, 10000) &&
+        baTlsLog.contains("(wss://"), "prometheiad started over wss:// on "
+        "port %d (%.200s)", portTls, baTlsLog.constData());
 
       OraclePinUtQt(1990, 6, 15, 12.0);
       ciCore.lon = 122.3; ciCore.lat = 47.6;
       us.fSidereal = fFalse; us.objCenter = oEar; us.fTopoPos = fFalse;
-      EphSourceSet("swiss");
+      EphSourceSet(szOracleSrvQt);
       CastChart(0);
       SnapshotEphQt(&snLocal);
 
@@ -23585,7 +23629,7 @@ static void TestEphSrvLiveQt()
       SnapshotEphQt(&snSrv);
       cDiff = CDiffEphQt(&snLocal, &snSrv, 0.0, S(szDiff));
       Check(NCastWarnSrvTestQt() == cWarn && cDiff == 0, "a cast over wss:// "
-        "is bit-identical to the local cast (%d warnings, %d differ: %s)",
+        "is bit-identical to the exact oracle's (%d warnings, %d differ: %s)",
         NCastWarnSrvTestQt() - cWarn, cDiff, szDiff);
       EphSrvFinalizeQt();
       QSslConfiguration::setDefaultConfiguration(sslSav);
@@ -23604,6 +23648,10 @@ LRestore:
   EphSourceSet(baChainSav.constData());
   FEphParamSet(epServerUrl, baAddrSav.isEmpty() ? NULL :
     baAddrSav.constData());
+  for (int i = 0; i < 4; i++)
+    FEphParamSet(rgepProm[i], rgbaPromSav[i].isEmpty() ? NULL :
+      rgbaPromSav[i].constData());
+  szOracleSrvQt = "swiss";
   us.fSidereal = fSidSav; us.fSidereal2 = fSid2Sav;
   us.fProgress = fProgSav;
   us.objCenter = objCenterSav;
@@ -24407,31 +24455,45 @@ static flag FEphBrowseQt(QPushButton *ppb, CONST QString &strAnswer,
   QString *pstrSelSeen = NULL)
 {
   QTimer tPick;
-  flag fSeen = fFalse;
-  int cTick = 0;
+  flag fSeen = fFalse, fTyped = fFalse, fDone = fFalse;
+  int cTick = 0, cTyped = 0;
 
   QObject::connect(&tPick, &QTimer::timeout, [&]() {
     QFileDialog *pfd =
       qobject_cast<QFileDialog *>(QApplication::activeModalWidget());
-    if (pfd == NULL || fSeen)
+    if (pfd == NULL || fDone)
       return;
     QLineEdit *pe = pfd->findChild<QLineEdit *>("fileNameEdit");
-    // A picker that preselects (the folder picker selects the folder it
-    // opens on) applies the selection when the folder has loaded, and
-    // that writes the name field -- over a path typed before it landed,
-    // one run in eight (found 2026-10-25). So it is waited for, which is
-    // also how the caller learns the selection was there.
-    if (!strSel.isEmpty() && pe != NULL && pe->text() != strSel &&
-      ++cTick < 60 * nScaleTest)
+    if (!fTyped) {
+      // A picker that preselects (the folder picker selects the folder it
+      // opens on) applies the selection when the folder has loaded, and
+      // that writes the name field -- over a path typed before it landed,
+      // one run in eight (found 2026-10-25). So it is waited for, which is
+      // also how the caller learns the selection was there.
+      if (!strSel.isEmpty() && pe != NULL && pe->text() != strSel &&
+        ++cTick < 60 * nScaleTest)
+        return;
+      fSeen = fTrue;
+      *pstrStart = pfd->directory().absolutePath();
+      if (pstrSelSeen != NULL)
+        *pstrSelSeen = pe != NULL ? pe->text() : QString();
+      // As a user answers it, by typing the path into the name field:
+      // selectFile() leaves the selection empty until the folder is read.
+      if (pe != NULL)
+        pe->setText(strAnswer);
+      fTyped = fTrue;
       return;
-    fSeen = fTrue;
-    *pstrStart = pfd->directory().absolutePath();
-    if (pstrSelSeen != NULL)
-      *pstrSelSeen = pe != NULL ? pe->text() : QString();
-    // As a user answers it, by typing the path into the name field:
-    // selectFile() leaves the selection empty until the folder is read.
-    if (pe != NULL)
+    }
+    // Accepted on a LATER tick, once what was typed has stayed: the
+    // selection can write the name field a second time after the first,
+    // and an accept in the same tick as the typing then returned the
+    // preselected folder -- one run in seven of the whole ephemeris set,
+    // the same day, after the first fix. Typed again if it was overwritten.
+    if (pe != NULL && pe->text() != strAnswer && ++cTyped < 20) {
       pe->setText(strAnswer);
+      return;
+    }
+    fDone = fTrue;
     // QFileDialog::accept() is protected; QDialog's is the same virtual.
     static_cast<QDialog *>(pfd)->accept();
   });
@@ -24903,38 +24965,30 @@ static void TestEphemDialogQt()
   }
 #endif
 
-  // A real server: astrolog-ephd on a scratch port, requiring a token.
+  // A real server: prometheiad on a scratch port, requiring a token.
   // Right, wrong and no token, each as Test reports it.
   {
-    QString strBin = QCoreApplication::applicationDirPath() +
-      "/astrolog-ephd", strEphe;
+    QString strBin, rgstrFileT[3];
+    QStringList rgstrArgT;
     QTemporaryDir dirTok;
     QProcess proc;
     QByteArray baLog;
+    char szWhyT[cchSzMax];
     int port = 27500 + (int)(QCoreApplication::applicationPid() % 400);
 
-    if (!QFileInfo(strBin).isExecutable())
-      printf("  skipped: %s is not built\n", strBin.toLocal8Bit().constData());
+    if (!FPromdArgsQt(port, &strBin, &rgstrArgT, rgstrFileT, S(szWhyT)))
+      printf("  skipped: %s\n", szWhyT);
     else {
       QFile fileTok(dirTok.path() + "/tokens");
       if (fileTok.open(QIODevice::WriteOnly)) {
         fileTok.write("dialog-token-good\n");
         fileTok.close();
       }
-      for (i = 0; i < 10; i++)
-        if (FSzSet(us.rgszPath[i])) {
-          SzPathDirAbs(us.rgszPath[i], S(szPath));
-          strEphe += (strEphe.isEmpty() ? "" : ";") +
-            QString::fromLocal8Bit(szPath);
-        }
-      strEphe += (strEphe.isEmpty() ? "" : ";") +
-        QCoreApplication::applicationDirPath();
       proc.setProcessChannelMode(QProcess::MergedChannels);
-      proc.start(strBin, QStringList() << "--port" << QString::number(port)
-        << "--ephe" << strEphe << "--threads" << "1" << "--tokens" <<
-        dirTok.path() + "/tokens" << "--require-token");
-      if (!FWaitEphdQt(&proc, &baLog, 10000))
-        Check(fFalse, "astrolog-ephd started on port %d (%s)", port,
+      proc.start(strBin, rgstrArgT << "--tokens" << dirTok.path() +
+        "/tokens" << "--require-token");
+      if (!FWaitPromdQt(&proc, &baLog, 10000))
+        Check(fFalse, "prometheiad started on port %d (%s)", port,
           baLog.constData());
       else {
         DriveModalQt(ShowEphemDialogQt, [&](QWidget *pw) {
@@ -24974,38 +25028,78 @@ static void TestEphemDialogQt()
         // and it sets the Uranians and custom slots aside -- so nothing
         // asked whether the dialog's setting computes every object the
         // settings name. Horizons alone did not (the nodes, 2026-10-25).
-        // Same files on both sides, so bit for bit.
+        // The Swiss files say which objects a cast must compute at all;
+        // Prometheia's library on the daemon's own files is the same engine
+        // on this side of the wire, so it is held to that bit for bit. At
+        // a 1990 instant, not the chart the settings left: the Delta T the
+        // client states pairs with Prometheia's Moon only after 1955 (the
+        // live server group's 1900 scenario, QT_GUI_PLAN.md item 289).
         {
           static EPHSNAPSHOT snLoc, snSrv;
-          char szDiff[cchSzMax], szUrlT[cchSzDef];
+#ifdef PROMETHEIA
+          static EPHSNAPSHOT snLib;
+          static CONST int rgepPromT[3] = {epPrometheiaEphemeris,
+            epPrometheiaCatalog, epPrometheiaPerturbers};
+#endif
+          char szDiff[cchSzMax], szUrlT[cchSzDef], szZero[cchSzMax] = "";
           int cDiff, cZero = 0, iT;
+          CI ciT = ciCore;
 
+          OraclePinUtQt(1990, 6, 15, 12.0);
+          ciCore.lon = 122.3; ciCore.lat = 47.6;
           sprintf2(S(szUrlT), "localhost:%d", port);
           FEphParamSet(epServerUrl, szUrlT);
           FEphParamSet(epServerToken, "dialog-token-good");
           EphSourceSet("swiss");
           CastChart(0);
           SnapshotEphQt(&snLoc);
+#ifdef PROMETHEIA
+          for (iT = 0; iT < 3; iT++)
+            FEphParamSet(rgepPromT[iT],
+              rgstrFileT[iT].toLocal8Bit().constData());
+          FEphParamSet(epPrometheiaLongspan, NULL);
+          EphSourceSet("prometheia");
+          CastChart(0);
+          SnapshotEphQt(&snLib);
+#endif
           EphSourceSet("server");
           EphSrvStartupQt();
           is.fNoEphFile = fFalse;
           CastChart(0);
           SnapshotEphQt(&snSrv);
-          cDiff = CDiffEphQt(&snLoc, &snSrv, 0.0, S(szDiff));
           for (iT = 0; iT < objMax; iT++)
             if (snSrv.rgobj[iT] == 0.0 && snSrv.rgalt[iT] == 0.0 &&
-              snSrv.rgdir[iT] == 0.0 && snLoc.rgobj[iT] != 0.0)
+              snSrv.rgdir[iT] == 0.0 && snLoc.rgobj[iT] != 0.0) {
               cZero++;
+              if (CchSz(szZero) < 200)
+                sprintf2(szZero + CchSz(szZero), cchSzMax - CchSz(szZero),
+                  "%s%s", *szZero ? ", " : "", szObjName[iT]);
+            }
           Check(cZero == 0, "a whole cast through the server alone leaves "
-            "no object at 0Ari00'00\" that the Swiss files compute (%d)",
-            cZero);
-          Check(cDiff == 0, "and every object is the Swiss files' own, bit "
-            "for bit (%d differ: %s)", cDiff, szDiff);
+            "no object at 0Ari00'00\" that the Swiss files compute (%d: %s)",
+            cZero, szZero);
+#ifdef PROMETHEIA
+          cDiff = CDiffEphQt(&snLib, &snSrv, 0.0, S(szDiff));
+          Check(cDiff == 0, "and every object is Prometheia's library's own "
+            "on the daemon's files, bit for bit (%d differ: %s)", cDiff,
+            szDiff);
+          for (iT = 0; iT < 3; iT++)
+            FEphParamSet(rgepPromT[iT], rgbaParamSav[rgepPromT[iT]].isEmpty()
+              ? NULL : rgbaParamSav[rgepPromT[iT]].constData());
+          FEphParamSet(epPrometheiaLongspan,
+            rgbaParamSav[epPrometheiaLongspan].isEmpty() ? NULL :
+            rgbaParamSav[epPrometheiaLongspan].constData());
+#else
+          (void)cDiff; (void)szDiff;
+          printf("  (no Prometheia library in this build to hold the "
+            "server's cast to bit for bit)\n");
+#endif
           EphSrvFinalizeQt();
           FEphParamSet(epServerUrl, rgbaParamSav[epServerUrl].constData());
           FEphParamSet(epServerToken,
             rgbaParamSav[epServerToken].constData());
           EphSourceSet("swiss");
+          ciCore = ciT;
           CastChart(0);
         }
       }

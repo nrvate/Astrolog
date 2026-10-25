@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""The grading and the driver behind tools/ephsrv-houses.sh.
+"""House points graded: the houses leg of tools/ephsrv-prometheia.sh.
 
-The server's house points (object kind 6) against tools/houses_ref.py, the
+It drove tools/ephsrv-houses.sh against astrolog-ephd until that server went
+on 2026-10-25; it grades Prometheia's daemon now. A server's house points (object kind 6) against tools/houses_ref.py, the
 reference implementation of EPHEMERIS_PLUGINS_PLAN.md 3.5b. Every row is graded
 AT ITS OWN REPORTED ARMC AND OBLIQUITY: the reference is handed the two
 numbers the row carries, so a sidereal-time model that differs by an

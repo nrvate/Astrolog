@@ -71,14 +71,9 @@ astrolog-qt-base
 .claude*
 .env*
 
-# ephsrv build artifacts: uSockets builds to a static lib, the smoke test
-# compiles to a local binary; the vendored sources and LICENSEs are what
-# is tracked.
-/ephsrv/uSockets/uSockets.a
-/ephsrv/smoketest
-
-# The ephemeris server's objects and binaries (Makefile.ephsrv; the vendored
-# uSockets static library was ignored with the ephsrv vendoring).
+# The protocol tools' binaries (the root Makefile). astrolog-ephd and
+# obj-ephsrv/ were the ephemeris server's, which went on 2026-10-25; still
+# ignored, so a checkout that built them before does not list them.
 /obj-ephsrv/
 /astrolog-ephd
 /eph_wsclient

@@ -496,8 +496,10 @@ int main(int argc, char **argv) {
   // EPH_DROP: the arrival affordance. A comma-separated list of option
   // spellings; each occurrence is removed from this run's own argv, WITH
   // whatever it consumes, and the client then behaves as though it had
-  // never been given. tools/ephsrv-blindspots.sh runs a gate once per
-  // option this way and calls a gate that still passes blind to it.
+  // never been given. tools/ephsrv-blindspots.sh ran a gate once per
+  // option this way and called a gate that still passed blind to it; it
+  // went with astrolog-ephd on 2026-10-25, and this stays for asking the
+  // same question of a gate against Prometheia's daemon.
   //
   // WHY IT LIVES HERE rather than in a shell wrapper: the arity of every
   // option is in the parse loop below and nowhere else, so a wrapper

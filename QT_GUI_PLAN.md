@@ -11908,6 +11908,125 @@ this is the note that explains the wall of dialogs.
     the warning gate, clang gate, stale-object and system-header checks
     clean; `ldd astrolog-qt-test` names no libswe.
 
+289. **The Swiss server goes; every route into a v4 engine asks one
+    question.** 2026-10-25, the maintainer: "jettison the astrolog-ephe
+    server, we now have promethia support", and of the two routes into
+    Prometheia, "we want the library calls to take the same path right?".
+
+    *What went.* `astrolog-ephd` (`ephsrv/eph_srv.cpp`, 4,300 lines), its
+    cache header, the vendored uWebSockets and uSockets, `ephsrv/deploy/`,
+    the smoke test, `Makefile.ephsrv` and `make ephsrv`, and the 25 tools
+    that only made sense against it -- golden, soak, cache, bench, robust,
+    tls, ops, limits, rates, image, blindspots, load, fork, serve, houses,
+    the app demo, the sidereal-plane and node-frame probes and fits, and
+    the two-daemon star-rate grader -- with their `ci-selftest.sh` and
+    `check.sh` lines. Their plans carry a retirement banner and are history.
+    *What stays*, because something still reads it: the `server` source;
+    `ephsrv/ephproto.h`, `conformance/`, `registries.json` and
+    `houses-rows.tsv`, at the same paths, since Prometheia's scheduled
+    checks read them from this tree; the shared sidereal-plane, star-orbit
+    and node-rate headers calc.cpp compiles; `eph_wsclient`, a v4 client
+    for any server, now `make eph_wsclient`; `tools/ephsrv-prometheia.sh`,
+    `tools/crosstest-prom.sh` and the house-point grader.
+
+    *The live tests, against prometheiad.* `ephem-server-live` and the
+    Ephemeris Settings token leg started this tree's server and compared
+    bytes with the local Swiss cast, Swiss being on both sides of the wire.
+    They start `prometheiad` now (`FPromdArgsQt`: the checkout
+    `PROMETHEIA_HOME` names, compiled into the test builds, over its own
+    kernels), and every cast has two oracles: the local Swiss cast to the
+    cross-engine bounds, and Prometheia's library on the daemon's own
+    three files to the BIT. The second was measured before it was trusted
+    -- tropical and sidereal 1990 casts bit-identical over every served
+    body -- and it is what the client's own legs needed: the nested cast,
+    the window cache, animation, reconnecting and wss had been skipped
+    against any foreign server, and now run. The ephemeris-edge leg
+    stages the daemon's own edge, read from its declared coverage
+    (`JdCoverageMinSrvTestQt()`), not the bundled Swiss files' 1800.
+
+    *What that found, the day it first ran* -- none of it visible before,
+    because nothing had held one route into Prometheia to the other's bits:
+
+    - **A Mars-centred chart, 6-18" apart.** The library route had its own
+      Swiss-to-v4 translation, which asked a planet-centred chart for
+      every correction; Swiss's `swe_calc_pctr()`, reached with the
+      heliocentric bit set, applies light time alone, and the server route
+      (`ProfileFromSwiss()`) asked that. The 6-18" was the aberration of
+      Mars's own motion. Prometheia's session confirmed their library and
+      server agree with each other for the same question.
+    - **Vulcan, refused on every cast.** The server route named a
+      fictitious body by its A.15 token, which prometheiad does not define
+      for Vulcan; the library route sent its elements. Every cast warned,
+      re-asked, and missed the window cache -- 20 of the client legs'
+      failures under `-i nrvate.as`, which enables Vulcan.
+    - **Delta T before 1955.** The server route stated a Delta T paired
+      with the LOCAL Swiss's lunar tidal term (DE431's -25.80"/cy^2), the
+      library route with the engine's own (DE441's -25.936): 0.0375 s at
+      1900, 0.022" on the Moon, quadratic back from 1955. Prometheia's
+      session agreed in principle to an optional WELCOME value per
+      coverage span naming the term; no primary source states one for
+      DE440/441 (Park et al. 2021 calls it implicit), so their daemon will
+      send it absent, and the client ASSUMES DE441's term for a server,
+      recorded as an assumption in `JdeSrvQt()`.
+    - **A scenario that never asked what it said.** The custom-object
+      scenario put Jupiter's perihelion in custom slot 0, which IS Vulcan's
+      index; under `-i nrvate.as` seorbel.txt names Vulcan, so the
+      perihelion never went on the wire there. Under `-Yi1 ephem` it did,
+      and the MEAN perihelion was 587.6" apart -- Swiss's mean elements
+      against Prometheia's DE440 fit, a definitional difference. The
+      scenario asks the OSCULATING one now, to its own bound (0.97"
+      measured, 1.3" held), the exact oracle holding it to the bit.
+    - **A settings test 3c8f294 broke.** `ephem-server`'s settings-file leg
+      compared whole lines, and since that commit every ephemeris line
+      carries its label as a comment. Not run in that commit's
+      verification; it compares what comes before the comment now.
+    - **The folder Browse check, one run in seven of the combined set.**
+      Item 287's fix waited for the picker's preselection before typing;
+      the selection can write the name field a second time, and the accept
+      in the same tick then returned the preselected folder. The helper
+      types on one tick and accepts on a later one, once the typing has
+      stayed (`FEphBrowseQt`). Ten runs of the Browse groups and two of the
+      combined set clean after it.
+    - **On Prometheia's side, reported with a C reproduction:** a catalog
+      body asked within about 115 days of the planets file's start fails
+      (the integrator reaches 2.8 days before it), and after that the body
+      fails at EVERY instant for the engine's life -- Chiron, Pholus and
+      Ceres alike at 1990 and 2100. The edge leg triggers it, and under
+      `-i nrvate.as`, which casts the catalog asteroids, the library then
+      fell back to Swiss for Chiron while a freshly restarted daemon did
+      not: the 0.19" in the reconnect, five-objects and wss legs. Open on
+      their side, then fixed there the same evening (f94fd56): the
+      perturber tables were one per engine with a sticky failure flag, so
+      it was every catalog body, not one. Against it the four checks pass.
+
+    *One translation.* `ephreq.h` was already documented as "the one
+    translation, shared by every transport", and two transports bypassed
+    it. It holds `FEphV4FromSwiss()` now -- one Swiss call as a v4 profile
+    and object, a fictitious body as its ELEMENTS (kind 4, the ones Swiss
+    reads: seorbel.txt, else the stock set), so a user's edited file is
+    the body every engine computes -- and `RDeltaTV4Sec()`, the one Delta
+    T. The query translation, the server route's own cast loop and the
+    library all call them; the library builds its question with
+    `CEphRequestFromQuery()` and computes from that `eph::Request`, so the
+    only difference between the two routes is the transport. The element
+    code moved out of the plugin's `#ifdef PROMETHEIA` (it uses nothing of
+    the library) behind `FEphElemGet()`. The Hamburg points go on the wire
+    as elements too; they were bit-identical either way.
+
+    *Net.* `ephem-server-live` 151 passed, 0 failed under both `-Yi1
+    ephem` and `-i nrvate.as`, the 1900 scenario to the bit, against
+    Prometheia f94fd56. The ephemeris groups together (horizons,
+    ephem-server, ephem-server-live, ephem-registry, ephem-no-source,
+    prometheia, oracle, ephemeris-dialog, about-swiss): 1336 and 1335
+    passed, 0 failed. Sabotaged and seen to fail, each reverted by its
+    exact string: a 1e-13 degree error in the library's row (22 checks,
+    every one the exact oracle's -- the bounds cannot see it); the server
+    route's Delta T back on Swiss's own term (the 1900 scenario and the
+    1550 edge); a fictitious body back to its token (Vulcan's warning,
+    the window cache, animation). `make check` clean, the suite 6484
+    passed. Console, Qt, Win32, wcli, Qt6, `eph_wsclient` and
+    `ephproto_test` build with no warning.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

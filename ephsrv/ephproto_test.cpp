@@ -529,7 +529,8 @@ int main(int argc, char **argv) {
     // mapping -- so under those flags the round trip IS the refusal.
     // SE_MEAN_NODE is absent: it no longer takes the named-body path, so
     // the geocentric-only guard does not apply to it. swe_nod_aps serves a
-    // heliocentric orbit point properly -- ephsrv-golden has legs for it --
+    // heliocentric orbit point properly -- the server's golden gate had legs
+    // for it --
     // which makes the mean node newly askable from the Sun's centre. The
     // other five are still named bodies and still refuse.
     auto fLunarNamed = [](int32_t ipl) {

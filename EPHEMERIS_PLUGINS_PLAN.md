@@ -1,5 +1,11 @@
 # Modular ephemeris: protocol version 4, source plugins, one way to choose a source
 
+> **2026-10-25:** `astrolog-ephd` was retired (`QT_GUI_PLAN.md` work log
+> item 289), so `prometheiad` is the version 4 server; the protocol, its
+> files under `ephsrv/` and the `server` source are unchanged. Every route
+> into a v4 engine now asks with one translation (`ephreq.h`). References
+> below to astrolog-ephd are history.
+
 This document is the design record for three linked changes. First, a
 **source-neutral wire protocol, version 4**, which both `astrolog-ephd` and
 Ephemeris Prometheia's `prometheiad` speak natively. Second, **every ephemeris

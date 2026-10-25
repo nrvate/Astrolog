@@ -42,7 +42,7 @@ SELFTEST=0
 for f in "$PROMD" "$EPHE" "$CLIENT"; do
   if [ ! -e "$f" ]; then
     echo "crosstest-prom: $f is not there; skipping (this gate needs the"
-    echo "  Prometheia build and our own \"make ephsrv\")"
+    echo "  Prometheia build and our own \"make eph_wsclient\")"
     exit 0
   fi
 done

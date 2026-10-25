@@ -42,7 +42,7 @@
 // measured. The centre point is not sampled -- the five-point formula does
 // not use it -- so four extra calls buy all three columns.
 //
-// This does make tools/ephsrv-rates.sh tautological FOR THESE POINTS: a rate
+// This made the server's rate gate tautological FOR THESE POINTS: a rate
 // computed by differencing trivially matches a difference. That is inherent
 // in 3.5a rather than a weakness here, and the independent check is the
 // cross-test against an engine that does not difference.

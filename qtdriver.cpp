@@ -8064,14 +8064,22 @@ static void StopTransQt()
 }
 
 
-// The instant in TT, as FSwissPlanet() makes it from the cast's UT1.
+// The instant in TT a question to the server states, from the cast's UT1,
+// with the Delta T every route into a v4 engine states (ephreq.h,
+// RDeltaTV4Sec()): paired with the lunar tidal term of the SERVER'S Moon,
+// not the local Swiss files' one FSwissPlanet() pairs with, whose cache
+// this therefore leaves alone. Version 4 does not yet say which Moon a
+// server answers from -- an optional WELCOME value per coverage span was
+// agreed in principle with the Prometheia project on 2026-10-25, absent
+// meaning unknown, and their daemon will send it absent until the term is
+// sourced -- so the term is an ASSUMPTION, recorded as one: DE440/DE441's,
+// SE_TIDAL_DE441, the term the Prometheia library route pairs with. Every
+// v4 server there is serves those files. Until 2026-10-25 this was Swiss's
+// own term, right for this tree's Swiss server and 0.0375 s wrong at 1900
+// for prometheiad (QT_GUI_PLAN.md item 289).
 static real JdeSrvQt(real jd)
 {
-  if (jd != is.jdDeltaT) {
-    is.jdDeltaT = jd;
-    is.rDeltaT = swe_deltat(jd);
-  }
-  return jd + (us.rDeltaT == rInvalid ? is.rDeltaT : us.rDeltaT/86400.0);
+  return jd + RDeltaTV4Sec(jd, SE_TIDAL_DE441) / 86400.0;
 }
 
 
@@ -9049,21 +9057,17 @@ void SrvPrefetchQt(real t, int objCentCalc, int imax, CONST EPHQUERY *pqSrv)
       s_plan.rgent[i].fUnsupported = fTrue;
       continue;
     }
-    // GetSwissFlags() spells the backend number into the ephemeris bits;
-    // which ephemeris a server reads is the server's business, and its
-    // datasetId says which it was.
-    ss.iflag = (ss.iflag & ~(SEFLG_JPLEPH | SEFLG_MOSEPH)) | SEFLG_SWIEPH;
+    // The one translation every route into a v4 engine asks with
+    // (ephreq.h, FEphV4FromSwiss()), which also leaves our ephemeris bit
+    // out: which ephemeris a server reads is the server's business.
     {
       eph::Profile pf;
       eph::Object obj;
-      double topo[3] = {ss.topoLon, ss.topoLat, ss.topoElv};
       std::vector<uint8_t> rgbProf;
       QByteArray baProf;
       int ip;
 
-      if (!eph::swiss::ProfileFromSwiss(ss.iflag, ss.iobjCent, ss.nSidMode, topo, &pf) ||
-        !eph::swiss::ObjectFromSwiss(ss.iobj, ss.nPnt > 0 ? ss.nPnt - 1 : -1,
-        ss.nNodMethod, &obj)) {
+      if (!FEphV4FromSwiss(&ss, &pf, &obj)) {
         // No version 4 form for this call. Not silent: the read below says
         // so, once per cast, like every other object with no answer.
         continue;
@@ -9480,6 +9484,19 @@ void SetWelcMaxCellsSrvTestQt(uint32_t dw) { esrv.welc.maxCells = dw; }
 // The coverage the server declared: how many spans, and one span put in
 // their place (jdMin > jdMax puts back what the server sent).
 int CCoverageSrvTestQt() { return (int)esrv.caps.coverage.size(); }
+// The earliest instant a declared span starts at, a TT Julian day, or 0
+// when the server declared none.
+double JdCoverageMinSrvTestQt()
+{
+  double jd = 0.0;
+
+  for (CONST eph::Capabilities::Coverage &e : esrv.caps.coverage) {
+    double jdT = e.tMin.jd1 + e.tMin.jd2;
+    if (jd == 0.0 || jdT < jd)
+      jd = jdT;
+  }
+  return jd;
+}
 void SetCoverageSrvTestQt(double jdMin, double jdMax)
 {
   static std::vector<eph::Capabilities::Coverage> vecSaved;

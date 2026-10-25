@@ -1,5 +1,10 @@
 # Ephemeris server: from built to production
 
+> **Retired, 2026-10-25.** The server this plan took to production went
+> with it (`QT_GUI_PLAN.md` work log item 289); go-live never happened. Kept
+> as the record of the TLS, limits, tokens and operability work, which
+> `prometheiad` followed ("These follow Astrolog's own server").
+
 `astrolog-ephd` is **built**: everything `EPHEMERIS_SERVER_PLAN.md` specified
 is on `qt`, the Qt client casts from it bit-exactly, and five gates hold it.
 It is not **deployable**: nothing about it assumes a network the operator

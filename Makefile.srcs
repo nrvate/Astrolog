@@ -54,16 +54,6 @@ SRC_QT   = qtdriver.cpp qtdialog.cpp
 SRC_TEST = qttest.cpp
 SRC_WIN  = wdialog.cpp wdriver.cpp
 
-# The ephemeris WebSocket server (branch ephserver, EPHEMERIS_SERVER_PLAN.md)
-# and the standalone wire client its gates drive. Unlike every other binary
-# in the tree these compile NONE of the engine and link the Swiss Ephemeris
-# thread-safe fork's library in place of the vendored SRC_SWISS files --
-# concurrent requests need the fork's swe_ctx API, which upstream 2.10.03
-# does not have, and the vendored copy stays untouched for the
-# swetest-oracle tooling. Makefile.ephsrv is the only build that compiles
-# this group; its SWE_HOME variable says where the fork lives.
-SRC_EPHSRV = ephsrv/eph_srv.cpp ephsrv/eph_wsclient.cpp
-
 # The vendored Swiss Ephemeris is compiled with two warning classes off:
 # -Wwrite-strings (string literals into char *, 80-odd sites in sweph.cpp
 # alone) and -Wsign-compare (two in search_star_in_list). They are
@@ -108,9 +98,8 @@ $(SWISS_OBJS): override CFLAGS += $(SWISS_NOWARN)
 #   CPPFLAGS += $(PROMETHEIA_FLAGS)
 #   LIBS += $(PROMETHEIA_LIBS)
 #
-# PROMETHEIA_HOME is where a Prometheia checkout lives, found the way
-# SWE_HOME finds the Swiss fork: a sibling by default, overridable with
-# "make PROMETHEIA_HOME=/path". Its build tree's prometheia.pc is appended
+# PROMETHEIA_HOME is where a Prometheia checkout lives: a sibling by
+# default, overridable with "make PROMETHEIA_HOME=/path". Its build tree's prometheia.pc is appended
 # to whatever PKG_CONFIG_PATH the user already has, so an installed
 # Prometheia still wins and a checkout without the sibling builds as before.
 PROMETHEIA_HOME ?= /shares/ephemeris-prometheia
@@ -122,6 +111,11 @@ else
 PROMETHEIA_FOUND := $(shell $(PROMETHEIA_PKGCONFIG) --exists prometheia 2>/dev/null && echo yes)
 endif
 PROMETHEIA_FLAGS := $(if $(PROMETHEIA_FOUND),-DPROMETHEIA $(shell $(PROMETHEIA_PKGCONFIG) --cflags prometheia 2>/dev/null))
+# The suite's live server legs start prometheiad, the protocol v4 daemon
+# this tree's own server gave way to, from the same checkout over its own
+# kernels (qttest.cpp, FPromdArgsQt): the three test makefiles compile its
+# path in. Found or not -- the legs skip, saying why, when it is not there.
+PROMETHEIA_TEST_FLAGS := -DPROMETHEIA_HOME_DIR='"$(PROMETHEIA_HOME)"'
 PROMETHEIA_LIBS := $(if $(PROMETHEIA_FOUND),$(shell $(PROMETHEIA_PKGCONFIG) --static --libs prometheia 2>/dev/null))
 
 # That decision is made here, at parse time, and a flip of it changes no

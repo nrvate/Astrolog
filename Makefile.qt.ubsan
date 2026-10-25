@@ -77,7 +77,7 @@ RM = rm -f
 # The Prometheia plugin's optional dependency; see Makefile.srcs for the
 # detection and for why a machine without the package builds exactly as
 # it always has.
-CPPFLAGS += $(PROMETHEIA_FLAGS)
+CPPFLAGS += $(PROMETHEIA_FLAGS) $(PROMETHEIA_TEST_FLAGS)
 LIBS += $(PROMETHEIA_LIBS)
 
 # Stamp the plugin state this dir was built with; see Makefile.srcs.
