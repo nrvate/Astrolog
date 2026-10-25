@@ -586,8 +586,24 @@ public:
       if (!ch.isNull() && ch == str[0])
         rgpb.append(pb);
     }
-    if (rgpb.isEmpty())
+    // A label's mnemonic moves to the control it labels, as a Windows
+    // static text's moves to the next control: "&Ephemeris:" to the list
+    // under it. Only when no button has the letter, so every button keeps
+    // the letter it had before labels were asked.
+    if (rgpb.isEmpty()) {
+      for (QLabel *pl : pdlg->findChildren<QLabel *>()) {
+        QWidget *pwBuddy = pl->buddy();
+        if (pwBuddy == NULL || !pl->isVisibleTo(pdlg) ||
+          !pwBuddy->isEnabled() || !pwBuddy->isVisibleTo(pdlg))
+          continue;
+        ch = ChMnemonicQt(pl->text());
+        if (!ch.isNull() && ch == str[0]) {
+          pwBuddy->setFocus(Qt::ShortcutFocusReason);
+          return true;
+        }
+      }
       return QObject::eventFilter(pobj, pev);
+    }
     // A mnemonic only one control carries presses it. An AMBIGUOUS one --
     // several share the letter -- only moves the focus to the next match,
     // and the user presses Space or Enter to act: that is what Windows'
@@ -5582,40 +5598,12 @@ LAgain:
 // file that wants one; OK here writes the one source picked.
 
 // The rows are CEphDialogRowsOf()'s -- the picked source's search folder
-// when it reads Swiss or JPL files, then its own parameters from the
-// generated table -- so this file names no parameter at all.
-#define cEphParamRowQt 4
+// when it searches the -Yi folders, then its own parameters from the
+// generated table -- so this file names no parameter at all. Five: the
+// folder and Prometheia's four files.
+#define cEphParamRowQt 5
 
 extern void EphSrvFinalizeQt();
-
-
-// The live line under the rows for the picked source, until a Test
-// replaces it: its state in its own words, the connecting state with its
-// dots cycling, because a wait that stands still reads as broken.
-
-static void SzEphemStatusLineQt(char *sz, CONST char *szKey, int nTick)
-{
-  EPHSRCDEF *pephsrc;
-  char szState[cchSzDef];
-  int nState;
-
-  pephsrc = PephsrcGet(IEphSrcFromKey(szKey));
-  if (pephsrc == NULL) {
-    sprintf2(sz, cchSzMax, "'%s' is not built into this program.", szKey);
-    return;
-  }
-  // A local source's state is always "ready", which says nothing about
-  // whether its files are there; only Test can say that.
-  nState = pephsrc->State(S(szState));
-  if (nState == esConnecting)
-    sprintf2(sz, cchSzMax, "%s: %s%.*s", pephsrc->szName, szState,
-      nTick % 3 + 1, "...");
-  else if (nState == esReady && FEqSz(szState, "ready"))
-    sprintf2(sz, cchSzMax, "%s", "Press Test to check that it works.");
-  else
-    sprintf2(sz, cchSzMax, "%s. Press Test to check that it works.",
-      szState);
-}
 
 
 // Ephemeris Settings, transcribed from dlgEphem.
@@ -5642,6 +5630,9 @@ void ShowEphemDialogQt()
   QListWidget *plist = (QListWidget *)PwRcFindQt(rgbuilt, "dlEp_src");
   QLabel *plDesc = (QLabel *)PwRcFindQt(rgbuilt, "dsEp_ds");
   QLabel *plStatus = (QLabel *)PwRcFindQt(rgbuilt, "dsEp_st");
+  QPushButton *ppbTest = (QPushButton *)PwRcFindQt(rgbuilt, "dbEp_ct");
+  QPushButton *ppbOK = (QPushButton *)PwRcFindQt(rgbuilt, "IDOK");
+  QPushButton *ppbCancel = (QPushButton *)PwRcFindQt(rgbuilt, "IDCANCEL");
   for (i = 0; i < cEphParamRowQt; i++) {
     rgplRow[i] = (QLabel *)PwRcFindIdxQt(rgbuilt, "dsEp_p", i+1);
     rgpeRow[i] = (QLineEdit *)PwRcFindIdxQt(rgbuilt, "deEp_p", i+1);
@@ -5664,20 +5655,53 @@ void ShowEphemDialogQt()
     rgstrVal[i] = QString::fromLocal8Bit(SzSet(us.rgszEphParam[i]));
   rgstrVal[iepRowPath] = QString::fromLocal8Bit(SzSet(us.rgszPath[1]));
 
+  // The line under the rows: the picked source's live state, refreshed on
+  // a timer and at once whenever the selection or a field changes, until a
+  // Test result takes it -- which then stays only while it is about what
+  // is on screen. A result left up after another source was picked read
+  // as that source's verdict (found 2026-10-24, from a screenshot).
+  // Whether the rows hold anything other than the settings in force: the
+  // in-use source's state describes those, not what is typed here.
+  auto FTyped = [&]() -> flag {
+    for (int iep = 0; iep < cEphParam; iep++)
+      if (rgstrVal[iep] != QString::fromLocal8Bit(SzSet(us.rgszEphParam[iep])))
+        return fTrue;
+    return rgstrVal[iepRowPath] !=
+      QString::fromLocal8Bit(SzSet(us.rgszPath[1]));
+  };
+  auto RefreshStatus = [&]() {
+    char szT[cchSzMax];
+    QByteArray baKey = strKey.toUtf8();
+
+    if (fHold || plStatus == NULL)
+      return;
+    SzEphDialogStatus(baKey.constData(), FTyped(), nTick, S(szT));
+    if (plStatus->text() != QString::fromUtf8(szT))
+      plStatus->setText(QString::fromUtf8(szT));
+  };
+
   // Show the picked source: its description, its rows filled from what
-  // was typed, the rows it does not use hidden -- a row the selection
-  // cannot use is a control that does nothing.
+  // was typed with what an empty one means shown greyed in it, the rows it
+  // does not use hidden -- a row the selection cannot use is a control
+  // that does nothing.
   auto ShowSource = [&]() {
     QByteArray baKey = strKey.toUtf8();
     EPHSRCDEF *pephsrc = PephsrcGet(IEphSrcFromKey(baKey.constData()));
+    char szEmpty[cchSzMax], szWhyT[cchSzMax];
     int iR;
+    // A source this build cannot use shows no rows -- nothing typed into
+    // them could make it work -- and cannot be OKed, or every chart would
+    // be cast through it and fail. The list keeps it, with its reason.
+    flag fAvail = pephsrc != NULL && pephsrc->FAvailable(S(szWhyT));
 
-    cRow = strKey.isEmpty() ? 0 :
+    cRow = !fAvail ? 0 :
       CEphDialogRowsOf(baKey.constData(), rgiepRow, cEphParamRowQt);
     if (plDesc != NULL)
       plDesc->setText(pephsrc == NULL ? QString("Pick an ephemeris.") :
         QString::fromUtf8(pephsrc->szDesc) +
-        (cRow == 0 ? " Nothing to set up." : ""));
+        (fAvail && cRow == 0 ? " Nothing to set up." : ""));
+    if (ppbOK != NULL)
+      ppbOK->setEnabled(pephsrc == NULL || fAvail);
     for (iR = 0; iR < cEphParamRowQt; iR++) {
       flag fLive = iR < cRow;
       int iep = fLive ? rgiepRow[iR] : -1;
@@ -5687,7 +5711,8 @@ void ShowEphemDialogQt()
       if (rgplRow[iR] != NULL) {
         rgplRow[iR]->setVisible(fLive);
         if (fLive)
-          rgplRow[iR]->setText(iep == iepRowPath ? QString("Ephemeris Folder:") :
+          rgplRow[iR]->setText(iep == iepRowPath ?
+            QString("Ephemeris Folder:") :
             QString::fromUtf8(rgephparam[iep].ep.szLabel) + ":");
       }
       if (rgpeRow[iR] != NULL) {
@@ -5695,6 +5720,11 @@ void ShowEphemDialogQt()
         if (fLive) {
           QSignalBlocker blk(rgpeRow[iR]);
           rgpeRow[iR]->setText(rgstrVal[iep]);
+          rgpeRow[iR]->setCursorPosition(0);
+          SzEphRowEmpty(iep, fFalse, S(szEmpty));
+          rgpeRow[iR]->setPlaceholderText(QString::fromUtf8(szEmpty));
+          SzEphRowEmpty(iep, fTrue, S(szEmpty));
+          rgpeRow[iR]->setToolTip(QString::fromUtf8(szEmpty));
           rgpeRow[iR]->setEchoMode(nKind == epkToken ?
             QLineEdit::PasswordEchoOnEdit : QLineEdit::Normal);
         }
@@ -5704,6 +5734,7 @@ void ShowEphemDialogQt()
           (nKind == epkPath || nKind == epkFile));
     }
     fHold = fFalse;
+    RefreshStatus();
   };
 
   if (plist != NULL) {
@@ -5733,18 +5764,31 @@ void ShowEphemDialogQt()
           break;
         }
     }
-    QObject::connect(plist, &QListWidget::currentRowChanged, &dlg,
-      [&, plist](int iRow) {
-      // A pick, not the row a Tab into the list made current without
-      // selecting it: see NListSelRowQt().
-      if (iRow < 0 || !plist->item(iRow)->isSelected())
+    // On the SELECTION, not the current row: a pick, not the row a Tab
+    // into the list made current without selecting it (NListSelRowQt()).
+    // This listened to currentRowChanged and asked whether that row was
+    // selected -- which a mouse press makes current BEFORE it selects it,
+    // so a click on a source changed nothing and OK applied the old one.
+    // Only the keyboard and a test's setCurrentRow() select first.
+    QObject::connect(plist, &QListWidget::itemSelectionChanged, &dlg,
+      [&, plist]() {
+      int iRow = NListSelRowQt(plist);
+      if (iRow < 0)
         return;
       EPHSRCDEF *pephsrcT = PephsrcGet(
         plist->item(iRow)->data(Qt::UserRole).toInt());
-      if (pephsrcT == NULL)
+      if (pephsrcT == NULL || strKey == QString::fromUtf8(pephsrcT->szKey))
         return;
       strKey = QString::fromUtf8(pephsrcT->szKey);
       ShowSource();
+    });
+    // Double-click is pick and OK, as in every list a dialog is built
+    // around. The click before it has already picked the row -- and made
+    // OK unavailable, when this build cannot use it.
+    QObject::connect(plist, &QListWidget::itemDoubleClicked, &dlg,
+      [&dlg, ppbOK](QListWidgetItem *) {
+      if (ppbOK == NULL || ppbOK->isEnabled())
+        dlg.accept();
     });
   }
 
@@ -5755,53 +5799,56 @@ void ShowEphemDialogQt()
         [&, iRow](CONST QString &str) {
         if (iRow < cRow)
           rgstrVal[rgiepRow[iRow]] = str;
-        fHold = fFalse;   // A Test result is about what WAS typed.
+        // A Test result is about what WAS typed: take it down now.
+        fHold = fFalse;
+        RefreshStatus();
       });
-    // Browse: a folder for the search path, a file for a file parameter.
+    // Browse: a folder for the search path, a file for a file parameter,
+    // starting where the field points when it points somewhere. A folder
+    // opens on its PARENT with itself selected, as Windows' folder picker
+    // shows it in the tree: opened inside, the picker reads every entry of
+    // the folder first, and the Swiss folder of a full install holds
+    // 887,000 files -- Browse sat for minutes (found 2026-10-24, by the
+    // suite under nrvate.as).
     if (rgppbRow[i] != NULL && rgpeRow[i] != NULL)
       QObject::connect(rgppbRow[i], &QPushButton::clicked, &dlg,
         [&, iRow]() {
         flag fDir = iRow < cRow && rgiepRow[iRow] == iepRowPath;
         QLineEdit *pe = rgpeRow[iRow];
-        QFileInfo fi(pe->text());
-        QString strStart = fi.isAbsolute() ? (fDir ? fi.absoluteFilePath() :
-          fi.absolutePath()) : StrLastDirQt("Browse");
-        QFileDialog dlgF(gi.qwind, "Browse", strStart,
-          fDir ? QString() : QString("Ephemeris Files (*.eph *.bsp *.se1);;"
-          "All Files (*)"));
+        char szAbs[cchSzMax];
+        QByteArray baT = pe->text().toLocal8Bit();
+        QString strStart, strSel;
+        if (!baT.isEmpty()) {
+          SzPathDirAbs(baT.constData(), S(szAbs));
+          QFileInfo fi(QString::fromLocal8Bit(szAbs));
+          strStart = fi.absolutePath();
+          if (fDir && fi.isDir())
+            strSel = fi.fileName();
+        } else
+          strStart = StrLastDirQt("Browse");
+        QFileDialog dlgF(&dlg, fDir ? "Ephemeris Folder" : "Browse", strStart,
+          fDir ? QString() : QString("Ephemeris Files (*.se1 *.eph *.bsp "
+          "*.epm *.4[0-9][0-9]);;All Files (*)"));
         dlgF.setFileMode(fDir ? QFileDialog::Directory :
           QFileDialog::ExistingFile);
         if (fDir)
           dlgF.setOption(QFileDialog::ShowDirsOnly, fTrue);
+        if (!strSel.isEmpty())
+          dlgF.selectFile(strSel);
         SizeFileDlgQt(&dlgF);
         if (dlgF.exec() == QDialog::Accepted &&
           !dlgF.selectedFiles().isEmpty()) {
+          // Shown from its start, as Windows' SetDlgItemText() shows it:
+          // setText() leaves the cursor at the end, and a long path read
+          // "nraid/shares/..." cut mid-word.
           pe->setText(dlgF.selectedFiles()[0]);
+          pe->setCursorPosition(0);
           NoteLastDirQt("Browse", dlgF.selectedFiles()[0]);
         }
       });
   }
   ShowSource();
 
-  // The line under the rows: the picked source's live state, refreshed on
-  // a timer, until a Test result takes it -- which then stays until the
-  // selection or a field changes, because it is about those.
-  QTimer timStatus(&dlg);
-  auto RefreshStatus = [&]() {
-    char szT[cchSzMax];
-    QByteArray baKey = strKey.toUtf8();
-
-    nTick++;
-    if (fHold || plStatus == NULL)
-      return;
-    if (strKey.isEmpty())
-      plStatus->setText(QString());
-    else {
-      SzEphemStatusLineQt(szT, baKey.constData(), nTick);
-      plStatus->setText(QString::fromUtf8(szT));
-    }
-  };
-  RefreshStatus();
   // A setting that names more than one source -- a chain from a settings
   // file -- is said once, since OK will keep only the one picked here.
   if (plStatus != NULL && CEphChainSrc(us.szEphemSource, rgisrc,
@@ -5811,15 +5858,20 @@ void ShowEphemDialogQt()
       .arg(QString::fromUtf8(SzSet(us.szEphemSource))));
     fHold = fTrue;
   }
-  QObject::connect(&timStatus, &QTimer::timeout, &dlg, RefreshStatus);
+  QTimer timStatus(&dlg);
+  QObject::connect(&timStatus, &QTimer::timeout, &dlg, [&]() {
+    nTick++;
+    RefreshStatus();
+  });
   timStatus.start(250);
 
   // Test: put what is on screen into force, ask the picked source ALONE
   // for three bodies at the chart's moment (FEphTestSource), and put the
   // saved settings back. The server is dropped on both sides of it, so the
   // test connects to the address typed and the next cast reconnects to the
-  // address in force.
-  QPushButton *ppbTest = (QPushButton *)PwRcFindQt(rgbuilt, "dbEp_ct");
+  // address in force. The dialog is held still while it runs -- a server
+  // or a web fetch can take seconds, and a click that landed meanwhile
+  // would act on settings that are not the user's.
   if (ppbTest != NULL && plStatus != NULL)
     QObject::connect(ppbTest, &QPushButton::clicked, &dlg, [&]() {
       char szOut[cchSzMax*4];
@@ -5847,11 +5899,15 @@ void ShowEphemDialogQt()
       EphSourceSet(baKey.constData());
       is.fSwissPathSet = fFalse;
       EphSrvFinalizeQt();
+      timStatus.stop();
+      fHold = fTrue;
       plStatus->setText("Testing...");
+      dlg.setEnabled(fFalse);
       plStatus->repaint();
       QApplication::setOverrideCursor(Qt::WaitCursor);
       fOk = FEphTestSource(baKey.constData(), S(szOut));
       QApplication::restoreOverrideCursor();
+      dlg.setEnabled(fTrue);
 
       for (iep = 0; iep < cEphParam; iep++)
         FEphParamSet(iep, rgbaSav[iep].constData());
@@ -5861,13 +5917,12 @@ void ShowEphemDialogQt()
       is.fSwissPathSet = fFalse;
       EphSrvFinalizeQt();
       fTested = fTrue;
-      plStatus->setText(QString(fOk ? "Works: " : "Does not work: ") +
-        QString::fromUtf8(szOut));
-      fHold = fTrue;
+      plStatus->setText(QString::fromUtf8(szOut));
+      (void)fOk;
+      timStatus.start(250);
+      ppbTest->setFocus();
     });
 
-  QPushButton *ppbOK = (QPushButton *)PwRcFindQt(rgbuilt, "IDOK");
-  QPushButton *ppbCancel = (QPushButton *)PwRcFindQt(rgbuilt, "IDCANCEL");
   if (ppbOK != NULL) {
     ppbOK->setDefault(fTrue);
     QObject::connect(ppbOK, &QPushButton::clicked, &dlg, &QDialog::accept);

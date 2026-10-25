@@ -192,7 +192,8 @@ static int NLookupServer(CONST char *sz, EPHMATCH *rgm, int cMax)
 
 EPHSRCDEF ephsrcServer = {
   "server", "Ephemeris Server",
-  "A version 4 ephemeris server over the network.",
+  "An ephemeris server over the network: astrolog-ephd, or any server "
+  "speaking its protocol.",
   FAvailableServer, GetCapsServer, StateServer, StartServer,
   StopServer, FSubmitServer, FReadServer, HintServer, NLookupServer
 };

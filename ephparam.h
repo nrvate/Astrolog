@@ -33,7 +33,7 @@ enum {
 
 #define EphParamRowsGenerated() \
   { \
-    {"jpl", {"file", "JPL file", epkFile, ""}}, \
+    {"jpl", {"file", "JPL File", epkFile, ""}}, \
     {"prometheia", {"ephemeris", "Ephemeris File", epkFile, ""}}, \
     {"prometheia", {"catalog", "Small-body Catalog", epkFile, ""}}, \
     {"prometheia", {"perturbers", "Perturber Kernel", epkFile, ""}}, \

@@ -97,6 +97,49 @@ flag FFileExists(CONST char *szFile)
 ******************************************************************************
 */
 
+// The directory holding the Astrolog executable, ending in its separator,
+// or "" when it is not known. FileOpen() below, SwissEnsurePath() and the
+// Prometheia source all resolve a relative -Yi directory against it.
+
+void GetExeDir(char *sz, int cch)
+{
+  char *pch;
+
+#ifdef WIN
+  GetModuleFileName(wi.hinst, sz, cch);
+#else
+  sprintf2(sz, cch, "%s", is.szProgName != NULL ? is.szProgName : "");
+#endif
+  for (pch = sz; *pch; pch++)
+    ;
+  while (pch > sz && *pch != chDirSep)
+    pch--;
+  if (*pch == chDirSep)
+    pch++;
+  *pch = chNull;
+}
+
+
+// A -Yi directory as every search uses it: one starting with a letter or
+// digit (and not a drive letter) is relative to the EXECUTABLE's
+// directory, not the working directory; anything else is taken as given.
+// Two readers resolving it two ways is how the Swiss files and the
+// Prometheia kernels came to be looked for in different places under the
+// same setting.
+
+void SzPathDirAbs(CONST char *szDir, char *sz, int cch)
+{
+  char szExe[cchSzMax];
+
+  if ((FCapCh(*szDir) || FUncapCh(*szDir) || FNumCh(*szDir)) &&
+    !(szDir[1] == ':')) {
+    GetExeDir(S(szExe));
+    sprintf2(sz, cch, "%s%s", szExe, szDir);
+  } else
+    sprintf2(sz, cch, "%s", szDir);
+}
+
+
 // Open the file indicated by the given string and return the file's stream
 // pointer, or NULL if the file couldn't be found or opened. All parts of the
 // program which open files to read call this routine. We look in several
@@ -4003,6 +4046,16 @@ static void FJPLCachePut(CONST char *szUrl, CONST PT3R *pt,
   if (cjcUsed < cJPLCache)
     cjcUsed++;
 }
+
+#ifdef QTTEST
+// The suite's way to answer a Horizons fetch with no network: a reply put
+// here is what GetJPLHorizonsAt() reads back for that exact URL, so a
+// whole cast through the horizons source can run offline.
+void JPLCachePutTest(CONST char *szUrl, CONST PT3R *pt, CONST char *szName)
+{
+  FJPLCachePut(szUrl, pt, szName);
+}
+#endif
 
 
 // Given a JPL object index, compute its geocentric position and velocity

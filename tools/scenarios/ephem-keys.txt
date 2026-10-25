@@ -1,0 +1,22 @@
+# Ephemeris Settings from the keyboard, through a real X server: the Alt
+# mnemonics go through Qt's shortcut map, which an event the suite sends
+# from inside the process does not reach (the ephemeris-dialog group tests
+# the bare letters, which the port routes itself, Windows' way). Alt+T
+# tests the source in use; Alt+E puts the focus back on the list, so Down
+# picks the next source and its rows replace the folder; Escape cancels.
+# Wine cannot be asked what a label says, and neither can AT-SPI reliably,
+# so the shots are what show the line and the rows; the expect lines are
+# what this scenario proves.
+menu Setting E&phemeris Settings...
+expect-window Ephemeris Settings
+shot out/drive/ephem-keys-0-open.png
+key alt+t
+sleep 2
+expect-window Ephemeris Settings
+shot out/drive/ephem-keys-1-tested.png
+key alt+e
+key Down
+sleep 1
+shot out/drive/ephem-keys-2-down.png
+key Escape
+expect-no-window Ephemeris Settings

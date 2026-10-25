@@ -243,7 +243,8 @@ static int NLookupHorizons(CONST char *sz, EPHMATCH *rgm, int cMax)
 
 EPHSRCDEF ephsrcHorizons = {
   "horizons", "JPL Horizons",
-  "NASA/JPL's Horizons service, fetched over the network per cast.",
+  "NASA/JPL's Horizons service over the network; the nodes and other "
+  "points it lacks come from the Swiss Ephemeris.",
   FAvailableHorizons, GetCapsHorizons, StateHorizonsSrc, StartHorizons,
   StopHorizons, FSubmitHorizons, FReadHorizons, HintHorizons,
   NLookupHorizons

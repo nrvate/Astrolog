@@ -39,7 +39,7 @@ OUT = "ephparam.h"
 # Sources with no parameters (swiss uses the -Yi paths; moshier, horizons,
 # matrix and none declare none) have no rows here.
 PARAMS = [
-    ("jpl", "file",        "JPL file",    "epkFile",  ""),
+    ("jpl", "file",        "JPL File",    "epkFile",  ""),
     # All three are FILE paths, resolved on the -Yi search paths by
     # FEphPromFindFile() and handed to prometheia_engine_open(),
     # _add_catalog() and _add_perturbers(). They were declared here as

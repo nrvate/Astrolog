@@ -1,8 +1,10 @@
-# The Windows half of Ephemeris Settings (QT_GUI_PLAN.md item 286): the
-# dialog opens from Setting / Ephemeris Settings, Test runs and the dialog
-# survives it, and Escape closes it. The Qt suite asserts what Test SAYS;
-# Wine has no way to read a static control's text, so the shots are for
-# looking at, and the expect lines are what this scenario proves.
+# The Windows half of Ephemeris Settings (QT_GUI_PLAN.md items 286-287):
+# the dialog opens from Setting / Ephemeris Settings, every source in the
+# list can be picked and shows its own rows, a row with focus says what
+# leaving it empty means, Test runs and the dialog survives it, and Escape
+# closes it. The Qt suite asserts what Test SAYS; Wine has no way to read
+# a static control's text, so the shots are for looking at, and the expect
+# lines are what this scenario proves.
 expect-window Astrolog
 focus Astrolog
 # By arrows, not "p": E&phemeris shares its letter with &Planetary Moons,
@@ -15,10 +17,43 @@ key Up
 key Return
 expect-window Ephemeris Settings
 focus Ephemeris Settings
-shot /tmp/claude-1000/-nvmraid-shares-Astrolog/958455c5-760e-4152-aabc-0b427d8fe47a/scratchpad/win/ephem-open.png
+shot out/win/ephem-0-open.png
+# The list has the focus. Home, then each source in turn: the rows follow
+# the selection within a quarter second (the dialog polls it).
+key Home
+sleep 1
+shot out/win/ephem-1.png
+key Down
+sleep 1
+shot out/win/ephem-2.png
+key Down
+sleep 1
+shot out/win/ephem-3.png
+key Down
+sleep 1
+shot out/win/ephem-4.png
+key Down
+sleep 1
+shot out/win/ephem-5.png
+key Down
+sleep 1
+shot out/win/ephem-6.png
+key Down
+sleep 1
+shot out/win/ephem-7.png
+key Down
+sleep 1
+shot out/win/ephem-8.png
+# Back to the first, Swiss Ephemeris, and into its folder row: the line
+# below says what an empty folder means.
+key Home
+sleep 1
+key Tab
+sleep 1
+shot out/win/ephem-9-hint.png
 key alt+t
-sleep 2
+sleep 3
 expect-window Ephemeris Settings
-shot /tmp/claude-1000/-nvmraid-shares-Astrolog/958455c5-760e-4152-aabc-0b427d8fe47a/scratchpad/win/ephem-tested.png
+shot out/win/ephem-10-tested.png
 key Escape
 expect-no-window Ephemeris Settings

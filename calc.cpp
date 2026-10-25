@@ -1156,6 +1156,7 @@ void ComputeEphem(real t)
   flag fJPLPla, fJPL, fRet;
 #ifdef SWISS
   EPHQUERY eq, eqGeo;
+  flag fGeoAny = fFalse;
 #endif
   EPHGEOROWS egr;
 
@@ -1226,7 +1227,7 @@ void ComputeEphem(real t)
       if (eqGeo.cobj > 0) {
         int isrcGeo = IEphSrcGeoUncorrected();
         if (isrcGeo != ephSrcNone)
-          FEphSubmitChain(&eqGeo, &isrcGeo, 1);
+          fGeoAny = FEphSubmitChain(&eqGeo, &isrcGeo, 1);
       }
       // A chain that answered NOTHING is the one failure that looks like a
       // success: every body at 0Ari00'00", no error, and the houses right,
@@ -1241,7 +1242,10 @@ void ComputeEphem(real t)
       // is about to be made again with an answer (the Qt backend recasts
       // on WELCOME). Warning here would print an alarm and then draw the
       // right chart a moment later, which is worse than silence.
-      if (eq.cobj > 0 && !FEphSubmit(&eq) && !is.fNoEphFile &&
+      // ... and only when the geocentric half answered nothing either:
+      // "every body" was said of a Horizons cast whose planets had all
+      // come back, because the rest had not (found 2026-10-25).
+      if (eq.cobj > 0 && !FEphSubmit(&eq) && !fGeoAny && !is.fNoEphFile &&
         !FEphChainConnecting()) {
         char szNo[cchSzMax];
         is.fNoEphFile = fTrue;
@@ -3084,6 +3088,22 @@ static flag FDirHasEphemQ(CONST char *szDir)
 }
 
 
+// The JPL file Swiss opens when none is named: SE_FNAME_DFT, which only
+// this file's headers define.
+CONST char *SzJplFileDefault()
+{
+  return SE_FNAME_DFT;
+}
+
+
+// The same question, for a caller outside this file: Ephemeris Settings'
+// Test, which says when the folder typed holds nothing.
+flag FDirHasEphem(CONST char *szDir)
+{
+  return FDirHasEphemQ(szDir);
+}
+
+
 // Append one directory to the list, unless it is empty or already
 // present.
 //
@@ -3228,6 +3248,40 @@ CONST char *SzSwissPathSet()
 }
 
 
+// The same path for a person to read, in Ephemeris Settings' Test result:
+// "the current folder and /usr/share/ephe" rather than ".;/usr/share/ephe/".
+// Each folder once -- the program's own folder is often the current one by
+// another spelling, and a trailing separator is not a different folder.
+
+void SzSwissPathShown(char *sz, int cch)
+{
+  char rgsz[cDirEphemMax+2][cchSzMax], szT[cchSzMax];
+  CONST char *pch, *pchEnd;
+  int cDir = 0, i, cchT;
+
+  *sz = chNull;
+  for (pch = SzSwissPathSet(); *pch; pch = pchEnd + (*pchEnd != chNull)) {
+    for (pchEnd = pch; *pchEnd && *pchEnd != chEphemSep; pchEnd++)
+      ;
+    cchT = (int)(pchEnd - pch);
+    while (cchT > 1 && (pch[cchT-1] == chDirSep || pch[cchT-1] == '/'))
+      cchT--;
+    if (cchT <= 0)
+      continue;
+    sprintf2(S(szT), "%.*s", cchT, pch);
+    for (i = 0; i < cDir && !FEqSz(rgsz[i], szT); i++)
+      ;
+    if (i < cDir || cDir >= cDirEphemMax+2)
+      continue;
+    sprintf2(rgsz[cDir++], cchSzMax, "%s", szT);
+  }
+  for (i = 0; i < cDir; i++)
+    sprintf2(sz + CchSz(sz), cch - CchSz(sz), "%s%s",
+      i == 0 ? "" : (i == cDir-1 ? " and " : ", "),
+      FEqSz(rgsz[i], ".") ? "the current folder" : rgsz[i]);
+}
+
+
 // Whether a body was answered by a DIFFERENT ephemeris than the one asked
 // for since the last reset: the library substitutes Moshier for a missing
 // Swiss file (and the Swiss files for a missing JPL one) and still
@@ -3249,11 +3303,14 @@ flag FSwissEphSubstituted(flag fReset)
 
 // Set up path for Swiss Ephemeris to search in for ephemeris files.
 
+// The -bP jpl.file value the path was last set up with.
+static char szJplFileSet[cchSzMax*2] = "";
+
 void SwissEnsurePath()
 {
   static EDL edl;
-  char szPath[AS_MAXCH], szExe[cchSzMax], szT[cchSzMax];
-  CONST char *pchDir;
+  char szPath[AS_MAXCH], szExe[cchSzMax], szT[cchSzMax], szJplDir[cchSzMax];
+  CONST char *pchDir, *pchJpl;
   char *pch;
   int i, cLost, cFound;
   flag fExplicitEmpty;
@@ -3261,6 +3318,12 @@ void SwissEnsurePath()
   char *env;
 #endif
 
+  // The JPL file is part of what this sets up, so a changed -bP jpl.file
+  // is a path to set again. Compared here rather than notified, as
+  // FEphParamSet() asks of every source that holds something open.
+  if (NSwissEphem() == 2 &&
+    !FEqSz(szJplFileSet, SzSet(us.rgszEphParam[epJplFile])))
+    is.fSwissPathSet = fFalse;
   if (is.fSwissPathSet)
     return;
   ClearB((pbyte)&edl, sizeof(EDL));
@@ -3390,8 +3453,51 @@ void SwissEnsurePath()
   // by default. SWE_FALLBACK=0 at make time keeps the fork's refusal.
   swe_set_ephe_fallback(SWE_EPHE_FALLBACK);
 #endif
+  // The JPL file (-bP jpl.file). Swiss keeps only the NAME it is given and
+  // looks for it on the search path, whatever directory came with it --
+  // so a file named with its directory has that directory added to the
+  // path, or it would never be found. The parameter was declared, saved,
+  // loaded and offered in Ephemeris Settings, and nothing read it until
+  // 2026-10-24: every JPL cast opened Swiss's default de431.eph, and a
+  // file typed in the dialog changed nothing. Empty restores that
+  // default, which is also what Swiss starts with.
+  //
+  // ONLY while the JPL file is the ephemeris in use. Opening one is not
+  // inert: Swiss takes its tidal acceleration, and so Delta-T, from the
+  // last lunar ephemeris it opened, so a DE441 file opened here moved a
+  // Swiss-files chart's Delta-T by 11.3 seconds at the year 1000 -- 5.6"
+  // on the Moon -- merely because a JPL file was configured (measured
+  // 2026-10-24, the first draft of this). A chain whose JPL source is not
+  // the Swiss bit in force never opens it; selecting it resets the path
+  // (EphSourceChanged()), which brings it here.
+  szJplDir[0] = chNull;
+  pchJpl = NSwissEphem() == 2 ? SzSet(us.rgszEphParam[epJplFile]) : "";
+  for (pch = (char *)pchJpl + CchSz(pchJpl); pch > pchJpl &&
+    pch[-1] != chDirSep && pch[-1] != '/'; pch--)
+    ;
+  if (pch > pchJpl) {
+    char szDirT[cchSzMax];
+    sprintf2(S(szDirT), "%.*s", (int)(pch - pchJpl), pchJpl);
+    SzPathDirAbs(szDirT, S(szJplDir));
+    i = CchSz(szPath);
+    if (i + 1 + CchSz(szJplDir) <= cchEphemPathMax) {
+      if (i > 0)
+        szPath[i++] = chEphemSep;
+      sprintf2(szPath + i, AS_MAXCH - i, "%s", szJplDir);
+    }
+  }
   swe_set_ephe_path(szPath);
   sprintf2(S(szSwissPathSet), "%s", szPath);
+  // Every time, while JPL is in use, and recorded only then. Swiss keeps
+  // the name it was last given across casts that never open it, so a
+  // record updated by a Swiss-files cast said "default" while Swiss still
+  // held a file that was not there: a JPL file typed wrong once, then any
+  // cast from the Swiss files, and the right file afterwards was never
+  // opened -- JPL "did not work" until restart (found 2026-10-24).
+  if (NSwissEphem() == 2) {
+    swe_set_jpl_file(FSzSet(pch) ? pch : SE_FNAME_DFT);
+    sprintf2(S(szJplFileSet), "%s", pchJpl);
+  }
   is.fSwissPathSet = fTrue;
 
   // Delta-T is a function of WHICH ephemeris answers: the library takes

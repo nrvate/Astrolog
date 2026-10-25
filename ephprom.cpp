@@ -98,8 +98,43 @@ static char *rgszEphPromOpenedFrom[cepPromParam] = {NULL, NULL, NULL, NULL};
 // date, which is what both of those are.
 static real g_rDeltaTSec = rInvalid;
 
+// The lunar tidal acceleration that belongs with the ephemeris this
+// engine answers from, or 0 when it is not known. Swiss's Delta-T model
+// is adjusted to the tidal term of the lunar ephemeris answering, so UT
+// and that Moon agree (swi_adjust_for_tidacc); the term is therefore part
+// of the PAIRING, not a property of Swiss. This hook used to take whatever
+// term Swiss had last loaded -- DE431's from the semo files, or DE441's if
+// a JPL file had just been opened -- so Prometheia's DE441 Moon at the
+// year 1000 read 203.4918752 or 203.4934645 depending on what ran before
+// it (an 11.3 s Delta-T, 5.7"), measured 2026-10-24 and confirmed with the
+// Swiss Ephemeris fork's session: 203.4934645 is the self-consistent
+// DE441 Moon, the other DE441 at DE431's TT.
+static double rEphPromTidAcc = 0.0;
+
+// Swiss's DE number to tidal term, as swi_get_tid_acc() maps it (ts.20
+// swephlib.c; the constants are swephexp.h's). 0 for a DE number it does
+// not list, which leaves Swiss's own term in force as before.
+static double RTidAccOfDenum(int denum)
+{
+  switch (denum) {
+  case 200: return SE_TIDAL_DE200;
+  case 403: return SE_TIDAL_DE403;
+  case 404: return SE_TIDAL_DE404;
+  case 405: return SE_TIDAL_DE405;
+  case 406: return SE_TIDAL_DE406;
+  case 421: return SE_TIDAL_DE421;
+  case 422: return SE_TIDAL_DE422;
+  case 430: return SE_TIDAL_DE430;
+  case 431: return SE_TIDAL_DE431;
+  case 440: case 441: return SE_TIDAL_DE441;
+  }
+  return 0.0;
+}
+
 static double FEnumDeltaTProm(void *puser, double jd)
 {
+  double r;
+
   (void)puser;
   if (g_rDeltaTSec != rInvalid)
     return (double)g_rDeltaTSec;
@@ -108,8 +143,16 @@ static double FEnumDeltaTProm(void *puser, double jd)
   // seconds, not the model's, are what this hook must answer too.
   if (us.rDeltaT != rInvalid)
     return (double)us.rDeltaT;
-  // swe_deltat() answers in DAYS; the hook is seconds of TT - UT1.
-  return swe_deltat(jd - swe_deltat(jd) / 86400.0) * 86400.0;
+  // swe_deltat() answers in DAYS; the hook is seconds of TT - UT1. With
+  // this engine's own tidal term set around the call and automatic
+  // restored straight after, as the fork's session advised: nothing runs
+  // between the two, so no other calculation sees the term.
+  if (rEphPromTidAcc != 0.0)
+    swe_set_tid_acc(rEphPromTidAcc);
+  r = swe_deltat(jd - swe_deltat(jd) / 86400.0) * 86400.0;
+  if (rEphPromTidAcc != 0.0)
+    swe_set_tid_acc(SE_TIDAL_AUTOMATIC);
+  return r;
 }
 
 void EphPromStop(void)
@@ -119,6 +162,7 @@ void EphPromStop(void)
   prometheia_engine_close(pephProm);
   pephProm = NULL;
   fEphPromOpen = fFalse;
+  rEphPromTidAcc = 0.0;
   // What the engine was opened from describes an OPEN engine, so it goes
   // with it. Held past the close, these were three of Astrolog's own
   // allocations that nothing ever released: every cast through this
@@ -127,7 +171,7 @@ void EphPromStop(void)
     DeallocatePIf(rgszEphPromOpenedFrom[iep]);
     rgszEphPromOpenedFrom[iep] = NULL;
   }
-  sprintf2(S(szEphPromState), "unavailable");
+  sprintf2(S(szEphPromState), "closed");
 }
 
 // Search a bare file name over Astrolog's own -Yi ephemeris directories
@@ -149,9 +193,15 @@ flag FEphPromFindFile(CONST char *szFile, char *szPath, int cch)
     return fTrue;
   }
   for (i = 0; i < 10; i++) {
+    char szDir[cchSzMax];
     if (!FSzSet(us.rgszPath[i]))
       continue;
-    sprintf2(S(szTry), "%s%c%s", us.rgszPath[i], chDirSep, szFile);
+    // Resolved as SwissEnsurePath() resolves it: a relative directory is
+    // the executable's, not the working directory's. Read as given, the
+    // default "-Yi1 ephem" found the kernels only when the program was
+    // started from its own folder.
+    SzPathDirAbs(us.rgszPath[i], S(szDir));
+    sprintf2(S(szTry), "%s%c%s", szDir, chDirSep, szFile);
     if (FFileExists(szTry)) {
       sprintf2(szPath, cch, "%s", szTry);
       return fTrue;
@@ -452,9 +502,34 @@ double REphPromElemDiff(CONST char *szFile)
 // C API's own example names, searched over the paths above; an empty
 // catalog or perturbers means none loaded. fFalse names in szWhy the
 // first thing missing.
+// The files an EMPTY parameter means, named once: the resolution below
+// searches for them, and Ephemeris Settings shows them greyed in the empty
+// field (SzEphPromEmpty()), so the two cannot name different files.
+static CONST char *rgszEphe[] = {"linux_p1550p2650.440", "de440s.bsp"};
+static CONST char szEphPromLongDefault[] = "linux_m13000p17000.441";
+
+void SzEphPromEmpty(int iep, flag fLong, char *sz, int cch)
+{
+  if (iep == epPrometheiaEphemeris && !fLong)
+    sprintf2(sz, cch, "%s", "empty: a DE440 file in the folders");
+  else if (iep == epPrometheiaEphemeris)
+    sprintf2(sz, cch, "Left empty, %s or %s is looked for in the ephemeris "
+      "folders.", rgszEphe[0], rgszEphe[1]);
+  else if (iep == epPrometheiaLongspan && !fLong)
+    sprintf2(sz, cch, "%s", "empty: the DE441 file, if found");
+  else if (iep == epPrometheiaLongspan)
+    sprintf2(sz, cch, "Left empty, %s is used if it is in the ephemeris "
+      "folders; it covers -13000 to 17000.", szEphPromLongDefault);
+  else if (iep == epPrometheiaCatalog)
+    sprintf2(sz, cch, "%s", !fLong ? "empty: none, so no asteroids" :
+      "Left empty, no catalog is read, so no asteroids or centaurs.");
+  else
+    sprintf2(sz, cch, "%s", !fLong ? "empty: none" :
+      "Left empty, no perturber kernel is read.");
+}
+
 static flag FEphPromResolve(char *szWhy, int cch)
 {
-  static CONST char *rgszEphe[] = {"linux_p1550p2650.440", "de440s.bsp"};
   int cEphe = (int)(sizeof(rgszEphe)/sizeof(CONST char *)), i;
 
   if (FSzSet(SzEphPromParam(epPromEphemeris))) {
@@ -473,11 +548,14 @@ static flag FEphPromResolve(char *szWhy, int cch)
         (int)sizeof(szEphPromEphe)); i++)
       ;
     if (i >= cEphe) {
-      sprintf2(S(szEphPromState), "no DE440 ephemeris on the -Yi paths; "
-        "set prometheia.ephemeris");
+      // Said for both places it can be fixed from: the dialog's field
+      // and the switch. The file names are the ones searched for, so the
+      // reader knows what "a DE440 ephemeris" means here.
+      sprintf2(S(szEphPromState), "no DE440 ephemeris (%s or %s) in the "
+        "ephemeris folders; set Ephemeris File, or -bP prometheia.ephemeris",
+        rgszEphe[0], rgszEphe[1]);
       if (szWhy != NULL)
-        sprintf2(szWhy, cch, "no DE440 ephemeris on the -Yi paths "
-          "(set prometheia.ephemeris)");
+        sprintf2(szWhy, cch, "%s", szEphPromState);
       return fFalse;
     }
   }
@@ -508,7 +586,7 @@ static flag FEphPromResolve(char *szWhy, int cch)
           SzEphPromParam(epPromLongspan));
       return fFalse;
     }
-  } else if (!FEphPromFindFile("linux_m13000p17000.441", szEphPromLong,
+  } else if (!FEphPromFindFile(szEphPromLongDefault, szEphPromLong,
     (int)sizeof(szEphPromLong)))
     *szEphPromLong = chNull;
   *szEphPromPert = chNull;
@@ -537,12 +615,30 @@ flag FEphPromAvailable(char *szWhy, int cch)
   return fTrue;
 }
 
+// The -Yi directories as one string, for noticing that they changed: an
+// empty parameter is a file searched for over them, so a different folder
+// can mean different files under the same parameters.
+static char szEphPromPathsOpened[cchSzMax * 4];
+
+static void SzEphPromPaths(char *sz, int cch)
+{
+  char *pch = sz;
+  int i;
+
+  *sz = chNull;
+  for (i = 0; i < 10; i++) {
+    sprintf2(pch, cch - (int)(pch - sz), "%s;", SzSet(us.rgszPath[i]));
+    pch += CchSz(pch);
+  }
+}
+
 flag FEphPromStart(char *szWhy, int cch)
 {
-  char szWhy2[256];
+  char szWhy2[256], szPaths[cchSzMax * 4];
   prometheia_error err;
   int iep;
 
+  SzEphPromPaths(S(szPaths));
   if (fEphPromOpen) {
     for (iep = 0; iep < cepPromParam; iep++)
       if (!FEqSz(SzSet(rgszEphPromOpenedFrom[iep]), SzEphPromParam(iep))) {
@@ -552,6 +648,9 @@ flag FEphPromStart(char *szWhy, int cch)
         EphPromStop();
         break;
       }
+    // Or on files found in a folder the settings no longer name.
+    if (fEphPromOpen && !FEqSz(szPaths, szEphPromPathsOpened))
+      EphPromStop();
     if (fEphPromOpen)
       return fTrue;
   }
@@ -562,6 +661,7 @@ flag FEphPromStart(char *szWhy, int cch)
   }
   for (iep = 0; iep < cepPromParam; iep++)
     FCloneSz(SzEphPromParam(iep), &rgszEphPromOpenedFrom[iep]);
+  sprintf2(S(szEphPromPathsOpened), "%s", szPaths);
   // The ABI the library in front of us actually has, against the one
   // these headers describe. EXACTLY equal, not "at least": under 0.x the
   // library grows prometheia_options by APPENDING fields, and a plugin
@@ -623,19 +723,53 @@ flag FEphPromStart(char *szWhy, int cch)
         err.message);
     return fFalse;
   }
-  prometheia_engine_set_delta_t(pephProm, FEnumDeltaTProm, NULL);
-  fEphPromOpen = fTrue;
-  sprintf2(S(szEphPromState), "ready: %s",
-    prometheia_engine_source(pephProm));
+  // Which DE answers, asked of the engine rather than guessed from file
+  // names: a result carries its ephemeris's DE number. J2000 is inside
+  // every DE440 file this source looks for; the year 1000 is outside them
+  // and inside DE441, so it reaches a long-span file when one is open.
+  // The two terms are the same for DE440 and DE441; should a long-span
+  // file of another lunar solution be paired with the main one, the
+  // main's term is used everywhere and the state says so, rather than
+  // the difference passing unremarked.
+  {
+    prometheia_result res;
+    prometheia_error errT;
+    double rLong = 0.0;
+
+    rEphPromTidAcc = 0.0;
+    if (prometheia_calc(pephProm, PROMETHEIA_SUN, 2451545.0, NULL, &res,
+      &errT) == PROMETHEIA_OK)
+      rEphPromTidAcc = RTidAccOfDenum(res.denum);
+    if (FSzSet(szEphPromLong) && prometheia_calc(pephProm, PROMETHEIA_SUN,
+      2086308.5, NULL, &res, &errT) == PROMETHEIA_OK)
+      rLong = RTidAccOfDenum(res.denum);
+    prometheia_engine_set_delta_t(pephProm, FEnumDeltaTProm, NULL);
+    fEphPromOpen = fTrue;
+    if (rLong != 0.0 && rLong != rEphPromTidAcc)
+      sprintf2(S(szEphPromState), "ready: %s (the long-span file's lunar "
+        "tidal term differs; Delta-T uses the main file's)",
+        prometheia_engine_source(pephProm));
+    else
+      sprintf2(S(szEphPromState), "ready: %s",
+        prometheia_engine_source(pephProm));
+  }
   return fTrue;
 }
 
+// A local engine is ready or it has failed (ephem.h): closed, it opens on
+// the next query, and any other text is why the last open did not. This
+// returned esConnecting for everything but "failed: ..." -- so a missing
+// file ("ephemeris '...' not found", "no DE440 ephemeris ...") read as a
+// source still connecting, and CastChart() withheld its "No ephemeris
+// source could answer" warning for a remote server that was about to
+// call back. Nothing was going to: every body read 0Ari00'00" in silence.
 int NEphPromState(char *sz, int cch)
 {
+  flag fClosed = !*szEphPromState || FEqSz(szEphPromState, "closed");
+
   if (sz != NULL)
-    sprintf2(sz, cch, "%s", szEphPromState);
-  return fEphPromOpen ? 0 :
-    (strncmp(szEphPromState, "failed", 6) == 0 ? 2 : 1);
+    sprintf2(sz, cch, "%s", fClosed ? "closed" : szEphPromState);
+  return fEphPromOpen || fClosed ? esReady : esFailed;
 }
 
 // --------------------------------------------------------------------------
@@ -1486,7 +1620,8 @@ static int NLookupProm(CONST char *sz, EPHMATCH *rgm, int cMax)
 
 EPHSRCDEF ephsrcPrometheia = {
   "prometheia", "Ephemeris Prometheia",
-  "The cleanroom Prometheia engine over JPL DE and SBDB files.",
+  "The Ephemeris Prometheia engine over JPL DE files, with asteroids "
+  "from a small-body catalog.",
   FAvailableProm, GetCapsProm, StateProm, StartProm, StopProm,
   FSubmitProm, FReadProm, HintProm, NLookupProm
 };

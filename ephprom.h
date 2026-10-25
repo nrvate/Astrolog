@@ -81,9 +81,8 @@ flag FEphPromAvailable(char *szWhy, int cch);
 
 // 4.1's Start and State. Start opens the engine from the parameters and
 // returns fFalse, with the reason in szWhy, when it cannot. State writes
-// one of "ready: <engine>", "unavailable", "failed: <reason>" and
-// returns it (esReady / esConnecting / esFailed) for the settings
-// dialog.
+// "ready: <engine>" or "closed" (esReady), or why the last open failed
+// (esFailed); never esConnecting, which is the remote source's.
 flag FEphPromStart(char *szWhy, int cch);
 void EphPromStop(void);
 int NEphPromState(char *sz, int cch);

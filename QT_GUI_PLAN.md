@@ -11724,6 +11724,121 @@ this is the note that explains the wall of dialogs.
     opens it; under Wine Test reads "Works: Sun 26Sco47,
     Moon 16Sag09, Chiron 9Ari48", the chart's own Sun and Moon.
 
+287. **Ephemeris Settings, every source driven with its real data.**
+    2026-10-24/25. The maintainer, on item 286: "the dialog seems broken
+    and half baked", and "EVERY OPTION, EVERY VALUE, TESTED IN THE UI AND
+    IN CODE AND WITH THE ACTUAL EPHEMERIS". Driving each source against
+    its own files -- de431.eph, Prometheia's DE440/DE441 kernels and
+    small-body catalogue, a live `astrolog-ephd` with tokens, Horizons --
+    found these, each fixed with a net that fails without the fix:
+
+    - *The JPL File field was read by nothing.* `-bP jpl.file` was
+      stored, saved and shown, and Swiss never heard of it.
+      `SwissEnsurePath()` now hands it to `swe_set_jpl_file()` while JPL
+      is in use, with its folder on the search path; a bare name is
+      looked for in the folders. Then a second fault behind it (found
+      2026-10-25): Swiss keeps the JPL name it was last given across
+      casts that never open JPL, and the program's record was updated by
+      those casts, so a wrong name once, then any ordinary cast, and the
+      right file was never opened again until a restart. The record is
+      now kept only while JPL is in use and the name handed over every
+      time the path is set up. Net: the real-data leg runs exactly that
+      sequence (sabotaged, it reads "de431.eph is not in the folders
+      searched" with the file in `-Yi6`).
+    - *JPL Horizons cast the nodes at 0Ari00'00"* (the maintainer, 10-25)
+      and warned that every body did. Upstream's Horizons selection
+      (`nSwissEph` 3) fetched the bodies Horizons has a target for and
+      computed the rest -- nodes, Lilith, Uranians, most asteroids --
+      with `FSwissPlanet()` under `SEFLG_JPLEPH`; the legacy spelling's
+      chain says so ("horizons,jpl"). The dialog writes "horizons" alone,
+      and that chain had nothing for the rest. `FEphSubmit()` now leaves
+      the geocentric head out of the residue's chain and, with nothing
+      after it, asks "jpl" -- which falls back to the Swiss files and
+      Moshier as upstream's call did. The warning now needs BOTH halves
+      to have answered nothing. Horizons shows the Ephemeris Folder row,
+      since the rest comes from there. Net: `JPLCachePutTest()` (io.cpp,
+      QTTEST) fills the reply cache for the exact URLs a cast builds, so
+      the `horizons` group casts through Horizons alone with no network;
+      sabotaged, it reads the node as 0 and reproduces the maintainer's
+      warning word for word. The comment there that "no offline test can
+      exercise" the routing end to end is no longer true.
+    - *The same question of the server, answered no.* The dialog writes
+      "server" alone too, where the legacy spelling was "server,swiss",
+      and the live-server group only ever cast "server,swiss" -- anything
+      the server left unanswered was filled in by Swiss and diffed to zero
+      -- with the Uranians and custom slots set aside. A whole chart
+      through "server" alone against `astrolog-ephd` is now compared with
+      the Swiss files' cast, every object, bit for bit, under nrvate.as
+      too: identical. Pointed at a dead port, the same leg reads 11
+      objects at zero and 12 differing, so it does see the server.
+    - *Every Horizons download read "Download cancelled."* with popups
+      on: `QProgressDialog::closeEvent()` emits `canceled()`, so closing
+      the progress dialog after a finished fetch cancelled it.
+      `FGetUrlQt()` disconnects first. The suite runs with popups off and
+      never makes the dialog, so only Test in normal use could see it.
+    - *Prometheia failed in silence.* A missing ephemeris left its state
+      "connecting", and a cast withholds the "no source could answer"
+      warning while a source connects -- so every body read 0Ari00'00"
+      with nothing said. `NEphPromState()` now answers ready, closed or
+      failed, never connecting. Net in `TestEphNoSourceQt`.
+    - *Prometheia's Moon at the year 1000 depended on what ran before it*
+      (5.7", the maintainer's report, confirmed with the Swiss fork's
+      session): the ΔT hook took whatever tidal term Swiss had last
+      loaded. It now sets the term of the DE file the engine opened around
+      the one call. Net in the `prometheia` group, which failed 5.7434"
+      before.
+    - *A mouse click did not pick a source.* `QListWidget` makes the row
+      current before it selects it, so the dialog's handler saw the old
+      selection; it listens to `itemSelectionChanged` now. Net: a click
+      on JPL must show JPL's rows (sabotaged, it shows Swiss's).
+    - *Browse on the folder froze for minutes* under nrvate.as: opened
+      inside /swe, the picker read all 887,000 entries. It opens on the
+      parent with the folder selected, as Windows' folder picker shows
+      it, and a picked path is shown from its start.
+    - *Moshier had no folder row* though every asteroid under it comes
+      from a Swiss file there; with none, Test says "Works, except for
+      Chiron". *Matrix* reports its own positions rather than "nothing
+      can be missing", computed into the chart's arrays and put back;
+      *None* says it computes nothing. An *unavailable* source (the
+      Win32 build's server) shows its reason, no rows, and OK disabled.
+    - *Test's time read 19:00 for 19:01*: the hours were truncated.
+      Rounded to the minute now; the group pins its chart at 19:01 UT.
+    - *Words.* Every source's description rewritten to say what it is;
+      an empty field greys its default ("empty: de431.eph") with the
+      sentence in its tooltip (Windows: the line under the rows while it
+      has focus); Swiss's "file not found in PATH" becomes "X is not in
+      the folders searched", followed by the folders, by name.
+    - *Bare mnemonic letters.* Windows acts on an underlined letter
+      without Alt in a dialog whose focus is on a button; the port did
+      only for buttons, so "e" did not reach the list. Labels with a
+      buddy now do too.
+
+    - *Two faults in the suite itself, found on the way.* The new folder
+      Browse leg raced Qt's deferred preselection -- the picker writes the
+      selected folder's name into the name field when the folder has
+      loaded, over a path typed before that, one run in eight; the leg
+      now waits for the preselection and asserts it (sabotaged, it
+      fails). And one full run under nrvate.as segfaulted in
+      `file-pickers`, inside `QFileSystemModel::parent()` during a queued
+      row removal, in Save Chart's warning box: the group's probe picker
+      lived on across the deletion of the folders typed into it and that
+      box's event loop, on a box another session's build was churning
+      /tmp on. Not reproduced -- 32 targeted runs, with and without a
+      churned private TMPDIR, and 120 probe rounds of delete-under-a-live-
+      model -- so the fix removes the precondition rather than claiming a
+      cause: the probe picker is deleted before the folders and before
+      Save Chart.
+
+    The Win32 dialog was rewritten to match: five rows, cue banners, a
+    folder picker opening at the folder, double-click on a source as OK,
+    the dialog held still during Test. Driven under Wine
+    (`tools/scenarios/win-ephem.txt`) and the Qt one through a real X
+    server (`tools/scenarios/ephem-keys.txt`, new: Alt+T, Alt+E, Down,
+    Escape). `ephemeris-dialog` runs every source's rows, placeholders and
+    Test, the keys, the mouse, Browse, and what OK writes surviving the
+    settings writer; its real-data legs skip, saying so, without the
+    files, and `-Yi4`/`-Yi5`/`-Yi6` on the command line bring them in.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

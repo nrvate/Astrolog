@@ -1499,6 +1499,17 @@ runs in seconds on a laptop.
 
 ## Working method
 
+**Never brush off something that could be because you hand-wave that it is
+not, as in: DO YOUR DUE DILIGENCE AT EVERY JUNCTURE.** The maintainer's
+rule, 2026-10-24, word for word. Before saying "that's because X is
+missing", "that can't happen", "nothing reads that", or "that's outside
+this change", go and look -- search the disk, read the code, run it.
+The day it was written: Chiron was reported "unknown because there is no
+small-body catalog on this machine" when `sbdb-full-20260916.epm` sat at
+the top of the Prometheia checkout, and the Ephemeris Settings dialog was
+called finished after checking its opening state only -- with a JPL file
+field that nothing in the program had ever read.
+
 The things that have actually caught bugs in this project:
 
 - **Verify a diagnosis before acting on it**, especially before touching

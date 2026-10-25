@@ -7268,7 +7268,14 @@ static void TestSaveFormatsQt()
 // different places, because they are different errands.
 static void TestFilePickersQt()
 {
-  QFileDialog dlg(gi.qwind, "Probe Picker");
+  // On the heap so it can be gone before the folders typed into it are
+  // removed and before Save Chart's message box runs an event loop: a
+  // QFileSystemModel left alive across both took a queued removal in that
+  // loop and crashed inside Qt (QFileSystemModel::parent() under
+  // rowsAboutToBeRemoved), once, in a full run under nrvate.as on a box
+  // whose /tmp another build was churning (2026-10-25).
+  QFileDialog *pdlgProbe = new QFileDialog(gi.qwind, "Probe Picker");
+  QFileDialog &dlg = *pdlgProbe;
   QTreeView *ptree;
   QListView *pside;
   QLineEdit *pedit;
@@ -7445,9 +7452,10 @@ static void TestFilePickersQt()
       "a 260 file folder completes at most 200 files plus its folder "
       "(%d)", pcomp->completionCount());
     pedit->clear();
-    QDir(QDir::tempPath() + "/astrolog-qt-comp").removeRecursively();
-    QDir(QDir::tempPath() + "/astrolog-qt-compcap").removeRecursively();
   }
+  delete pdlgProbe;
+  QDir(QDir::tempPath() + "/astrolog-qt-comp").removeRecursively();
+  QDir(QDir::tempPath() + "/astrolog-qt-compcap").removeRecursively();
 
   // Per-family last folder, through the real Save Chart path with the
   // picker stand-in: the write itself fails (the folder does not
@@ -10723,7 +10731,7 @@ static void TestDialogQuirksQt()
     tBox.stop();
     pw->close();
   });
-  Check(c == 4 && cBad == 0, "all four ephemeris Browse buttons do "
+  Check(c == 5 && cBad == 0, "all five ephemeris Browse buttons do "
     "something (%d of %d dead)", cBad, c);
 
   // Enter Command Line stores its checkbox with an empty line too.
@@ -19369,6 +19377,8 @@ static void StoreHorizonsRowQt(int iobj, CONST real *rgr, EPHGEOROWS *pegr)
 // well under the band, which the Pluto pair above measures and Jupiter's
 // would not satisfy.
 
+extern void JPLCachePutTest(CONST char *, CONST PT3R *, CONST char *);
+
 static void TestHorizonsEmulationQt()
 {
   EPHGEOROWS egr;
@@ -19433,6 +19443,73 @@ static void TestHorizonsEmulationQt()
     EphSelBorrow ebT("swiss");
     Check(!FEphGeoUncorrected(), "and the Swiss files do not, since they "
       "answer in the cast's own frame");
+  }
+
+  // A cast through Horizons ALONE, end to end and offline: the Sun and
+  // Moon answered from the reply cache, filled for the exact URLs the
+  // cast builds, and the nodes -- which Horizons has no target for --
+  // from the Swiss Ephemeris, as upstream's Horizons selection computed
+  // them (FSwissPlanet() under SEFLG_JPLEPH). Horizons alone is what the
+  // Ephemeris Settings dialog writes, and it cast both nodes at 0Ari00'00"
+  // with a warning that every body read that while the planets were all
+  // there (found 2026-10-25, by the maintainer).
+  {
+    CI ciMainSav2 = ciMain, ciCoreSav2 = ciCore;
+    byte rgfIgnSav[objMax];
+    CONST int rgobjHor[2] = {oSun, oMoo};
+    real rgrHor[2] = {123.25, 234.5}, rNodSwiss, rNodHor;
+    char szUrl[cchSzLine*2], szCap[cchSzMax*2];
+    PT3R rgpt[3];
+    CI ciQ;
+    int iT, jT;
+
+    for (iT = 0; iT < objMax; iT++) {
+      rgfIgnSav[iT] = ignore[iT];
+      ignore[iT] = iT != oNod && iT != oSou;
+    }
+    OraclePinUtQt(1971, 11, 19, 19.0 + 1.0/60.0);
+    ciMain = ciCore;
+    {
+      EphSelBorrow ebT("swiss");
+      CastChart(0);
+      rNodSwiss = planet[oNod];
+    }
+    // The fetches the horizons cast will make, answered before it makes
+    // them: the instant is the query's own (CiFromJulianEph(), checked
+    // below), so the URL is exactly GetJPLHorizonsAt()'s. Three rows of
+    // one longitude, so the rates are zero and fTruePos moves nothing.
+    CiFromJulianEph(JulianDayFromTime(is.T), &ciQ);
+    for (iT = 0; iT < 2; iT++) {
+      SzUrlJPLHorizons(NEphHorizonsId(rgobjHor[iT]), &ciQ, us.fTopoPos,
+        ciQ.lon, ciQ.lat, us.elvDef, S(szUrl));
+      for (jT = 0; jT < 3; jT++) {
+        rgpt[jT].x = rgrHor[iT]; rgpt[jT].y = 0.0; rgpt[jT].z = 8.3;
+      }
+      JPLCachePutTest(szUrl, rgpt, szObjName[rgobjHor[iT]]);
+    }
+    {
+      EphSelBorrow ebT("horizons");
+      is.fNoEphFile = fFalse;
+      SetWarningCapture(szCap, sizeof(szCap));
+      CastChart(0);
+      SetWarningCapture(NULL, 0);
+      rNodHor = planet[oNod];
+      Check(MinDistance(planet[oSun], Mod(rgrHor[0] + is.rSid)) < 1e-6 &&
+        MinDistance(planet[oMoo], Mod(rgrHor[1] + is.rSid)) < 1e-6,
+        "a cast through Horizons alone takes the Sun and Moon from "
+        "Horizons (%.6f, %.6f)", planet[oSun], planet[oMoo]);
+    }
+    Check(MinDistance(rNodHor, rNodSwiss) < 1.0/3600.0,
+      "and the North Node, which Horizons has no target for, from the "
+      "Swiss Ephemeris (%.6f, Swiss files %.6f)", rNodHor, rNodSwiss);
+    Check(strstr(szCap, "could answer") == NULL,
+      "and no warning that nothing could answer (\"%s\")", szCap);
+    for (iT = 0; iT < objMax; iT++)
+      ignore[iT] = rgfIgnSav[iT];
+    ciMain = ciMainSav2;
+    ciCore = ciCoreSav2;
+    is.fNoEphFile = fFalse;
+    CastChart(0);
   }
 
   // The instant the horizons SOURCE asks for is the query's, converted
@@ -19586,14 +19663,6 @@ static void TestHorizonsEmulationQt()
 }
 #endif // JPLWEB
 
-
-// The ephemeris selection's own spellings, for the dialog group's round
-// trip: nothing else, so the replay cannot drag the legacy spellings
-// along behind the new ones.
-static flag FWantEphQt(CONST char *sz)
-{
-  return FEqSzPrefixQt(sz, "-bE") || FEqSzPrefixQt(sz, "-bP");
-}
 
 static void TestEphSrvQt()
 {
@@ -22014,6 +22083,68 @@ static void TestPrometheiaQt()
               rD);
             Check(rD < 1.0, "and agrees with Swiss within 1\" (%.4f\")", rD);
           }
+
+          // The Moon at the year 1000 against Swiss reading the SAME file
+          // as its JPL file: one ephemeris, so all that is left to differ
+          // is UT -- Delta-T, whose tidal term has to be the answering
+          // lunar ephemeris's own. This source's hook took whatever term
+          // Swiss had loaded last, so its Moon moved 5.7" with what had
+          // run before it (2026-10-24, confirmed with the Swiss fork's
+          // session). So both orders: after a cast from the Swiss files,
+          // whose term is DE431's, and after Swiss has opened DE441.
+          {
+            CONST real jdK = 2086308.5;   // 1000 Jan 2, 0h UT (Julian).
+            real rgMoo[2][2], lonJ = 0.0, latJ = 0.0;
+            char *szJplSav = NULL;
+            flag fJ = fFalse, fSubJ = fTrue;
+            real rTidSwiss = 0.0;
+            int iOrd;
+
+            FCloneSz(us.rgszEphParam[epJplFile], &szJplSav);
+            for (iOrd = 0; iOrd < 2; iOrd++) {
+              if (iOrd == 0) {
+                // Another term in force, as after a cast from Swiss files
+                // built from DE431 -- set outright, since which term the
+                // files carry depends on the files: /swe's are DE431's,
+                // the bundled ephem/ ones DE441's. This leg's first two
+                // drafts relied on the files, and passed with the fix
+                // sabotaged under -Yi1 ephem.
+                swe_set_tid_acc(SE_TIDAL_DE431);
+                rTidSwiss = swe_get_tid_acc();
+              } else {
+                EphSelBorrow bJ("jpl");
+                FEphParamSet(epJplFile, szLong);
+                is.fSwissPathSet = fFalse;
+                FSwissEphSubstituted(fTrue);
+                fJ = FSwissPlanet(oMoo, jdK, oEar, &lonJ, &latJ, &r3, &r4,
+                  &r5, &r6);
+                fSubJ = FSwissEphSubstituted(fTrue);
+              }
+              EphQueryInit(&eqh, jdK);
+              FEphQueryAdd(&eqh, oMoo, 0, oEar, NULL);
+              FEphSubmitChain(&eqh, rgisrc, 1);
+              rgMoo[iOrd][0] = rgMoo[iOrd][1] = 0.0;
+              FEphRead(&eqh, oMoo, &rgMoo[iOrd][0], &rgMoo[iOrd][1], &h3,
+                &h4, &h5, &h6);
+              swe_set_tid_acc(SE_TIDAL_AUTOMATIC);
+            }
+            FEphParamSet(epJplFile, szJplSav);
+            DeallocatePIf(szJplSav);
+            is.fSwissPathSet = fFalse;
+            Check(RAbs(rTidSwiss - SE_TIDAL_DE431) < 1e-9, "DE431's tidal "
+              "term was in force for the first order (%.4f)", rTidSwiss);
+            Check(fJ && !fSubJ, "Swiss answers the year 1000 Moon from the "
+              "DE441 file itself");
+            if (fJ && !fSubJ) {
+              rD = SphDistance(rgMoo[0][0], rgMoo[0][1], lonJ, latJ) * 3600.0;
+              h1 = SphDistance(rgMoo[1][0], rgMoo[1][1], lonJ, latJ) * 3600.0;
+              printf("  oracle %-46s %9.4f\" and %.4f\"\n",
+                "1000 Moon, DE441 both sides, both orders", rD, h1);
+              Check(rD < 0.01 && h1 < 0.01, "and this source's Moon is "
+                "Swiss's within 0.01\" whichever ran first (%.4f\", %.4f\")",
+                rD, h1);
+            }
+          }
           OraclePinUtQt(2026, 9, 17, 0.0);
           ciCore.lon = 0.0; ciCore.lat = 0.0;
           CastChart(0);
@@ -22298,7 +22429,8 @@ LStop:
     ;
   }
   EphPromStop();
-  Check(NEphPromState(szStateAfter, (int)sizeof(szStateAfter)) == 1,
+  Check(NEphPromState(szStateAfter, (int)sizeof(szStateAfter)) == esReady
+    && FEqSz(szStateAfter, "closed"),
     "the engine stopped cleanly (%s)", szStateAfter);
 
   // A catalog with NO perturber kernel serves a body only within 100 years
@@ -23631,6 +23763,37 @@ static void TestEphNoSourceQt()
   printf("  (the reason string is exercised by the console build, which "
     "has no transport; see the comment here)\n");
 
+#ifdef PROMETHEIA
+  // A LOCAL source that cannot open must say so too. The warning above is
+  // withheld while a source is still connecting, and Prometheia's state
+  // read "connecting" for every failure but one spelt "failed: ..." -- so
+  // an ephemeris file that is not there cast every body at 0Ari00'00" with
+  // nothing said (found 2026-10-24). Cast for real: the withholding is in
+  // CastChart(), not in the walk.
+  {
+    char szCap[cchSzMax*2], szState[cchSzMax], *szEphSav = NULL;
+    FCloneSz(us.rgszEphParam[epPrometheiaEphemeris], &szEphSav);
+    {
+      EphSelBorrow bChain("prometheia");
+      FEphParamSet(epPrometheiaEphemeris, "/nonexistent/missing-de440.440");
+      is.fNoEphFile = fFalse;
+      SetWarningCapture(szCap, sizeof(szCap));
+      CastChart(0);
+      SetWarningCapture(NULL, 0);
+      Check(PephsrcGet(IEphSrcFromKey("prometheia"))->State(S(szState)) ==
+        esFailed && !FEphChainConnecting(), "an engine that could not open "
+        "has failed and is not connecting (%s)", szState);
+      Check(strstr(szCap, "No ephemeris source could answer") != NULL &&
+        strstr(szCap, "missing-de440.440") != NULL,
+        "and the cast says so, naming the file (%s)", szCap);
+      FEphParamSet(epPrometheiaEphemeris, szEphSav);
+    }
+    DeallocatePIf(szEphSav);
+    is.fNoEphFile = fFalse;
+    CastChart(0);
+  }
+#endif
+
   // The other half, or the two assertions above would pass on a host that
   // never answers anything at all.
   {
@@ -24224,34 +24387,151 @@ static QLineEdit *PeEphRowQt(QWidget *pw, CONST QString &strLabel)
   return NULL;
 }
 
+// The line under the rows, as shown.
+static QString StrEphLineQt(QWidget *pw)
+{
+  QLabel *pl = pw->findChild<QLabel *>("dsEp_st");
+  return pl != NULL ? pl->text() : QString();
+}
+
+// Test, as a click, and the line it leaves.
+static QString StrEphTestQt(QWidget *pw)
+{
+  FClickButtonQt(pw, "dbEp_ct");
+  return StrEphLineQt(pw);
+}
+
+// Whether a wrapped label's text fits the box the resource gives it. A
+// Test result runs to several lines, and one too long is cut off at the
+// bottom with nothing to say so.
+static flag FEphFitsQt(QWidget *pw, CONST char *szName)
+{
+  QLabel *pl = pw->findChild<QLabel *>(szName);
+  return pl != NULL && pl->heightForWidth(pl->width()) <= pl->height();
+}
+
+// The rows a source should show, from the table the dialog reads.
+static QString StrEphRowsWantQt(CONST char *szKey)
+{
+  QStringList rgstr;
+  int rgiep[8], c, i;
+
+  c = CEphDialogRowsOf(szKey, rgiep, 8);
+  for (i = 0; i < c; i++)
+    rgstr << (rgiep[i] == iepRowPath ? QString("Ephemeris Folder:") :
+      QString::fromUtf8(rgephparam[rgiep[i]].ep.szLabel) + ":");
+  return rgstr.join("|");
+}
+
+// The dialog as a picture, one per source and per result, under
+// QTEPHSHOTDIR -- not QTSHOTDIR, which puts the binary in the mode that
+// captures every dialog's opening state and runs no group.
+static void ShotEphQt(QWidget *pw, CONST char *szName)
+{
+  CONST char *szDir = getenv("QTEPHSHOTDIR");
+
+  if (szDir != NULL)
+    pw->grab().save(QString("%1/ephem-%2.png").arg(szDir, szName));
+}
+
+// A file by name in the -Yi folders, resolved as the search resolves them;
+// for the legs that need real data and skip, saying so, without it.
+static flag FEphFindYiQt(CONST char *szFile, char *szPath, int cch)
+{
+  char szDir[cchSzMax];
+  int i;
+
+  for (i = 0; i < 10; i++) {
+    if (!FSzSet(us.rgszPath[i]))
+      continue;
+    SzPathDirAbs(us.rgszPath[i], S(szDir));
+    sprintf2(szPath, cch, "%s/%s", szDir, szFile);
+    if (FFileExists(szPath))
+      return fTrue;
+  }
+  return fFalse;
+}
+
+// Click a Browse button and answer the picker it opens. The directory the
+// picker opened in comes back in *pstrStart; false when no picker came.
+static flag FEphBrowseQt(QPushButton *ppb, CONST QString &strAnswer,
+  QString *pstrStart, CONST QString &strSel = QString(),
+  QString *pstrSelSeen = NULL)
+{
+  QTimer tPick;
+  flag fSeen = fFalse;
+  int cTick = 0;
+
+  QObject::connect(&tPick, &QTimer::timeout, [&]() {
+    QFileDialog *pfd =
+      qobject_cast<QFileDialog *>(QApplication::activeModalWidget());
+    if (pfd == NULL || fSeen)
+      return;
+    QLineEdit *pe = pfd->findChild<QLineEdit *>("fileNameEdit");
+    // A picker that preselects (the folder picker selects the folder it
+    // opens on) applies the selection when the folder has loaded, and
+    // that writes the name field -- over a path typed before it landed,
+    // one run in eight (found 2026-10-25). So it is waited for, which is
+    // also how the caller learns the selection was there.
+    if (!strSel.isEmpty() && pe != NULL && pe->text() != strSel &&
+      ++cTick < 60 * nScaleTest)
+      return;
+    fSeen = fTrue;
+    *pstrStart = pfd->directory().absolutePath();
+    if (pstrSelSeen != NULL)
+      *pstrSelSeen = pe != NULL ? pe->text() : QString();
+    // As a user answers it, by typing the path into the name field:
+    // selectFile() leaves the selection empty until the folder is read.
+    if (pe != NULL)
+      pe->setText(strAnswer);
+    // QFileDialog::accept() is protected; QDialog's is the same virtual.
+    static_cast<QDialog *>(pfd)->accept();
+  });
+  tPick.start(50 * nScaleTest);
+  if (ppb != NULL)
+    ppb->click();
+  tPick.stop();
+  return fSeen;
+}
+
 static void TestEphemDialogQt()
 {
   QByteArray baChainSav(SzSet(us.szEphemSource));
-  QByteArray baPathSav(SzSet(us.rgszPath[1]));
+  QByteArray rgbaPathSav[10];
   QByteArray rgbaParamSav[cEphParam];
   QString strFolder = QString("Ephemeris Folder:");
   QString strJpl = QString("%1:").arg(rgephparam[epJplFile].ep.szLabel);
   QString strUrl = QString("%1:").arg(rgephparam[epServerUrl].ep.szLabel);
   QString strTok = QString("%1:").arg(rgephparam[epServerToken].ep.szLabel);
-  char szPath[cchSzMax], szHead[cchSzDef];
-  int iep;
+  CI ciSav = ciCore;
+  flag fSecondsSav = us.fSeconds;
+  char sz[cchSzMax*2], szPath[cchSzMax*2], szHead[cchSzDef], szWhy[cchSzMax];
+  int iep, i;
 
   Group("Ephemeris settings dialog");
   for (iep = 0; iep < cEphParam; iep++)
     rgbaParamSav[iep] = QByteArray(SzSet(us.rgszEphParam[iep]));
+  for (i = 0; i < 10; i++)
+    rgbaPathSav[i] = QByteArray(SzSet(us.rgszPath[i]));
+  // One chart moment for every Test below, so what a result says can be
+  // held to a number: 11:01 at zone 8 west, 19:01 UT, which is also the
+  // minute whose hours, truncated, read 19:00 (found 2026-10-24).
+  // And to the minute, as positions are printed by default: nrvate.as
+  // prints seconds ("=b0"), so a held number would be per configuration.
+  OraclePinUtQt(1971, 11, 19, 11.0 + 1.0/60.0);
+  ciCore.zon = 8.0;
+  us.fSeconds = fFalse;
+  RecastAndRedrawQt();
 
   // What the dialog builds: the registry itself as the list, the setting's
-  // source selected, and that source's own rows -- for Swiss, the folder
-  // its files are searched for in, which no dialog offered before.
+  // source selected, that source's own rows.
   EphSourceSet("swiss");
   {
-    char szWhy[cchSzDef];
     int isrcSwiss = IEphSrcFromKey("swiss");
 
     DriveModalQt(ShowEphemDialogQt, [&](QWidget *pw) {
       QListWidget *plist = pw->findChild<QListWidget *>("dlEp_src");
       QLineEdit *pe;
-      int i;
 
       Check(plist != NULL && plist->count() == CEphSrc(),
         "the source list is the registry itself (%d rows)",
@@ -24276,41 +24556,104 @@ static void TestEphemDialogQt()
         "Swiss shows exactly its folder (\"%s\")",
         StrEphRowsQt(pw).toLocal8Bit().constData());
       pe = PeEphRowQt(pw, strFolder);
-      Check(pe != NULL && pe->text() == QString::fromLocal8Bit(baPathSav),
-        "the folder row opens on -Yi1 (\"%s\")",
+      Check(pe != NULL && pe->text() == QString::fromLocal8Bit(
+        rgbaPathSav[1]), "the folder row opens on -Yi1 (\"%s\")",
         pe == NULL ? "" : pe->text().toLocal8Bit().constData());
+      Check(StrEphLineQt(pw) == "In use. Press Test to check that it works.",
+        "the source in use says so (\"%s\")",
+        StrEphLineQt(pw).toLocal8Bit().constData());
+      ShotEphQt(pw, "open");
       if (!FClickButtonQt(pw, "IDCANCEL"))
         pw->close();
     });
   }
 
-  // Picking a source re-makes the rows as that source's own: a row another
-  // source owns is never left on screen, where whatever is typed into it
-  // would go to the wrong setting.
+  // Every source, picked: its own rows and no other's, each row's grey
+  // "empty means" that fits the field and the sentence behind it, Browse
+  // where a row names a file or folder, its description, OK only where this
+  // build can use it, and the line under the rows its own at once.
   DriveModalQt(ShowEphemDialogQt, [&](QWidget *pw) {
+    QPushButton *ppbOK = PpbButtonQt(pw, "IDOK");
+    QList<QLabel *> rgpl = pw->findChildren<QLabel *>("dsEp_p");
+    QList<QLineEdit *> rgpe = pw->findChildren<QLineEdit *>("deEp_p");
+    QList<QPushButton *> rgppb = pw->findChildren<QPushButton *>("dbEp_b");
     QLabel *plDesc = pw->findChild<QLabel *>("dsEp_ds");
+    int isrc, rgiep[8], cRow, cBad;
+
+    Check(rgpl.size() == 5 && rgpe.size() == 5 && rgppb.size() == 5,
+      "five rows, each a label, a field and a Browse (%d, %d, %d)",
+      (int)rgpl.size(), (int)rgpe.size(), (int)rgppb.size());
+    for (isrc = 0; isrc < CEphSrc(); isrc++) {
+      EPHSRCDEF *pes = PephsrcGet(isrc);
+      flag fAvail = pes->FAvailable(S(szWhy));
+      QString strWant, strDesc;
+
+      FPickEphQt(pw, pes->szKey);
+      strWant = fAvail ? StrEphRowsWantQt(pes->szKey) : QString();
+      Check(StrEphRowsQt(pw) == strWant, "%s shows its own rows (\"%s\", "
+        "want \"%s\")", pes->szKey, StrEphRowsQt(pw).toLocal8Bit().constData(),
+        strWant.toLocal8Bit().constData());
+      cRow = fAvail ? CEphDialogRowsOf(pes->szKey, rgiep, 8) : 0;
+      cBad = 0;
+      for (i = 0; i < cRow && i < rgpe.size() && i < rgppb.size(); i++) {
+        QLineEdit *pe = rgpe[i];
+        int nKind = rgiep[i] == iepRowPath ? epkPath :
+          rgephparam[rgiep[i]].ep.nKind;
+        int dxRoom = pe->width() - 4 - 2 *
+          pe->style()->pixelMetric(QStyle::PM_DefaultFrameWidth, NULL, pe);
+        SzEphRowEmpty(rgiep[i], fFalse, S(sz));
+        if (pe->placeholderText() != QString::fromUtf8(sz)) {
+          cBad++;
+          printf("  %s row %d greys \"%s\", want \"%s\"\n", pes->szKey, i,
+            pe->placeholderText().toLocal8Bit().constData(), sz);
+        }
+        if (QFontMetrics(pe->font()).horizontalAdvance(
+          pe->placeholderText()) > dxRoom) {
+          cBad++;
+          printf("  %s row %d: \"%s\" is %d px in a %d px field\n",
+            pes->szKey, i, sz, QFontMetrics(pe->font()).horizontalAdvance(
+            pe->placeholderText()), dxRoom);
+        }
+        SzEphRowEmpty(rgiep[i], fTrue, S(sz));
+        if (pe->toolTip() != QString::fromUtf8(sz) || sz[0] == chNull)
+          cBad++;
+        if (rgppb[i]->isVisible() != (nKind == epkPath || nKind == epkFile))
+          cBad++;
+      }
+      Check(cBad == 0, "%s: each row greys what empty means, in full in its "
+        "tooltip, fitting the field, with Browse where it names a file or "
+        "folder (%d wrong)", pes->szKey, cBad);
+      strDesc = QString::fromUtf8(pes->szDesc) +
+        (fAvail && cRow == 0 ? " Nothing to set up." : "");
+      Check(plDesc != NULL && plDesc->text() == strDesc &&
+        FEphFitsQt(pw, "dsEp_ds"), "%s describes itself, in the space "
+        "there is (\"%s\")", pes->szKey,
+        plDesc == NULL ? "" : plDesc->text().toLocal8Bit().constData());
+      Check(ppbOK != NULL && ppbOK->isEnabled() == fAvail,
+        "%s can be OKed exactly when this build can use it", pes->szKey);
+      SzEphDialogStatus(pes->szKey, fFalse, 0, S(sz));
+      Check(StrEphLineQt(pw) == QString::fromUtf8(sz),
+        "%s's line is its own at once (\"%s\")", pes->szKey,
+        StrEphLineQt(pw).toLocal8Bit().constData());
+      ShotEphQt(pw, pes->szKey);
+    }
+    if (!FClickButtonQt(pw, "IDCANCEL"))
+      pw->close();
+  });
+
+  // Picking a source re-makes the rows as that source's own, and what was
+  // typed survives looking at another and coming back.
+  DriveModalQt(ShowEphemDialogQt, [&](QWidget *pw) {
     QLineEdit *pe;
 
-    FPickEphQt(pw, "jpl");
-    Check(StrEphRowsQt(pw) == strFolder + "|" + strJpl,
-      "JPL shows its folder and its file (\"%s\")",
-      StrEphRowsQt(pw).toLocal8Bit().constData());
     FPickEphQt(pw, "server");
-    Check(StrEphRowsQt(pw) == strUrl + "|" + strTok,
-      "the server shows its address and token (\"%s\")",
-      StrEphRowsQt(pw).toLocal8Bit().constData());
     pe = PeEphRowQt(pw, strTok);
     Check(pe != NULL && pe->echoMode() == QLineEdit::PasswordEchoOnEdit,
       "the token row is masked until it takes focus");
-    // Typed text survives looking at another source and coming back.
     pe = PeEphRowQt(pw, strUrl);
     if (pe != NULL)
       pe->setText("keep.example:9");
     FPickEphQt(pw, "moshier");
-    Check(StrEphRowsQt(pw).isEmpty() && plDesc != NULL &&
-      plDesc->text().contains("Nothing to set up"),
-      "Moshier shows no rows and says so (\"%s\")",
-      plDesc == NULL ? "" : plDesc->text().toLocal8Bit().constData());
     FPickEphQt(pw, "server");
     pe = PeEphRowQt(pw, strUrl);
     Check(pe != NULL && pe->text() == "keep.example:9",
@@ -24325,17 +24668,15 @@ static void TestEphemDialogQt()
   // the one picked: one ephemeris, no fallback behind it.
   EphSourceSet("server,swiss,moshier");
   DriveModalQt(ShowEphemDialogQt, [&](QWidget *pw) {
-    QLabel *plStatus = pw->findChild<QLabel *>("dsEp_st");
-    Check(plStatus != NULL && plStatus->text().contains("more than one"),
+    Check(StrEphLineQt(pw).contains("more than one"),
       "a chain from a settings file is pointed out (\"%s\")",
-      plStatus == NULL ? "" : plStatus->text().toLocal8Bit().constData());
+      StrEphLineQt(pw).toLocal8Bit().constData());
     FPickEphQt(pw, "moshier");
     if (!FClickButtonQt(pw, "IDOK"))
       pw->close();
   });
   Check(FEqSz(SzSet(us.szEphemSource), "moshier"),
     "OK writes the one source picked (\"%s\")", SzSet(us.szEphemSource));
-  // And OK with no pick changed keeps the source, alone.
   EphSourceSet("server,swiss");
   DriveModalQt(ShowEphemDialogQt, [&](QWidget *pw) {
     if (!FClickButtonQt(pw, "IDOK"))
@@ -24345,165 +24686,578 @@ static void TestEphemDialogQt()
     "OK on an untouched chain keeps its first source alone (\"%s\")",
     SzSet(us.szEphemSource));
   EphSrvFinalizeQt();
+  EphSourceSet("swiss");
+  RecastAndRedrawQt();
 
-  // Test: the values ON SCREEN, the picked source ALONE, and the settings
-  // in force untouched afterwards. Each read inside the click, before the
-  // refresh timer could take the line back -- though a result holds it.
+  // Test: the values ON SCREEN, the picked source ALONE, the answer at the
+  // chart's moment, and the settings in force untouched afterwards.
   {
-    QTemporaryDir dirEmpty;
-    QString strEmpty = dirEmpty.path();
-    char *rgszPathSav[10];
-    int i;
+    CP cpSav;
+    flag fSame;
 
-    EphSourceSet("swiss");
     DriveModalQt(ShowEphemDialogQt, [&](QWidget *pw) {
-      QLabel *plStatus = pw->findChild<QLabel *>("dsEp_st");
-      QString str;
+      QString str, strT;
+      int cLong = 0;
 
-      // The folder in force: the Swiss files are there in every
-      // configuration the suite runs under, Chiron's included.
-      FClickButtonQt(pw, "dbEp_ct");
-      str = plStatus != NULL ? plStatus->text() : QString();
-      Check(str.startsWith("Works:") && !str.contains("Chiron: none"),
-        "Test on the Swiss files in force works, Chiron too (\"%s\")",
+      str = StrEphTestQt(pw);
+      Check(str.startsWith("Works. Sun ") && str.contains("Chiron ") &&
+        str.contains("at 1971-11-19 19:01 UT, the chart's moment"),
+        "Test on the Swiss files in force works, Chiron too, at the "
+        "chart's minute (\"%s\")", str.toLocal8Bit().constData());
+      cLong += !FEphFitsQt(pw, "dsEp_st");
+      // A result is about the source it tested: another picked shows its
+      // own line at once, and an edit takes the result down at once.
+      FPickEphQt(pw, "moshier");
+      SzEphDialogStatus("moshier", fFalse, 0, S(sz));
+      Check(StrEphLineQt(pw) == QString::fromUtf8(sz), "picking another "
+        "source after a Test shows that source's line, not the result "
+        "(\"%s\")", StrEphLineQt(pw).toLocal8Bit().constData());
+      str = StrEphTestQt(pw);
+      Check(str.startsWith("Works. Sun ") && str.contains("Chiron "),
+        "Test on Moshier works, Chiron from the folder's file (\"%s\")",
         str.toLocal8Bit().constData());
+      cLong += !FEphFitsQt(pw, "dsEp_st");
+      if (PeEphRowQt(pw, strFolder) != NULL) {
+        strT = PeEphRowQt(pw, strFolder)->text();
+        PeEphRowQt(pw, strFolder)->setText(strT + "/");
+      }
+      Check(StrEphLineQt(pw) == "Press Test to check that it works.",
+        "an edit after a Test takes the result down at once (\"%s\")",
+        StrEphLineQt(pw).toLocal8Bit().constData());
+      if (PeEphRowQt(pw, strFolder) != NULL)
+        PeEphRowQt(pw, strFolder)->setText(strT);
+
+      // Matrix computes into the chart's own arrays; the chart on screen
+      // must be what it was.
       FPickEphQt(pw, "matrix");
-      FClickButtonQt(pw, "dbEp_ct");
-      str = plStatus != NULL ? plStatus->text() : QString();
-      Check(str.startsWith("Works:"), "Test on Matrix works (\"%s\")",
-        str.toLocal8Bit().constData());
+      cpSav = cp0;
+      str = StrEphTestQt(pw);
+      fSame = memcmp(&cpSav, &cp0, sizeof(CP)) == 0;
+      Check(str.startsWith("Works. Sun 26Sco47, Moon 16Sag10, Chiron 9Ari35 "
+        "at 1971-11-19 19:01 UT"), "Test on Matrix gives its own positions "
+        "(\"%s\")", str.toLocal8Bit().constData());
+      Check(fSame, "and leaves the chart's positions as they were");
+      cLong += !FEphFitsQt(pw, "dsEp_st");
       FPickEphQt(pw, "none");
-      FClickButtonQt(pw, "dbEp_ct");
-      str = plStatus != NULL ? plStatus->text() : QString();
-      Check(str.startsWith("Does not work:"),
+      str = StrEphTestQt(pw);
+      Check(str.startsWith("Does not work. None computes no positions"),
         "Test on None does not work (\"%s\")", str.toLocal8Bit().constData());
+      // A JPL file that is not there: the Swiss files answer in its place,
+      // and Test must not call that working.
+      FPickEphQt(pw, "jpl");
+      if (PeEphRowQt(pw, strJpl) != NULL)
+        PeEphRowQt(pw, strJpl)->setText("/nonexistent-astrolog/missing.eph");
+      str = StrEphTestQt(pw);
+      Check(str.startsWith("Does not work. The JPL file missing.eph is not "
+        "in the folders searched"), "Test on a JPL file that is not there "
+        "does not work, naming it (\"%s\")", str.toLocal8Bit().constData());
+      cLong += !FEphFitsQt(pw, "dsEp_st");
       // An unreachable server says why, in the connection's own words.
       FPickEphQt(pw, "server");
       if (PeEphRowQt(pw, strUrl) != NULL)
         PeEphRowQt(pw, strUrl)->setText("127.0.0.1:1");
-      FClickButtonQt(pw, "dbEp_ct");
-      str = plStatus != NULL ? plStatus->text() : QString();
-      Check(str.startsWith("Does not work:") && str.contains("127.0.0.1:1"),
+      str = StrEphTestQt(pw);
+      Check(str.startsWith("Does not work.") && str.contains("127.0.0.1:1"),
         "Test on an unreachable server says so, naming it (\"%s\")",
         str.toLocal8Bit().constData());
+      cLong += !FEphFitsQt(pw, "dsEp_st");
+      Check(cLong == 0, "every result fits under the rows (%d cut off)",
+        cLong);
+      ShotEphQt(pw, "tested");
       if (!FClickButtonQt(pw, "IDCANCEL"))
         pw->close();
     });
     EphSrvFinalizeQt();
+    Check(FEqSz(SzSet(us.szEphemSource), "swiss") &&
+      FEqSz(SzSet(us.rgszEphParam[epJplFile]),
+      rgbaParamSav[epJplFile].constData()) &&
+      FEqSz(SzSet(us.rgszEphParam[epServerUrl]),
+      rgbaParamSav[epServerUrl].constData()), "Test then Cancel leaves the "
+      "source and every value as they were");
+  }
 
-    // A folder with no files. Every other -Yi path is set aside for the
-    // visit, since the search takes them all and any one of them holding
-    // files would answer. The Swiss Ephemeris still computes the Sun and
-    // Moon then -- from Moshier, successfully -- so a Test that only
-    // asked whether positions came back would call this working.
-    for (i = 0; i < 10; i++) {
-      rgszPathSav[i] = us.rgszPath[i];
-      us.rgszPath[i] = NULL;
-    }
-    FCloneSz(baPathSav.constData(), &us.rgszPath[1]);
+  // Folders with nothing in them, and one that is not there. Every other
+  // -Yi path is set aside for the visit, since the search takes them all
+  // and any one of them holding files would answer. The Swiss Ephemeris
+  // still computes the Sun and Moon then -- from Moshier, successfully --
+  // so a Test that only asked whether positions came back would call this
+  // working.
+  {
+    QTemporaryDir dirEmpty;
+    QString strEmpty = dirEmpty.path(), strNone = strEmpty + "/not-here";
+
+    for (i = 0; i < 10; i++)
+      FCloneSz(NULL, &us.rgszPath[i]);
     is.fSwissPathSet = fFalse;
     DriveModalQt(ShowEphemDialogQt, [&](QWidget *pw) {
-      QLabel *plStatus = pw->findChild<QLabel *>("dsEp_st");
-      QLineEdit *pe = PeEphRowQt(pw, strFolder);
       QString str;
+      int cLong = 0;
 
-      if (pe != NULL)
-        pe->setText(strEmpty);
-      FClickButtonQt(pw, "dbEp_ct");
-      str = plStatus != NULL ? plStatus->text() : QString();
-      Check(str.startsWith("Does not work:") && str.contains("Moshier"),
-        "Test on a folder with no files does not work, and says the "
-        "positions were Moshier's (\"%s\")", str.toLocal8Bit().constData());
+      if (PeEphRowQt(pw, strFolder) != NULL)
+        PeEphRowQt(pw, strFolder)->setText(strEmpty);
+      str = StrEphTestQt(pw);
+      Check(str.startsWith("Does not work. No Swiss Ephemeris planet file is "
+        "in the folders searched, so the Sun and Moon came from the "
+        "Moshier formulas instead") && str.contains("holds no Swiss "
+        "Ephemeris files") && !str.contains("Sun 1"),
+        "Test on a folder with no files does not work, says the answer was "
+        "Moshier's and shows none of it (\"%s\")",
+        str.toLocal8Bit().constData());
+      cLong += !FEphFitsQt(pw, "dsEp_st");
+      if (PeEphRowQt(pw, strFolder) != NULL)
+        PeEphRowQt(pw, strFolder)->setText(strNone);
+      str = StrEphTestQt(pw);
+      Check(str.startsWith("Does not work.") && str.contains("does not "
+        "exist"), "Test on a folder that is not there says so (\"%s\")",
+        str.toLocal8Bit().constData());
+      cLong += !FEphFitsQt(pw, "dsEp_st");
+      FPickEphQt(pw, "moshier");
+      if (PeEphRowQt(pw, strFolder) != NULL)
+        PeEphRowQt(pw, strFolder)->setText(strEmpty);
+      str = StrEphTestQt(pw);
+      Check(str.startsWith("Works, except for Chiron. Sun ") &&
+        str.contains("Chiron: seas_18.se1 is not in the folders searched"),
+        "Moshier with no files works for the Sun and Moon and names "
+        "Chiron's missing file (\"%s\")", str.toLocal8Bit().constData());
+      cLong += !FEphFitsQt(pw, "dsEp_st");
+      Check(cLong == 0, "and every one of those fits (%d cut off)", cLong);
+      ShotEphQt(pw, "nofiles");
       if (!FClickButtonQt(pw, "IDCANCEL"))
         pw->close();
     });
-    Check(FEqSz(SzSet(us.rgszPath[1]), baPathSav.constData()) &&
-      FEqSz(SzSet(us.szEphemSource), "swiss"),
-      "Test then Cancel leaves the folder and the source as they were "
-      "(\"%s\", \"%s\")", SzSet(us.rgszPath[1]), SzSet(us.szEphemSource));
-    FCloneSz(NULL, &us.rgszPath[1]);
     for (i = 0; i < 10; i++)
-      us.rgszPath[i] = rgszPathSav[i];
+      FCloneSz(rgbaPathSav[i].isEmpty() ? NULL : rgbaPathSav[i].constData(),
+        &us.rgszPath[i]);
     is.fSwissPathSet = fFalse;
+    RecastAndRedrawQt();
   }
 
-  // What OK applies is what was typed, for every source visited, and it
-  // survives the writer and a fresh read.
+  // The real files, where this machine has them. Each skips, saying so,
+  // where it does not: "-Yi6 <folder>" on the command line brings one in.
+  if (FEphFindYiQt("de431.eph", S(szPath))) {
+    // A wrong file first, then a chart from the Swiss files, which never
+    // opens JPL: Swiss kept the wrong name across it while the program's
+    // record said "default", so the right file was never opened again and
+    // JPL "did not work" until a restart (found 2026-10-24).
+    DriveModalQt(ShowEphemDialogQt, [&](QWidget *pw) {
+      QString str;
+      FPickEphQt(pw, "jpl");
+      if (PeEphRowQt(pw, strJpl) != NULL)
+        PeEphRowQt(pw, strJpl)->setText("/nonexistent-astrolog/missing.eph");
+      str = StrEphTestQt(pw);
+      Check(str.startsWith("Does not work."), "Test on a JPL file that is "
+        "not there does not work (\"%s\")", str.toLocal8Bit().constData());
+      if (!FClickButtonQt(pw, "IDCANCEL"))
+        pw->close();
+    });
+    EphSourceSet("swiss");
+    is.fSwissPathSet = fFalse;
+    RecastAndRedrawQt();
+    DriveModalQt(ShowEphemDialogQt, [&](QWidget *pw) {
+      QString str;
+      FPickEphQt(pw, "jpl");
+      if (PeEphRowQt(pw, strJpl) != NULL)
+        PeEphRowQt(pw, strJpl)->setText("");
+      str = StrEphTestQt(pw);
+      Check(str.startsWith("Works. Sun "), "then Test on JPL with the "
+        "field empty finds de431.eph in the folders (\"%s\")",
+        str.toLocal8Bit().constData());
+      if (PeEphRowQt(pw, strJpl) != NULL)
+        PeEphRowQt(pw, strJpl)->setText(QString::fromLocal8Bit(szPath));
+      str = StrEphTestQt(pw);
+      Check(str.startsWith("Works. Sun "), "and named by its full path "
+        "(\"%s\")", str.toLocal8Bit().constData());
+      if (!FClickButtonQt(pw, "IDCANCEL"))
+        pw->close();
+    });
+  } else
+    printf("  skipped: no de431.eph in the -Yi folders, so JPL is tested "
+      "only failing\n");
+#ifdef PROMETHEIA
+  {
+    char szEphe[cchSzMax], szCat[cchSzMax];
+    if (FEphPromFindFile("linux_p1550p2650.440", S(szEphe))) {
+      flag fCat = FEphPromFindFile("sbdb-full-20260916.epm", S(szCat));
+      QString strDir = QFileInfo(QString::fromLocal8Bit(szEphe)).path();
+      DriveModalQt(ShowEphemDialogQt, [&](QWidget *pw) {
+        QLineEdit *peCat, *peEph;
+        QString str;
+        int cLong = 0;
+
+        FPickEphQt(pw, "prometheia");
+        if (PeEphRowQt(pw, strFolder) != NULL)
+          PeEphRowQt(pw, strFolder)->setText(strDir);
+        peCat = PeEphRowQt(pw, QString("%1:").arg(
+          rgephparam[epPrometheiaCatalog].ep.szLabel));
+        peEph = PeEphRowQt(pw, QString("%1:").arg(
+          rgephparam[epPrometheiaEphemeris].ep.szLabel));
+        if (peCat != NULL)
+          peCat->setText("");
+        str = StrEphTestQt(pw);
+        Check(str.startsWith("Works, except for Chiron. Sun ") &&
+          str.contains("Small-body Catalog"), "Prometheia over its folder "
+          "with no catalog works and says what Chiron needs (\"%s\")",
+          str.toLocal8Bit().constData());
+        cLong += !FEphFitsQt(pw, "dsEp_st");
+        if (fCat && peCat != NULL) {
+          peCat->setText(QString::fromLocal8Bit(szCat));
+          str = StrEphTestQt(pw);
+          Check(str.startsWith("Works. Sun ") && str.contains("Chiron "),
+            "and with the catalog, Chiron too (\"%s\")",
+            str.toLocal8Bit().constData());
+        } else
+          printf("  skipped: no sbdb catalog on the -Yi paths\n");
+        if (peEph != NULL)
+          peEph->setText("/nonexistent-astrolog/missing-de440.440");
+        str = StrEphTestQt(pw);
+        Check(str.startsWith("Does not work.") &&
+          str.contains("missing-de440.440"), "an ephemeris file that is not "
+          "there does not work, naming it (\"%s\")",
+          str.toLocal8Bit().constData());
+        cLong += !FEphFitsQt(pw, "dsEp_st");
+        Check(cLong == 0, "and the results fit (%d cut off)", cLong);
+        ShotEphQt(pw, "prometheia-tested");
+        if (!FClickButtonQt(pw, "IDCANCEL"))
+          pw->close();
+      });
+    } else
+      printf("  skipped: no Prometheia ephemeris on the -Yi paths\n");
+  }
+#endif
+
+  // A real server: astrolog-ephd on a scratch port, requiring a token.
+  // Right, wrong and no token, each as Test reports it.
+  {
+    QString strBin = QCoreApplication::applicationDirPath() +
+      "/astrolog-ephd", strEphe;
+    QTemporaryDir dirTok;
+    QProcess proc;
+    QByteArray baLog;
+    int port = 27500 + (int)(QCoreApplication::applicationPid() % 400);
+
+    if (!QFileInfo(strBin).isExecutable())
+      printf("  skipped: %s is not built\n", strBin.toLocal8Bit().constData());
+    else {
+      QFile fileTok(dirTok.path() + "/tokens");
+      if (fileTok.open(QIODevice::WriteOnly)) {
+        fileTok.write("dialog-token-good\n");
+        fileTok.close();
+      }
+      for (i = 0; i < 10; i++)
+        if (FSzSet(us.rgszPath[i])) {
+          SzPathDirAbs(us.rgszPath[i], S(szPath));
+          strEphe += (strEphe.isEmpty() ? "" : ";") +
+            QString::fromLocal8Bit(szPath);
+        }
+      strEphe += (strEphe.isEmpty() ? "" : ";") +
+        QCoreApplication::applicationDirPath();
+      proc.setProcessChannelMode(QProcess::MergedChannels);
+      proc.start(strBin, QStringList() << "--port" << QString::number(port)
+        << "--ephe" << strEphe << "--threads" << "1" << "--tokens" <<
+        dirTok.path() + "/tokens" << "--require-token");
+      if (!FWaitEphdQt(&proc, &baLog, 10000))
+        Check(fFalse, "astrolog-ephd started on port %d (%s)", port,
+          baLog.constData());
+      else {
+        DriveModalQt(ShowEphemDialogQt, [&](QWidget *pw) {
+          QString str;
+          FPickEphQt(pw, "server");
+          if (PeEphRowQt(pw, strUrl) != NULL)
+            PeEphRowQt(pw, strUrl)->setText(QString("localhost:%1").arg(
+              port));
+          if (PeEphRowQt(pw, strTok) != NULL)
+            PeEphRowQt(pw, strTok)->setText("dialog-token-good");
+          str = StrEphTestQt(pw);
+          Check(str.startsWith("Works. Sun ") && str.contains("Chiron "),
+            "Test on a live server with its token works (\"%s\")",
+            str.toLocal8Bit().constData());
+          if (PeEphRowQt(pw, strTok) != NULL)
+            PeEphRowQt(pw, strTok)->setText("dialog-token-bad");
+          str = StrEphTestQt(pw);
+          Check(str.startsWith("Does not work.") &&
+            str.contains("unknown token"), "with a wrong token it does not, "
+            "saying why (\"%s\")", str.toLocal8Bit().constData());
+          if (PeEphRowQt(pw, strTok) != NULL)
+            PeEphRowQt(pw, strTok)->setText("");
+          str = StrEphTestQt(pw);
+          Check(str.startsWith("Does not work.") &&
+            str.contains("requires a token"), "and with none, the same "
+            "(\"%s\")", str.toLocal8Bit().constData());
+          Check(FEphFitsQt(pw, "dsEp_st"), "and the result fits");
+          ShotEphQt(pw, "server-tested");
+          if (!FClickButtonQt(pw, "IDCANCEL"))
+            pw->close();
+        });
+        EphSrvFinalizeQt();
+
+        // A whole chart through "server" ALONE, which is what OK writes.
+        // The live-server group casts "server,swiss", where anything the
+        // server left unanswered is filled in by Swiss and diffs to zero,
+        // and it sets the Uranians and custom slots aside -- so nothing
+        // asked whether the dialog's setting computes every object the
+        // settings name. Horizons alone did not (the nodes, 2026-10-25).
+        // Same files on both sides, so bit for bit.
+        {
+          static EPHSNAPSHOT snLoc, snSrv;
+          char szDiff[cchSzMax], szUrlT[cchSzDef];
+          int cDiff, cZero = 0, iT;
+
+          sprintf2(S(szUrlT), "localhost:%d", port);
+          FEphParamSet(epServerUrl, szUrlT);
+          FEphParamSet(epServerToken, "dialog-token-good");
+          EphSourceSet("swiss");
+          CastChart(0);
+          SnapshotEphQt(&snLoc);
+          EphSourceSet("server");
+          EphSrvStartupQt();
+          is.fNoEphFile = fFalse;
+          CastChart(0);
+          SnapshotEphQt(&snSrv);
+          cDiff = CDiffEphQt(&snLoc, &snSrv, 0.0, S(szDiff));
+          for (iT = 0; iT < objMax; iT++)
+            if (snSrv.rgobj[iT] == 0.0 && snSrv.rgalt[iT] == 0.0 &&
+              snSrv.rgdir[iT] == 0.0 && snLoc.rgobj[iT] != 0.0)
+              cZero++;
+          Check(cZero == 0, "a whole cast through the server alone leaves "
+            "no object at 0Ari00'00\" that the Swiss files compute (%d)",
+            cZero);
+          Check(cDiff == 0, "and every object is the Swiss files' own, bit "
+            "for bit (%d differ: %s)", cDiff, szDiff);
+          EphSrvFinalizeQt();
+          FEphParamSet(epServerUrl, rgbaParamSav[epServerUrl].constData());
+          FEphParamSet(epServerToken,
+            rgbaParamSav[epServerToken].constData());
+          EphSourceSet("swiss");
+          CastChart(0);
+        }
+      }
+      proc.terminate();
+      if (!proc.waitForFinished(5000))
+        proc.kill();
+    }
+  }
+
+  // The keys and the mouse, as a user works the dialog: the mnemonic
+  // letters as Windows takes them, bare, from a control that does not take
+  // typing -- "t" tests, "e" goes to the list "&Ephemeris:" labels --
+  // while the same letter typed into a field is typing; Return is OK,
+  // Escape is Cancel, and a click picks a source and a double-click OKs
+  // it. Alt with the letter is Qt's own shortcut map, which an event sent
+  // from here does not reach: tools/scenarios/ephem-keys.txt presses it
+  // through a real X server.
+  EphSourceSet("swiss");
+  DriveModalQt(ShowEphemDialogQt, [&](QWidget *pw) {
+    QListWidget *plist = pw->findChild<QListWidget *>("dlEp_src");
+    QPushButton *ppbCancel = PpbButtonQt(pw, "IDCANCEL");
+    QLineEdit *pe = PeEphRowQt(pw, strFolder);
+    QKeyEvent evT(QEvent::KeyPress, Qt::Key_T, Qt::NoModifier, "t"),
+      evE(QEvent::KeyPress, Qt::Key_E, Qt::NoModifier, "e"),
+      evT2(QEvent::KeyPress, Qt::Key_T, Qt::NoModifier, "t");
+    QString strWas = pe != NULL ? pe->text() : QString();
+
+    if (ppbCancel != NULL)
+      ppbCancel->setFocus();
+    QApplication::sendEvent(ppbCancel != NULL ? (QWidget *)ppbCancel : pw,
+      &evT);
+    Check(StrEphLineQt(pw).startsWith("Works. "), "a bare t tests (\"%s\")",
+      StrEphLineQt(pw).toLocal8Bit().constData());
+    if (ppbCancel != NULL)
+      ppbCancel->setFocus();
+    QApplication::sendEvent(ppbCancel != NULL ? (QWidget *)ppbCancel : pw,
+      &evE);
+    Check(plist != NULL && plist->hasFocus(), "a bare e goes to the list");
+    if (pe != NULL) {
+      pe->setFocus();
+      pe->end(fFalse);
+      QApplication::sendEvent(pe, &evT2);
+      Check(pe->text() == strWas + "t", "and t typed into a field is "
+        "typing (\"%s\")", pe->text().toLocal8Bit().constData());
+      pe->setText(strWas);
+    }
+    FPickEphQt(pw, "moshier");
+    if (plist != NULL)
+      PressQt(plist, Qt::Key_Escape);
+  });
+  Check(FEqSz(SzSet(us.szEphemSource), "swiss"),
+    "Escape cancels, keeping the source (\"%s\")", SzSet(us.szEphemSource));
+  DriveModalQt(ShowEphemDialogQt, [&](QWidget *pw) {
+    QListWidget *plist = pw->findChild<QListWidget *>("dlEp_src");
+    FPickEphQt(pw, "moshier");
+    if (plist != NULL)
+      PressQt(plist, Qt::Key_Return);
+  });
+  Check(FEqSz(SzSet(us.szEphemSource), "moshier"),
+    "Return is OK, applying the source picked (\"%s\")",
+    SzSet(us.szEphemSource));
+  DriveModalQt(ShowEphemDialogQt, [&](QWidget *pw) {
+    QListWidget *plist = pw->findChild<QListWidget *>("dlEp_src");
+    int iRow;
+    for (iRow = 0; plist != NULL && iRow < plist->count(); iRow++)
+      if (plist->item(iRow)->data(Qt::UserRole).toInt() ==
+        IEphSrcFromKey("jpl"))
+        break;
+    if (plist != NULL && iRow < plist->count()) {
+      QPoint pt = plist->visualItemRect(plist->item(iRow)).center();
+      QWidget *pv = plist->viewport();
+      QMouseEvent e1(QEvent::MouseButtonPress, pt, Qt::LeftButton,
+        Qt::LeftButton, Qt::NoModifier), e2(QEvent::MouseButtonRelease, pt,
+        Qt::LeftButton, Qt::NoButton, Qt::NoModifier),
+        e3(QEvent::MouseButtonDblClick, pt, Qt::LeftButton, Qt::LeftButton,
+        Qt::NoModifier), e4(QEvent::MouseButtonRelease, pt, Qt::LeftButton,
+        Qt::NoButton, Qt::NoModifier);
+      QApplication::sendEvent(pv, &e1);
+      QApplication::sendEvent(pv, &e2);
+      // The first click alone picks: a mouse press makes the row current
+      // before it selects it, and the dialog once listened for the first.
+      // JPL, because its rows differ from Moshier's, which is in use: the
+      // first draft clicked Swiss, whose single folder row is Moshier's
+      // too, and passed with the bug put back.
+      Check(StrEphRowsQt(pw) == StrEphRowsWantQt("jpl"), "a click on a "
+        "source picks it, showing its rows (\"%s\")",
+        StrEphRowsQt(pw).toLocal8Bit().constData());
+      QApplication::sendEvent(pv, &e3);
+      QApplication::sendEvent(pv, &e4);
+    }
+  });
+  Check(FEqSz(SzSet(us.szEphemSource), "jpl"),
+    "a double-click on a source picks it and OKs (\"%s\")",
+    SzSet(us.szEphemSource));
+  EphSourceSet("swiss");
+  RecastAndRedrawQt();
+
+  // Browse: the folder picker for the folder, the file picker for a file,
+  // each opening where the field points, and what is picked lands in it.
+  {
+    QTemporaryDir dirB;
+    QString strFile = dirB.path() + "/picked.eph", strStart, strSelSeen;
+    QFile fileB(strFile);
+
+    if (fileB.open(QIODevice::WriteOnly))
+      fileB.close();
+    QDir().mkpath(dirB.path() + "/sub");
+    DriveModalQt(ShowEphemDialogQt, [&](QWidget *pw) {
+      QList<QPushButton *> rgppb = pw->findChildren<QPushButton *>("dbEp_b");
+      QLineEdit *pe;
+      flag fSeen;
+
+      // The folder picker opens on the folder's parent, with the folder
+      // selected: inside it, it would read every file there first.
+      FPickEphQt(pw, "jpl");
+      pe = PeEphRowQt(pw, strFolder);
+      if (pe != NULL)
+        pe->setText(dirB.path() + "/sub");
+      fSeen = FEphBrowseQt(rgppb.isEmpty() ? NULL : rgppb[0], dirB.path(),
+        &strStart, "sub", &strSelSeen);
+      Check(fSeen && strStart == dirB.path() && strSelSeen == "sub",
+        "the folder's Browse opens on the folder's parent (\"%s\") with "
+        "the folder selected (\"%s\")", strStart.toLocal8Bit().constData(),
+        strSelSeen.toLocal8Bit().constData());
+      Check(pe != NULL &&
+        QFileInfo(pe->text()).absoluteFilePath() == dirB.path(),
+        "and the folder picked lands in the field (\"%s\")",
+        pe == NULL ? "" : pe->text().toLocal8Bit().constData());
+      pe = PeEphRowQt(pw, strJpl);
+      if (pe != NULL)
+        pe->setText(dirB.path() + "/other.eph");
+      fSeen = FEphBrowseQt(rgppb.size() < 2 ? NULL : rgppb[1], strFile,
+        &strStart);
+      Check(fSeen && strStart == dirB.path() && pe != NULL &&
+        pe->text() == strFile, "a file's Browse opens in the file's folder "
+        "(\"%s\") and the file picked lands in the field (\"%s\")",
+        strStart.toLocal8Bit().constData(),
+        pe == NULL ? "" : pe->text().toLocal8Bit().constData());
+      Check(pe != NULL && pe->cursorPosition() == 0, "shown from its "
+        "start, as Windows shows a path it sets (cursor at %d)",
+        pe == NULL ? -1 : pe->cursorPosition());
+      if (!FClickButtonQt(pw, "IDCANCEL"))
+        pw->close();
+    });
+  }
+
+  // What OK applies is what was typed, for every row of every source, and
+  // it survives the writer and a fresh read: -bE, every -bP, and -Yi1.
   {
     QByteArray baFileOutSav(SzSet(is.szFileOut));
     flag fFileOutSav = is.szFileOut != NULL;
-    int nWriteFormatSav = us.nWriteFormat, cLine;
+    int nWriteFormatSav = us.nWriteFormat, cLine, cBad = 0;
     flag fNoWriteSav = us.fNoWrite;
+    QString strDirAlt;
 
+    // The folder as a different spelling of the same place, so the casts
+    // OK makes still find their files.
+    SzPathDirAbs(rgbaPathSav[1].isEmpty() ? "." : rgbaPathSav[1].constData(),
+      S(szPath));
+    strDirAlt = QString::fromLocal8Bit(szPath) + "/.";
     EphSourceSet("swiss");
     DriveModalQt(ShowEphemDialogQt, [&](QWidget *pw) {
-      QLineEdit *pe;
-      FPickEphQt(pw, "jpl");
-      if ((pe = PeEphRowQt(pw, strJpl)) != NULL)
-        pe->setText("eph5-file-value");
-      FPickEphQt(pw, "server");
-      if ((pe = PeEphRowQt(pw, strTok)) != NULL)
-        pe->setText("eph5-token-value");
+      int isrc, rgiep[8], c, j;
+      for (isrc = 0; isrc < CEphSrc(); isrc++) {
+        c = CEphDialogRowsOf(PephsrcGet(isrc)->szKey, rgiep, 8);
+        FPickEphQt(pw, PephsrcGet(isrc)->szKey);
+        for (j = 0; j < c; j++) {
+          QLineEdit *pe = PeEphRowQt(pw, rgiep[j] == iepRowPath ? strFolder :
+            QString("%1:").arg(rgephparam[rgiep[j]].ep.szLabel));
+          if (pe != NULL)
+            pe->setText(rgiep[j] == iepRowPath ? strDirAlt :
+              QString("rt-%1-value").arg(rgiep[j]));
+        }
+      }
+      FPickEphQt(pw, "swiss");
       if (!FClickButtonQt(pw, "IDOK"))
         pw->close();
     });
-    EphSrvFinalizeQt();
-    Check(FEqSz(SzSet(us.szEphemSource), "server") &&
-      FEqSz(SzSet(us.rgszEphParam[epJplFile]), "eph5-file-value") &&
-      FEqSz(SzSet(us.rgszEphParam[epServerToken]), "eph5-token-value"),
-      "OK applies the source picked and what was typed for each source "
-      "visited (\"%s\")", SzSet(us.szEphemSource));
+    for (iep = 0; iep < cEphParam; iep++) {
+      sprintf2(S(sz), "rt-%d-value", iep);
+      cBad += !FEqSz(SzSet(us.rgszEphParam[iep]), sz);
+    }
+    Check(cBad == 0 && FEqSz(SzSet(us.szEphemSource), "swiss") &&
+      QString::fromLocal8Bit(SzSet(us.rgszPath[1])) == strDirAlt,
+      "OK applies the source picked and what was typed in every row of "
+      "every source (%d of %d values wrong)", cBad, cEphParam);
 
     SzScratchPathQt(S(szPath), "eph5round", ".as");
     us.fNoWrite = fFalse;
     us.nWriteFormat = 'd';
     FCloneSz(szPath, &is.szFileOut);
     Check(FOutputSettings(), "FOutputSettings() wrote a settings file");
-    EphSourceSet("swiss");
-    FEphParamSet(epJplFile, "");
-    FEphParamSet(epServerToken, "");
-    cLine = CReplaySettingsQt(szPath, FWantEphQt);
-    Check(cLine == 3 + (rgbaParamSav[epServerUrl].isEmpty() ? 0 : 1),
-      "the file carries one -bE and the -bP lines (%d)", cLine);
+    EphSourceSet("moshier");
+    for (iep = 0; iep < cEphParam; iep++)
+      FEphParamSet(iep, "");
+    FCloneSz("poison", &us.rgszPath[1]);
+    cLine = CReplaySettingsQt(szPath, [](CONST char *szL) -> flag {
+      return FEqSzPrefixQt(szL, "-bE") || FEqSzPrefixQt(szL, "-bP") ||
+        FEqSzPrefixQt(szL, "-Yi1"); });
+    cBad = 0;
+    for (iep = 0; iep < cEphParam; iep++) {
+      sprintf2(S(sz), "rt-%d-value", iep);
+      cBad += !FEqSz(SzSet(us.rgszEphParam[iep]), sz);
+    }
     SzEphChainHead(us.szEphemSource, S(szHead));
-    Check(FEqSz(szHead, "server") &&
-      FEqSz(SzSet(us.rgszEphParam[epJplFile]), "eph5-file-value") &&
-      FEqSz(SzSet(us.rgszEphParam[epServerToken]), "eph5-token-value"),
-      "and both survive save and load (%s)", szHead);
+    Check(cBad == 0 && FEqSz(szHead, "swiss") &&
+      QString::fromLocal8Bit(SzSet(us.rgszPath[1])) == strDirAlt,
+      "and all of it survives save and load (%d lines, %d values lost, "
+      "-Yi1 \"%s\")", cLine, cBad, SzSet(us.rgszPath[1]));
     remove(szPath);
     FCloneSz(fFileOutSav ? baFileOutSav.constData() : NULL, &is.szFileOut);
     us.nWriteFormat = nWriteFormatSav;
     us.fNoWrite = fNoWriteSav;
   }
 
-  // The folder typed applies on OK as -Yi1, and resets the search.
-  DriveModalQt(ShowEphemDialogQt, [&](QWidget *pw) {
-    QLineEdit *pe;
-    FPickEphQt(pw, "swiss");
-    if ((pe = PeEphRowQt(pw, strFolder)) != NULL)
-      pe->setText("eph-folder-value");
-    if (!FClickButtonQt(pw, "IDOK"))
-      pw->close();
-  });
-  Check(FEqSz(SzSet(us.rgszPath[1]), "eph-folder-value") &&
-    FEqSz(SzSet(us.szEphemSource), "swiss"),
-    "the folder typed applies as -Yi1 (\"%s\")", SzSet(us.rgszPath[1]));
-
-  // The server was picked and OKed above, and OK casts -- which starts the
-  // adapter. Put it back, or the next group inherits a connector it did
-  // not start.
-  EphSrvFinalizeQt();
-
   // Back where the suite was, through the same accessors the dialog used.
+  EphSrvFinalizeQt();
   for (iep = 0; iep < cEphParam; iep++)
     FEphParamSet(iep, rgbaParamSav[iep].constData());
-  FCloneSz(baPathSav.isEmpty() ? NULL : baPathSav.constData(),
-    &us.rgszPath[1]);
+  for (i = 0; i < 10; i++)
+    FCloneSz(rgbaPathSav[i].isEmpty() ? NULL : rgbaPathSav[i].constData(),
+      &us.rgszPath[i]);
   is.fSwissPathSet = fFalse;
   EphSourceSet(baChainSav.constData());
+  ciCore = ciSav;
+  us.fSeconds = fSecondsSav;
   RecastAndRedrawQt();
-  printf("  Ephemeris Settings shows one source's own settings, Test says\n"
-         "  whether it works, and what OK applies survives the writer\n");
+  printf("  Ephemeris Settings: every source's rows, every Test verdict,\n"
+         "  the keys, the mouse and Browse, and what OK applies survives\n"
+         "  the writer\n");
 }
 
 static CONST QTTESTENTRY rgqttestQt[] = {

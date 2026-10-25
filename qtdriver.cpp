@@ -120,6 +120,10 @@
 
 #include "astrolog.h"
 #include "qtdriver.h"
+// ephem.h names the protocol's default port for the builds that do not
+// compile ephproto.h; this one does, so it pins the copy.
+static_assert(eph::kDefaultPort == nEphSrvPortDefault,
+  "ephem.h's copy of the protocol's default port has drifted");
 #include "ephreq.h"
 // The Swiss Ephemeris constants the Ephemeris Server backend speaks in
 // (SEFLG_*, SE_SIDM_*) and swe_deltat(), which the local path also calls
@@ -1066,6 +1070,11 @@ void ClearPopupSuppressedTestQt() { s_szPopupSuppressedQt[0] = chNull; }
 
 void PrintWarningQt(CONST char *sz, flag fError)
 {
+  // Collected rather than shown while a caller asked for that (Ephemeris
+  // Settings' Test): PrintWarning() checks first, but this is also called
+  // directly, from FGetUrlQt() among others.
+  if (FWarningCaptured(sz))
+    return;
   if (FNoPopupQt()) {
     size_t cch = strlen(s_szPopupSuppressedQt);
     snprintf(s_szPopupSuppressedQt + cch, sizeof(s_szPopupSuppressedQt) - cch,
@@ -7172,7 +7181,15 @@ flag FGetUrlQt(CONST char *szUrl, CONST char *szFile)
         .constData(),
       (long long)msHead, (long long)msFirst,
       (long long)timNet.elapsed());
+  // Disconnected BEFORE it closes: QProgressDialog's closeEvent() emits
+  // canceled(), so closing it after a finished fetch set fCancel and every
+  // download that had a progress dialog -- every one with popups on, which
+  // is normal use -- was reported "Download cancelled." and its file
+  // discarded. The suite runs with popups off, so no dialog was made and
+  // nothing there could see it; Ephemeris Settings' Test on JPL Horizons
+  // did (2026-10-24).
   if (pdlg != NULL) {
+    QObject::disconnect(pdlg, &QProgressDialog::canceled, prep, NULL);
     pdlg->close();
     delete pdlg;
   }

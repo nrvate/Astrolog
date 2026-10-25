@@ -709,6 +709,9 @@
 #define dbEp_b3                         1749
 #define dbEp_b4                         1750
 #define dsEp_ds                         1751
+#define dsEp_p5                         1752
+#define deEp_p5                         1753
+#define dbEp_b5                         1754
 #define dxSe_10                         1585
 #define dxSe_A3                         1586
 #define dxSe_Ap                         1587
@@ -1198,7 +1201,7 @@
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        227
 #define _APS_NEXT_COMMAND_VALUE         40367
-#define _APS_NEXT_CONTROL_VALUE         1752
+#define _APS_NEXT_CONTROL_VALUE         1755
 #define _APS_NEXT_SYMED_VALUE           102
 #endif
 #endif

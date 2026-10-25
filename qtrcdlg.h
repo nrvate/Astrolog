@@ -1902,30 +1902,33 @@ static CONST RCCTL rgctlObjectSel[] = {
 #define dxObjectSel 344
 #define dyObjectSel 322
 
-// dlgEphem -- 262 x 236 dialog units, from astrolog.rc
+// dlgEphem -- 262 x 250 dialog units, from astrolog.rc
 #define szTitleEphem "Ephemeris Settings"
 static CONST RCCTL rgctlEphem[] = {
-  {ctlButton, "OK", "IDOK", -1, 207,217,50,14},
-  {ctlButton, "Cancel", "IDCANCEL", -1, 152,217,50,14},
-  {ctlButton, "&Test", "dbEp_ct", -1, 5,217,50,14},
+  {ctlButton, "OK", "IDOK", -1, 207,231,50,14},
+  {ctlButton, "Cancel", "IDCANCEL", -1, 152,231,50,14},
+  {ctlButton, "&Test", "dbEp_ct", -1, 5,231,50,14},
   {ctlLabel,  "&Ephemeris:", "IDC_STATIC", -1, 5,5,60,8},
   {ctlList,   "", "dlEp_src", -1, 5,14,252,66},
   {ctlLabel,  "", "dsEp_ds", -1, 5,84,252,16},
-  {ctlLabel,  "", "dsEp_p", 1, 5,106,100,8},
-  {ctlEdit,   "", "deEp_p", 1, 110,104,126,13},
+  {ctlLabel,  "", "dsEp_p", 1, 5,106,80,8},
+  {ctlEdit,   "", "deEp_p", 1, 88,104,148,13},
   {ctlButton, "...", "dbEp_b", 1, 240,103,18,14},
-  {ctlLabel,  "", "dsEp_p", 2, 5,120,100,8},
-  {ctlEdit,   "", "deEp_p", 2, 110,118,126,13},
+  {ctlLabel,  "", "dsEp_p", 2, 5,120,80,8},
+  {ctlEdit,   "", "deEp_p", 2, 88,118,148,13},
   {ctlButton, "...", "dbEp_b", 2, 240,117,18,14},
-  {ctlLabel,  "", "dsEp_p", 3, 5,134,100,8},
-  {ctlEdit,   "", "deEp_p", 3, 110,132,126,13},
+  {ctlLabel,  "", "dsEp_p", 3, 5,134,80,8},
+  {ctlEdit,   "", "deEp_p", 3, 88,132,148,13},
   {ctlButton, "...", "dbEp_b", 3, 240,131,18,14},
-  {ctlLabel,  "", "dsEp_p", 4, 5,148,100,8},
-  {ctlEdit,   "", "deEp_p", 4, 110,146,126,13},
+  {ctlLabel,  "", "dsEp_p", 4, 5,148,80,8},
+  {ctlEdit,   "", "deEp_p", 4, 88,146,148,13},
   {ctlButton, "...", "dbEp_b", 4, 240,145,18,14},
-  {ctlLabel,  "", "dsEp_st", -1, 5,166,252,44},
+  {ctlLabel,  "", "dsEp_p", 5, 5,162,80,8},
+  {ctlEdit,   "", "deEp_p", 5, 88,160,148,13},
+  {ctlButton, "...", "dbEp_b", 5, 240,159,18,14},
+  {ctlLabel,  "", "dsEp_st", -1, 5,180,252,46},
 };
 #define cctlEphem (int)(sizeof(rgctlEphem) / sizeof(RCCTL))
 #define dxEphem 262
-#define dyEphem 236
+#define dyEphem 250
 

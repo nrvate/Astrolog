@@ -126,6 +126,12 @@ extern CONST EPHPARAMROW rgephparam[cEphParam];
 // dialog can keep its values in one array of cEphParam+1.
 #define iepRowPath cEphParam
 
+// The Ephemeris Server's port when its address is empty. The protocol's
+// own constant is eph::kDefaultPort in ephsrv/ephproto.h, a C++ header the
+// Win32 build and this core do not include; qtdriver.cpp, which does,
+// static_asserts the two equal, so this copy cannot drift.
+#define nEphSrvPortDefault 47190
+
 // A source's parameters are reached by its key, with CEphParamOfSrc()
 // and IepOfSrc() -- declared in extern.h with every other function,
 // since the P(()) macro is not in scope here. That pair is the ONLY way
@@ -334,6 +340,7 @@ typedef struct _EphTrans {
 // before none, so the five indexes above never move.
 #ifdef PROMETHEIA
 extern EPHSRCDEF ephsrcPrometheia;
+extern void SzEphPromEmpty(int iep, flag fLong, char *sz, int cch);
 #define cEphSrcPrometheia 1
 #else
 #define cEphSrcPrometheia 0

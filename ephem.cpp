@@ -445,11 +445,12 @@ int CEphParamRows(int *rgiep, int cMax)
 
 
 // The rows Ephemeris Settings shows for ONE source: the folder its data
-// files are searched for in, when it reads Swiss Ephemeris or JPL files
-// (iepRowPath), then its own parameters. Swiss had no row at all before,
-// so the dialog's commonest source showed "Parameters:" over nothing and
-// the one setting that decides whether it works -- where its files are
-// -- could only be typed into astrolog.as.
+// files are searched for in, when it searches the -Yi folders for them --
+// Swiss, JPL, Moshier, Prometheia and Horizons (iepRowPath) -- then its own
+// parameters. Swiss had no row at all before, so the dialog's commonest
+// source showed "Parameters:" over nothing and the one setting that
+// decides whether it works -- where its files are -- could only be typed
+// into astrolog.as.
 
 int CEphDialogRowsOf(CONST char *szKey, int *rgiep, int cMax)
 {
@@ -457,9 +458,50 @@ int CEphDialogRowsOf(CONST char *szKey, int *rgiep, int cMax)
 
   if (rgiep == NULL || cMax <= 0)
     return 0;
-  if (FEqSz(szKey, "swiss") || FEqSz(szKey, "jpl"))
+  // Moshier too: its formulas cover the Sun, Moon and planets, and every
+  // asteroid and centaur still comes from a Swiss file in these folders --
+  // with none there Chiron reads 0Ari00 under it. And Horizons: what it
+  // has no target for -- the nodes, Lilith, most asteroids -- the Swiss
+  // Ephemeris computes (FEphSubmit()), from these folders.
+  if (FEqSz(szKey, "swiss") || FEqSz(szKey, "jpl") ||
+    FEqSz(szKey, "moshier") || FEqSz(szKey, "prometheia") ||
+    FEqSz(szKey, "horizons"))
     rgiep[cRow++] = iepRowPath;
   return cRow + CEphParamRowsOf(szKey, rgiep + cRow, cMax - cRow);
+}
+
+
+// What an EMPTY row means, for Ephemeris Settings: an empty value is never
+// "nothing", it is the source's own default, and a blank box said none of
+// that. Two lengths. The short one is greyed in the field itself, which is
+// 148 dialog units -- about 36 characters -- so it names the default and
+// no more. The long one is a sentence, for the field's tooltip and, in the
+// Windows build, the line under the rows while the field has focus.
+
+void SzEphRowEmpty(int iep, flag fLong, char *sz, int cch)
+{
+  *sz = chNull;
+  if (iep == iepRowPath)
+    sprintf2(sz, cch, "%s", !fLong ? "empty: the program's own folder" :
+      "Left empty, the program's own folder and the current folder are "
+      "searched, and any other folders the settings name (-Yi).");
+#ifdef SWISS
+  else if (iep == epJplFile)
+    sprintf2(sz, cch, !fLong ? "empty: %s" : "Left empty, %s is looked for "
+      "in the ephemeris folders.", SzJplFileDefault());
+#endif
+  else if (iep == epServerUrl)
+    sprintf2(sz, cch, !fLong ? "empty: localhost:%d" : "Left empty, the "
+      "server on this computer is used: localhost:%d.", nEphSrvPortDefault);
+  else if (iep == epServerToken)
+    sprintf2(sz, cch, "%s", !fLong ? "empty: none" :
+      "Left empty, no token is sent, which a server that requires one "
+      "refuses.");
+#ifdef PROMETHEIA
+  else if (iep >= 0 && iep < cEphParam &&
+    FEqSz(rgephparam[iep].szSrc, "prometheia"))
+    SzEphPromEmpty(iep, fLong, sz, cch);
+#endif
 }
 
 
@@ -474,11 +516,11 @@ int CEphDialogRowsOf(CONST char *szKey, int *rgiep, int cMax)
 // Moshier formulas, and successfully -- so a check that only asked
 // whether positions came back would pass a selection with no files at
 // all. FSwissEphSubstituted() says when that happened. Chiron is reported
-// but not required: it needs an asteroid file even when the planets do
-// not, and Moshier has none at all, so its absence is a note rather than
-// a failure. The warnings a source raises while answering are captured
-// into the result rather than shown, so a missing file is one line here
-// and not a box per body.
+// but not required: it needs an asteroid file (or Prometheia's catalog)
+// even when the planets do not, so its absence reads "Works, except for
+// Chiron." rather than a failure. The warnings a source raises while
+// answering are captured into the result rather than shown, so a missing
+// file is one line here and not a box per body.
 //
 // The caller decides which settings the source sees: Ephemeris Settings
 // puts the values as typed into force around this call and restores
@@ -498,25 +540,86 @@ static CONST char *SzEphErr(int nErr)
   }
 }
 
+// Append to a report being built in sz (of cch), sentence by sentence.
+// Each one starts with a capital and ends with a full stop whatever the
+// text it came from does: the reasons are the sources' own, written for a
+// command line ("ephemeris '...' not found"), and read as sentences here.
+static void EphTestAdd(char *sz, int cch, CONST char *szAdd)
+{
+  int cchAt = CchSz(sz);
+
+  if (!FSzSet(szAdd))
+    return;
+  sprintf2(sz + cchAt, cch - cchAt, "%s%c%s%s", cchAt > 0 ? " " : "",
+    ChCap(szAdd[0]), szAdd + 1, szAdd[CchSz(szAdd)-1] == '.' ? "" : ".");
+}
+
+// The instant Test asks about, said as a date and a UT time, so the
+// positions can be held against a chart or another program: "the chart's
+// moment" alone named nothing anyone could check.
+// A Swiss Ephemeris "SwissEph file 'seas_18.se1' not found in PATH './'"
+// as a sentence for someone looking at a dialog: the file, and that it is
+// not in the folders searched -- which the result names once, at its end,
+// rather than in the library's spelling of the path ("./" for the current
+// folder) once per body.
+static void SzEphTestReason(CONST char *szCap, char *sz, int cch)
+{
+  CONST char *pch, *pchEnd;
+
+  for (pch = szCap; *pch && !FEqRgch(pch, "SwissEph file '", 15, fFalse);
+    pch++)
+    ;
+  if (*pch) {
+    pch += 15;
+    for (pchEnd = pch; *pchEnd && *pchEnd != '\''; pchEnd++)
+      ;
+    if (*pchEnd && FEqRgch(pchEnd, "' not found in PATH", 19, fFalse)) {
+      sprintf2(sz, cch, "%.*s is not in the folders searched",
+        (int)(pchEnd - pch), pch);
+      return;
+    }
+  }
+  sprintf2(sz, cch, "%s", szCap);
+}
+
+static CONST char *SzEphTestMoment()
+{
+  static char szMoment[cchSzDef];
+  real jd = JulianDayFromTime(is.T) + 0.5;
+  int mon, day, yea, nMin;
+
+  // To the nearest minute, before anything is split off: 11:01 is
+  // 19.01666... hours, and its minutes truncated read 19:00.
+  jd = RFloor(jd * (24.0*60.0) + 0.5) / (24.0*60.0);
+  nMin = (int)RFloor((jd - RFloor(jd)) * (24.0*60.0) + 0.5);
+  JulianToMdy(jd - 0.5, &mon, &day, &yea);
+  sprintf2(S(szMoment), "%d-%02d-%02d %02d:%02d UT, the chart's moment",
+    yea, mon, day, nMin / 60, nMin % 60);
+  return szMoment;
+}
+
 flag FEphTestSource(CONST char *szKey, char *sz, int cch)
 {
   static EPHQUERY eq;   // Big; and the test is modal, one at a time.
   CONST int rgobj[3] = {oSun, oMoo, oChi};
   EPHSRCDEF *pes;
   EPHCAPS caps;
-  char szWhy[cchSzMax], szCap[cchSzMax*2];
+  char szWhy[cchSzMax*2], szCap[cchSzMax*2], szT[cchSzMax*3];
   char *pch;
-  int isrc, i;
-  flag fNoEphSav, rgfOk[3], fSubst = fFalse, fOk;
+  int isrc, i, nState;
+  flag fNoEphSav, rgfOk[3], fSubst = fFalse, fOk, fAny;
 
+  *sz = chNull;
   isrc = IEphSrcFromKey(szKey);
   pes = PephsrcGet(isrc);
   if (pes == NULL) {
-    sprintf2(sz, cch, "'%s' is not built into this program.", szKey);
+    sprintf2(sz, cch, "Does not work. '%s' is not built into this program.",
+      szKey);
     return fFalse;
   }
   if (!pes->FAvailable(S(szWhy))) {
-    sprintf2(sz, cch, "not available: %s.", szWhy);
+    sprintf2(sz, cch, "%s", "Does not work.");
+    EphTestAdd(sz, cch, szWhy);
     return fFalse;
   }
   ClearB((pbyte)&caps, sizeof(EPHCAPS));
@@ -524,13 +627,55 @@ flag FEphTestSource(CONST char *szKey, char *sz, int cch)
   if (caps.fLegacyCast) {
     // Matrix and None answer through CastChart()'s own hook, not a query.
     if (FEqSz(szKey, "none")) {
-      sprintf2(sz, cch, "%s", "None computes no positions: every body "
-        "reads 0Ari00'00\".");
+      sprintf2(sz, cch, "%s", "Does not work. None computes no positions: "
+        "every body reads 0Ari00'00\".");
       return fFalse;
     }
-    sprintf2(sz, cch, "%s", "formulas built into the program; there are "
-      "no files or connection that could be missing.");
+#ifdef MATRIX
+    // Matrix: nothing can be missing, but its answer can still be held
+    // against a chart. Its formulas run as the cast runs them, into the
+    // chart's own arrays (cp0, which planet[] and space[] name), so those
+    // are put back after: the chart on screen is drawn from them. Chiron
+    // is asked for even when the chart leaves it out, and from the Earth
+    // whatever the chart's centre, as the other sources are asked.
+    {
+      CP cpSav = cp0;
+      flag fIgnChiSav = ignore[oChi];
+      int objCenterSav = us.objCenter;
+      real rgr[3], rNod, rNodAlt;
+
+      ignore[oChi] = fFalse;
+      us.objCenter = oEar;
+      ComputePlanets();
+      ComputeLunar(&planet[oMoo], &planetalt[oMoo], &rNod, &rNodAlt);
+      rgr[0] = planet[oSun]; rgr[1] = planet[oMoo]; rgr[2] = planet[oChi];
+      cp0 = cpSav;
+      ignore[oChi] = fIgnChiSav;
+      us.objCenter = objCenterSav;
+      sprintf2(sz, cch, "%s", "Works.");
+      pch = szT;
+      *pch = chNull;
+      for (i = 0; i < 3; i++) {
+        CONST char *szPos;
+        for (szPos = SzZodiac(rgr[i]); *szPos == ' '; szPos++)
+          ;
+        sprintf2(pch, (int)sizeof(szT) - (int)(pch - szT), "%s%s %s",
+          i > 0 ? ", " : "", szObjDisp[rgobj[i]], szPos);
+        pch += CchSz(pch);
+      }
+      sprintf2(pch, (int)sizeof(szT) - (int)(pch - szT), " at %s",
+        SzEphTestMoment());
+      EphTestAdd(sz, cch, szT);
+      EphTestAdd(sz, cch, "From formulas built into the program, so there "
+        "is no file or connection that could be missing");
+      return fTrue;
+    }
+#else
+    sprintf2(sz, cch, "%s", "Works. The Matrix formulas are built into "
+      "the program; there are no files or connection that could be "
+      "missing.");
     return fTrue;
+#endif
   }
 
   EphQueryInit(&eq, JulianDayFromTime(is.T));
@@ -549,63 +694,197 @@ flag FEphTestSource(CONST char *szKey, char *sz, int cch)
 #endif
   is.fNoEphFile = fNoEphSav;
 
-  for (i = 0; i < 3; i++)
-    rgfOk[i] = eq.rgisrc[i] != ephSrcNone && eq.rgrow[i].nErr == ephErrNone;
-  fOk = rgfOk[0] && rgfOk[1] && !fSubst;
-
-  *sz = chNull;
-  pch = sz;
-  if (fSubst) {
-    sprintf2(pch, cch, "%s files were not found, so these came from %s: ",
-      FEqSz(szKey, "jpl") ? "The JPL" : "The Swiss Ephemeris",
-      FEqSz(szKey, "jpl") ? "another ephemeris" : "the Moshier formulas");
-    pch += CchSz(pch);
-  }
+  fAny = fFalse;
   for (i = 0; i < 3; i++) {
-    CONST char *szPos;
-    if (rgfOk[i]) {
+    rgfOk[i] = eq.rgisrc[i] != ephSrcNone && eq.rgrow[i].nErr == ephErrNone;
+    fAny |= rgfOk[i];
+  }
+  fOk = rgfOk[0] && rgfOk[1] && !fSubst;
+  sprintf2(sz, cch, "%s", !fOk ? "Does not work." : rgfOk[2] ? "Works." :
+    "Works, except for Chiron.");
+
+  // What came back, at one instant, so it can be held against a chart --
+  // but not when it came from another ephemeris than the one asked for:
+  // those positions are right and say nothing about this selection, and
+  // shown they read as its answer.
+  if (fAny && !fSubst) {
+    pch = szT;
+    *pch = chNull;
+    for (i = 0; i < 3; i++) {
+      CONST char *szPos;
+      if (!rgfOk[i])
+        continue;
       // SzZodiac() pads its degrees to two places for a column.
       for (szPos = SzZodiac(Mod(eq.rgrow[i].rg[0] + is.rSid));
         *szPos == ' '; szPos++)
         ;
-      sprintf2(pch, cch - (int)(pch - sz), "%s%s %s", i > 0 ? ", " : "",
-        szObjDisp[rgobj[i]], szPos);
-    }
-    else
-      sprintf2(pch, cch - (int)(pch - sz), "%s%s: none", i > 0 ? ", " : "",
-        szObjDisp[rgobj[i]]);
-    pch += CchSz(pch);
-  }
-  sprintf2(pch, cch - (int)(pch - sz), "%s", " at the chart's moment.");
-  pch += CchSz(pch);
-  if (!(rgfOk[0] && rgfOk[1] && rgfOk[2])) {
-    // The source's own words first; the walk's summary when it had none;
-    // the row's error code as the last resort.
-    if (FSzSet(szCap))
-      sprintf2(pch, cch - (int)(pch - sz), " %s", szCap);
-    else if (FSzSet(SzEphNoSourceWhy()))
-      sprintf2(pch, cch - (int)(pch - sz), " %s", SzEphNoSourceWhy());
-    else
-      for (i = 0; i < 3; i++)
-        if (!rgfOk[i]) {
-          sprintf2(pch, cch - (int)(pch - sz), " %s: %s.",
-            szObjDisp[rgobj[i]], SzEphErr(eq.rgrow[i].nErr));
-          break;
-        }
-    pch += CchSz(pch);
-    // And the source's state, for a remote one: why it is not connected.
-    if (pes->State(S(szWhy)) != esReady && FSzSet(szWhy)) {
-      sprintf2(pch, cch - (int)(pch - sz), " %s%s", szWhy,
-        szWhy[CchSz(szWhy)-1] == '.' ? "" : ".");
+      sprintf2(pch, (int)sizeof(szT) - (int)(pch - szT), "%s%s %s",
+        pch > szT ? ", " : "", szObjDisp[rgobj[i]], szPos);
       pch += CchSz(pch);
     }
+    sprintf2(pch, (int)sizeof(szT) - (int)(pch - szT), " at %s",
+      SzEphTestMoment());
+    EphTestAdd(sz, cch, szT);
   }
+
 #ifdef SWISS
-  if (FEqSz(szKey, "swiss") || FEqSz(szKey, "jpl"))
-    sprintf2(pch, cch - (int)(pch - sz), " Files from: %s",
-      FSzSet(SzSwissPathSet()) ? SzSwissPathSet() : "(no folder found)");
+  // The files asked for were not there, and the library answered from
+  // another ephemeris without failing: the one case where positions came
+  // back and the selection still does not work. Name what was looked for.
+  if (fSubst) {
+    if (FEqSz(szKey, "jpl")) {
+      CONST char *pchF = SzSet(us.rgszEphParam[epJplFile]), *pchB;
+      for (pchB = pchF + CchSz(pchF); pchB > pchF && pchB[-1] != chDirSep &&
+        pchB[-1] != '/'; pchB--)
+        ;
+      sprintf2(S(szT), "The JPL file %s is not in the folders searched, so "
+        "the Sun and Moon came from the Swiss Ephemeris files instead",
+        FSzSet(pchB) ? pchB : SzJplFileDefault());
+    } else
+      sprintf2(S(szT), "%s", "No Swiss Ephemeris planet file is in the "
+        "folders searched, so the Sun and Moon came from the Moshier "
+        "formulas instead");
+    EphTestAdd(sz, cch, szT);
+  }
+#endif
+
+  if (!fAny) {
+    // Nothing answered: one reason, the most specific there is. A source
+    // that is not connected says why in its state (the server's own
+    // error); otherwise the source's own warning; otherwise why the walk
+    // got nothing from it, without the walk's "key (...)" wrapping.
+    nState = pes->State(S(szWhy));
+    if (nState != esReady && FSzSet(szWhy)) {
+      // The server's state reads "Ephemeris Server <addr>: retry in Ns --
+      // <error>"; the retry is the live connection's business, not this
+      // test's, which drops it afterwards.
+      for (pch = szWhy; *pch && !FEqRgch(pch, " -- ", 4, fFalse); pch++)
+        ;
+      if (*pch)
+        EphTestAdd(sz, cch, pch + 4);
+      else
+        EphTestAdd(sz, cch, szWhy);
+    } else if (FSzSet(szCap))
+      EphTestAdd(sz, cch, szCap);
+    else if (FSzSet(SzEphNoSourceWhy())) {
+      CONST char *pchW = SzEphNoSourceWhy();
+      i = CchSz(szKey);
+      if (FEqRgch(pchW, szKey, i, fFalse) && pchW[i] == ' ' &&
+        pchW[i+1] == '(')
+        sprintf2(S(szT), "%.*s", CchSz(pchW) - i - 3, pchW + i + 2);
+      else
+        sprintf2(S(szT), "%s", pchW);
+      EphTestAdd(sz, cch, szT);
+    } else {
+      sprintf2(S(szT), "The Sun: %s", SzEphErr(eq.rgrow[0].nErr));
+      EphTestAdd(sz, cch, szT);
+      // A file that does not reach the date: Prometheia has a field for
+      // exactly this, and the reader should be told it is the fix.
+      if (eq.rgrow[0].nErr == ephErrOutsideCover &&
+        FEqSz(szKey, "prometheia"))
+        EphTestAdd(sz, cch, "A Long-span Ephemeris such as "
+          "linux_m13000p17000.441 (JPL DE441) covers -13000 to 17000");
+    }
+  } else {
+    // Some answered: say what each one that did not lacked.
+    for (i = 0; i < 3; i++) {
+      if (rgfOk[i])
+        continue;
+      if (eq.rgrow[i].nErr == ephErrUnknownBody && FEqSz(szKey, "prometheia")
+        && !FSzSet(us.rgszEphParam[epPrometheiaCatalog]))
+        sprintf2(S(szT), "%s: no data -- Prometheia computes asteroids and "
+          "centaurs from a Small-body Catalog, and none is set",
+          szObjDisp[rgobj[i]]);
+      else if (FSzSet(szCap)) {
+        char szR[cchSzMax*2];
+        SzEphTestReason(szCap, S(szR));
+        sprintf2(S(szT), "%s: %s", szObjDisp[rgobj[i]], szR);
+      } else
+        sprintf2(S(szT), "%s: %s", szObjDisp[rgobj[i]],
+          SzEphErr(eq.rgrow[i].nErr));
+      EphTestAdd(sz, cch, szT);
+      szCap[0] = chNull;   // One source warning is said once.
+    }
+  }
+
+#ifdef SWISS
+  if (FEqSz(szKey, "swiss") || FEqSz(szKey, "jpl") ||
+    FEqSz(szKey, "moshier")) {
+    char szDir[cchSzMax*2];
+    // The Ephemeris Folder is -Yi1, and the search takes every -Yi folder
+    // and the program's own: a folder typed here that holds nothing is
+    // masked by another that does, and Test would say Works about a
+    // setting that did nothing. Say so.
+    if (FSzSet(us.rgszPath[1])) {
+      SzPathDirAbs(us.rgszPath[1], S(szDir));
+      if (!FDirExists(szDir)) {
+        sprintf2(S(szT), "The Ephemeris Folder %s does not exist", szDir);
+        EphTestAdd(sz, cch, szT);
+      } else if (!FDirHasEphem(szDir)) {
+        sprintf2(S(szT), "The Ephemeris Folder %s holds no Swiss Ephemeris "
+          "files", szDir);
+        EphTestAdd(sz, cch, szT);
+      }
+    }
+    SzSwissPathShown(S(szDir));
+    sprintf2(S(szT), "Searched: %s", FSzSet(szDir) ? szDir : "no folder");
+    EphTestAdd(sz, cch, szT);
+  }
 #endif
   return fOk;
+}
+
+
+// The line under Ephemeris Settings' rows for the picked source, until a
+// Test replaces it. Both builds' dialogs show this, so it is said once.
+//
+// Only the source IN USE has a state worth showing, and only while the
+// rows hold what it is using (fTyped false): any other source's state is
+// about settings it is not running on, and a local source's "ready" says
+// nothing about whether its files are there -- only Test can say that.
+// A connecting server's dots cycle with nTick, because a wait that stands
+// still reads as broken.
+
+void SzEphDialogStatus(CONST char *szKey, flag fTyped, int nTick, char *sz,
+  int cch)
+{
+  EPHSRCDEF *pes = PephsrcGet(IEphSrcFromKey(szKey));
+  char szState[cchSzMax], szHead[cchSzDef];
+  int nState;
+
+  *sz = chNull;
+  if (pes == NULL) {
+    sprintf2(sz, cch, "%s", "Pick an ephemeris.");
+    return;
+  }
+  if (!pes->FAvailable(S(szState))) {
+    EphTestAdd(sz, cch, szState);
+    EphTestAdd(sz, cch, "Pick another ephemeris");
+    return;
+  }
+  SzEphChainHead(us.szEphemSource, S(szHead));
+  if (fTyped || !FEqSz(szHead, szKey)) {
+    sprintf2(sz, cch, "%s", "Press Test to check that it works.");
+    return;
+  }
+  nState = pes->State(S(szState));
+  if (nState == esConnecting)
+    sprintf2(sz, cch, "In use. %s%.*s", szState, nTick % 3 + 1, "...");
+  else {
+    if (nState == esFailed)
+      sprintf2(sz, cch, "In use, and failing: %s", szState);
+    else if (FEqRgch(szState, "ready: ", 7, fFalse))
+      sprintf2(sz, cch, "In use: %s", szState + 7);
+    else if (FEqSz(szState, "ready") || FEqRgch(szState, "ready (", 7,
+      fFalse) || FEqSz(szState, "closed") || !FSzSet(szState))
+      sprintf2(sz, cch, "%s", "In use");
+    else
+      sprintf2(sz, cch, "In use. %s", szState);
+    if (sz[CchSz(sz)-1] != '.')
+      sprintf2(sz + CchSz(sz), cch - CchSz(sz), "%s", ".");
+    sprintf2(sz + CchSz(sz), cch - CchSz(sz), "%s",
+      " Press Test to check that it works.");
+  }
 }
 
 
@@ -1065,16 +1344,37 @@ flag FEphSubmitChain(EPHQUERY *pq, CONST int *rgisrcChain, int cisrc)
 }
 
 
-// Submit a query down the chain today's settings derive: the primary
-// source, and that is the whole chain in phase 3. Phase 4's us.szEphemSource
-// names the order; phase 6's remote sources join the walk.
+// Submit the cast's query down the chain us.szEphemSource names.
+//
+// With Horizons at the head (the source answering in the Earth's frame),
+// ComputeEphem() has already sent it every object it has a target for, so
+// this query holds only the REST: the nodes, Lilith, the Uranians, any
+// asteroid with no Horizons id. Asking Horizons for those attempts
+// nothing. Upstream's Horizons selection (nSwissEph 3) computed them with
+// FSwissPlanet() under SEFLG_JPLEPH -- the Swiss Ephemeris over the JPL
+// file, which falls back to the Swiss files and then Moshier when the file
+// is not there -- and that is the "jpl" source, as the legacy spelling's
+// chain already says ("horizons,jpl", EphSourceSetShadow()). So the head
+// is left out, and when nothing is named after it, "jpl" answers. Without
+// this, Horizons alone -- what the Ephemeris Settings dialog writes --
+// cast both nodes at 0Ari00'00" and warned that every body read that
+// (found 2026-10-25, by the maintainer).
 
 flag FEphSubmit(EPHQUERY *pq)
 {
-  int rgisrc[cEphSrcBuiltIn];
+  int rgisrc[cEphSrcBuiltIn], cisrc, isrcGeo, i, j;
 
-  return FEphSubmitChain(pq, rgisrc,
-    CEphChainSrc(us.szEphemSource, rgisrc, cEphSrcBuiltIn));
+  cisrc = CEphChainSrc(us.szEphemSource, rgisrc, cEphSrcBuiltIn);
+  if (FEphGeoUncorrected()) {
+    isrcGeo = IEphSrcGeoUncorrected();
+    for (i = j = 0; i < cisrc; i++)
+      if (rgisrc[i] != isrcGeo)
+        rgisrc[j++] = rgisrc[i];
+    cisrc = j;
+    if (cisrc == 0 && (rgisrc[0] = IEphSrcFromKey("jpl")) >= 0)
+      cisrc = 1;
+  }
+  return FEphSubmitChain(pq, rgisrc, cisrc);
 }
 
 
@@ -1200,7 +1500,8 @@ static int NLookupNone(CONST char *sz, EPHMATCH *rgm, int cMax)
 
 
 EPHSRCDEF ephsrcNone = {
-  "none", "None", "No ephemeris source; the Matrix legacy cast only.",
+  "none", "None", "No ephemeris: every body reads 0Ari00'00\"; the house cusps "
+  "are still computed.",
   FAvailableNone, GetCapsNone, StateNone, StartNone, StopNone,
   FSubmitNone, FReadNone, HintNone, NLookupNone
 };

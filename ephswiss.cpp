@@ -227,7 +227,8 @@ EPHSRCDEF ephsrcSwiss = {
 
 EPHSRCDEF ephsrcMoshier = {
   "moshier", "Moshier ephemeris",
-  "The Moshier analytic formulas; major planets and Moon.",
+  "Built-in formulas for the Sun, Moon and planets; asteroids such as "
+  "Chiron still need the folder's Swiss files.",
   FAvailableSwissLocal, GetCapsSwissLocal, StateSwissLocal, StartSwissLocal,
   StopSwissLocal, FSubmitMoshier, FReadSwissLocal, HintSwissLocal,
   NLookupSwissLocal
@@ -235,7 +236,7 @@ EPHSRCDEF ephsrcMoshier = {
 
 EPHSRCDEF ephsrcJpl = {
   "jpl", "JPL ephemeris file",
-  "The Swiss Ephemeris over a JPL_DE file.",
+  "The Swiss Ephemeris over a JPL DE file, such as de431.eph.",
   FAvailableSwissLocal, GetCapsSwissLocal, StateSwissLocal, StartSwissLocal,
   StopSwissLocal, FSubmitJpl, FReadSwissLocal, HintSwissLocal,
   NLookupSwissLocal
@@ -322,7 +323,8 @@ static int NLookupMatrix(CONST char *sz, EPHMATCH *rgm, int cMax)
 
 EPHSRCDEF ephsrcMatrix = {
   "matrix", "Matrix formula",
-  "Astrolog's own Matrix formulas; the legacy cast hook.",
+  "Astrolog's own Matrix formulas, built in: no files needed, less "
+  "precise than an ephemeris.",
   FAvailableMatrix, GetCapsMatrix, StateMatrix, StartMatrix, StopMatrix,
   FSubmitMatrix, FReadMatrix, HintMatrix, NLookupMatrix
 };

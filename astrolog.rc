@@ -3142,30 +3142,33 @@ BEGIN
 END
 
 
-dlgEphem DIALOGEX 32, 32, 262, 236
+dlgEphem DIALOGEX 32, 32, 262, 250
 STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
 CAPTION "Ephemeris Settings"
 FONT 8, "MS Shell Dlg", 400, 0, 0x1
 BEGIN
-    DEFPUSHBUTTON   "OK",IDOK,207,217,50,14
-    PUSHBUTTON      "Cancel",IDCANCEL,152,217,50,14
-    PUSHBUTTON      "&Test",dbEp_ct,5,217,50,14
+    DEFPUSHBUTTON   "OK",IDOK,207,231,50,14
+    PUSHBUTTON      "Cancel",IDCANCEL,152,231,50,14
+    PUSHBUTTON      "&Test",dbEp_ct,5,231,50,14
     LTEXT           "&Ephemeris:",IDC_STATIC,5,5,60,8
     LISTBOX         dlEp_src,5,14,252,66,LBS_NOTIFY | LBS_NOINTEGRALHEIGHT | WS_VSCROLL | WS_TABSTOP
     LTEXT           "",dsEp_ds,5,84,252,16
-    LTEXT           "",dsEp_p1,5,106,100,8
-    EDITTEXT        deEp_p1,110,104,126,13,ES_AUTOHSCROLL
+    LTEXT           "",dsEp_p1,5,106,80,8
+    EDITTEXT        deEp_p1,88,104,148,13,ES_AUTOHSCROLL
     PUSHBUTTON      "...",dbEp_b1,240,103,18,14
-    LTEXT           "",dsEp_p2,5,120,100,8
-    EDITTEXT        deEp_p2,110,118,126,13,ES_AUTOHSCROLL
+    LTEXT           "",dsEp_p2,5,120,80,8
+    EDITTEXT        deEp_p2,88,118,148,13,ES_AUTOHSCROLL
     PUSHBUTTON      "...",dbEp_b2,240,117,18,14
-    LTEXT           "",dsEp_p3,5,134,100,8
-    EDITTEXT        deEp_p3,110,132,126,13,ES_AUTOHSCROLL
+    LTEXT           "",dsEp_p3,5,134,80,8
+    EDITTEXT        deEp_p3,88,132,148,13,ES_AUTOHSCROLL
     PUSHBUTTON      "...",dbEp_b3,240,131,18,14
-    LTEXT           "",dsEp_p4,5,148,100,8
-    EDITTEXT        deEp_p4,110,146,126,13,ES_AUTOHSCROLL
+    LTEXT           "",dsEp_p4,5,148,80,8
+    EDITTEXT        deEp_p4,88,146,148,13,ES_AUTOHSCROLL
     PUSHBUTTON      "...",dbEp_b4,240,145,18,14
-    LTEXT           "",dsEp_st,5,166,252,44
+    LTEXT           "",dsEp_p5,5,162,80,8
+    EDITTEXT        deEp_p5,88,160,148,13,ES_AUTOHSCROLL
+    PUSHBUTTON      "...",dbEp_b5,240,159,18,14
+    LTEXT           "",dsEp_st,5,180,252,46
 END
 
 /////////////////////////////////////////////////////////////////////////////

@@ -1519,7 +1519,10 @@ void SetWarningCapture(char *sz, int cch)
 }
 
 
-static flag FWarningCaptured(CONST char *sz)
+// Not static: PrintWarningQt() asks it too, because some Qt code warns
+// through it directly -- FGetUrlQt() does, and a Horizons Test sat behind a
+// modal box nobody had asked for until it did.
+flag FWarningCaptured(CONST char *sz)
 {
   int cch;
 
