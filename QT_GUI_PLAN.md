@@ -11827,6 +11827,19 @@ this is the note that explains the wall of dialogs.
       The Win32 build draws no cue banner at all -- it has no common
       controls 6 manifest -- so there the text is the line under the rows
       while the field has focus, as before.
+    - *Where the settings file put it* (the maintainer, 10-25: "gets
+      shoved in a weird place"). `-bE` sat among the display flags with
+      its comment on the line after it, the `-bP` lines between that and
+      a second comment, and the folders it reads 70 lines further down.
+      It is a section of its own now, "EPHEMERIS (Setting / Ephemeris
+      Settings)", just above FILE PATHS: `-bE` with the keys this build
+      has beside it, then each set file, server or token with the
+      dialog's own label as its comment, in the dialog's order -- and,
+      last, any parameter for a source compiled out of this build, which
+      is written back rather than dropped. Proven by a save, a reload of
+      that file alone casting 1700 (catalog and perturbers both needed),
+      and a second save byte-identical, with a path holding a space and a
+      token holding a ";".
     - *Bare mnemonic letters.* Windows acts on an underlined letter
       without Alt in a dialog whose focus is on a button; the port did
       only for buttons, so "e" did not reach the list. Labels with a

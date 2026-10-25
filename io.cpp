@@ -1836,36 +1836,12 @@ flag FOutputSettings()
   sprintf2(S(sz), "%cb2     ", ChDashF(us.fSecondHide)); PrintFSz();
   PrintF(
     "; Don't display :00 seconds [\"_b2\" shows anyway, \"=b2\" skips   ]\n");
-  // The selection's own spellings (EPHEMERIS_PLUGINS_PLAN.md 5.3): one
-  // -bE line for the chain, then one -bP line per parameter that sits
-  // away from its default. No order dependence: these are the only
-  // lines the selection has. The chain is written even at its default,
-  // so a round trip always carries it; the parameters are written only
-  // when set, and "" or NULL -- the default -- writes nothing, which is
-  // why the sweep's poison-to-empty reads back as still default rather
-  // than lost. The -bU Matrix-stars flag is the one legacy -b spelling
-  // still written: it is a preference beside the selection, not part
-  // of it.
+  // The -bU Matrix-stars flag is the one legacy -b spelling still
+  // written: it is a preference beside the selection, not part of it.
+  // The selection itself has a section of its own, below.
   sprintf2(S(sz), "%cbU     ", ChDashF(us.fMatrixStar)); PrintFSz();
   PrintF(
     "; Matrix fixed stars only   [\"=bU\" uses them, \"_bU\" doesn't   ]\n");
-  PrintF("-bE "); PrintQuotedParamSz(file, SzSet(us.szEphemSource));
-  PrintF("\n");
-  PrintF(
-    "; Ephemeris source chain    [\"swiss\"; \"server,swiss,moshier\" orders "
-    "the fallback]\n");
-  for (iep = 0; iep < cEphParam; iep++) {
-    if (FEphParamDefaulted(iep))
-      continue;
-    sprintf2(S(sz), "-bP %s.%s ", rgephparam[iep].szSrc,
-      rgephparam[iep].ep.szKey);
-    PrintFSz();
-    PrintQuotedParamSz(file, us.rgszEphParam[iep]);
-    PrintF("\n");
-  }
-  PrintF(
-    "; Ephemeris parameters      [\"-bP server.url <address>\" sets one; "
-    "\"\" is its default]\n");
   sprintf2(S(sz), "%cv0     ", ChDashF(us.fVelocity)); PrintFSz();
   PrintF(
     "; Show average velocities   [\"=v0\" average, \"_v0\" does absolute]\n");
@@ -2093,6 +2069,58 @@ flag FOutputSettings()
   PrintF("         ; Direction arc and measure      [1,3 RA; 2,3 Naibod]\n");
   sprintf2(S(sz), "%cpv", ChDashF(us.fProgConverse)); PrintFSz();
   PrintF("           ; Converse progress/directions   [=pv is converse]\n");
+
+  // The ephemeris (EPHEMERIS_PLUGINS_PLAN.md 5.3), in a section of its
+  // own and as the dialog that sets it shows it: the one picked, then
+  // each file, server or token set for any source, beside that row's own
+  // label, in the dialog's order. It sat among the display flags, with
+  // its two comments on lines of their own and the parameters between
+  // them (2026-10-25, the maintainer: "gets shoved in a weird place").
+  // No order dependence: these are the only lines the selection has, and
+  // nothing reads them until a cast. -bE is written even at its default,
+  // so a round trip always carries it; a parameter only when set, since
+  // "" or NULL -- the default -- writes nothing, which is why the sweep's
+  // poison-to-empty reads back as still default rather than lost.
+  {
+    flag rgfDone[cEphParam];
+    int rgiepRow[cEphParam + 1], cRow, isrc, k;
+
+    PrintF("\n\n; EPHEMERIS (Setting / Ephemeris Settings):\n\n");
+    PrintF("-bE "); PrintQuotedParamSz(file, SzSet(us.szEphemSource));
+    PrintF(" ; Ephemeris [");
+    for (isrc = 0; isrc < CEphSrc(); isrc++) {
+      sprintf2(S(sz), "%s%s", isrc > 0 ? " " : "", PephsrcGet(isrc)->szKey);
+      PrintFSz();
+    }
+    PrintF("]\n");
+    for (iep = 0; iep < cEphParam; iep++)
+      rgfDone[iep] = fFalse;
+    for (isrc = 0; isrc <= CEphSrc(); isrc++) {
+      if (isrc < CEphSrc())
+        cRow = CEphDialogRowsOf(PephsrcGet(isrc)->szKey, rgiepRow,
+          cEphParam + 1);
+      else {
+        // Last, any parameter no source in this build shows: one a
+        // settings file carried in for a source compiled out, which is
+        // written back rather than dropped.
+        for (cRow = 0; cRow < cEphParam; cRow++)
+          rgiepRow[cRow] = cRow;
+      }
+      for (k = 0; k < cRow; k++) {
+        iep = rgiepRow[k];
+        if (iep < 0 || iep >= cEphParam || rgfDone[iep] ||
+          FEphParamDefaulted(iep))
+          continue;
+        rgfDone[iep] = fTrue;
+        sprintf2(S(sz), "-bP %s.%s ", rgephparam[iep].szSrc,
+          rgephparam[iep].ep.szKey);
+        PrintFSz();
+        PrintQuotedParamSz(file, us.rgszEphParam[iep]);
+        sprintf2(S(sz), " ; %s\n", rgephparam[iep].ep.szLabel);
+        PrintFSz();
+      }
+    }
+  }
 
   PrintF("\n\n; FILE PATHS (-Yi1 through -Yi9):\n; For example, "
     "point -Yi1 to ephemeris dir, -Yi2 to font dir, etc.\n\n");
