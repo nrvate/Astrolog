@@ -25099,12 +25099,15 @@ static void TestEphemDialogQt()
     if (plist != NULL && iRow < plist->count()) {
       QPoint pt = plist->visualItemRect(plist->item(iRow)).center();
       QWidget *pv = plist->viewport();
-      QMouseEvent e1(QEvent::MouseButtonPress, pt, Qt::LeftButton,
+      // Local and global position both: the form Qt5 and Qt6 each take
+      // without a deprecation warning, as the canvas clicks above do.
+      QPoint ptG = pv->mapToGlobal(pt);
+      QMouseEvent e1(QEvent::MouseButtonPress, pt, ptG, Qt::LeftButton,
         Qt::LeftButton, Qt::NoModifier), e2(QEvent::MouseButtonRelease, pt,
-        Qt::LeftButton, Qt::NoButton, Qt::NoModifier),
-        e3(QEvent::MouseButtonDblClick, pt, Qt::LeftButton, Qt::LeftButton,
-        Qt::NoModifier), e4(QEvent::MouseButtonRelease, pt, Qt::LeftButton,
-        Qt::NoButton, Qt::NoModifier);
+        ptG, Qt::LeftButton, Qt::NoButton, Qt::NoModifier),
+        e3(QEvent::MouseButtonDblClick, pt, ptG, Qt::LeftButton,
+        Qt::LeftButton, Qt::NoModifier), e4(QEvent::MouseButtonRelease, pt,
+        ptG, Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
       QApplication::sendEvent(pv, &e1);
       QApplication::sendEvent(pv, &e2);
       // The first click alone picks: a mouse press makes the row current
