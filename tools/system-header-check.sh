@@ -18,15 +18,6 @@
 #   2. a real -M preprocess (which does list system headers) of what the Qt
 #      build includes, under those flags, resolves swephexp.h to ./swephexp.h.
 #
-# That is the bundled build's guarantee, SWE=bundled, which is what a fresh
-# checkout and every CI runner get. Where the fork IS installed the Qt
-# builds now default to SWE=system and link its libswe.so on purpose (end of
-# Makefile.srcs) -- and they do it by naming its header by absolute path
-# with -include, never by the search order this checks, so the quote form
-# below still finds ./swephexp.h and is a guarded no-op there. The check
-# holds in both builds for that reason, and must keep holding: an include
-# path that quietly reached /usr/local/include would be this bug again.
-#
 #   tools/system-header-check.sh
 #   tools/system-header-check.sh --selftest   # bad inputs it must refuse
 set -u

@@ -21,8 +21,7 @@ OBJDIR = obj-qt-asan
 # there before adding a source.
 include Makefile.srcs
 OBJS = $(patsubst %.cpp,$(OBJDIR)/%.o,\
-  $(SRC_CORE) $(SRC_GRAPHICS) $(SRC_QT) $(SRC_TEST) \
-  $(if $(filter bundled,$(SWE)),$(SRC_SWISS)))
+  $(SRC_CORE) $(SRC_GRAPHICS) $(SRC_QT) $(SRC_TEST) $(SRC_SWISS))
 
 # Build against whichever Qt this machine has: Qt6 when pkg-config knows
 # about it, Qt5 otherwise. One command works on a stock Ubuntu (Qt5), on a
@@ -67,13 +66,6 @@ RM = rm -f
 # it always has.
 CPPFLAGS += $(PROMETHEIA_FLAGS)
 LIBS += $(PROMETHEIA_LIBS)
-
-# The Swiss Ephemeris: the installed fork's libswe.so, or the vendored
-# sources compiled in, by SWE=system|bundled. The end of Makefile.srcs says
-# which is the default where, and why the system header goes in by -include.
-CPPFLAGS += $(SWE_FLAGS)
-LIBS += $(SWE_LIBS)
-$(eval $(call swe-select,$(OBJDIR)))
 
 # Stamp the plugin state this dir was built with; see Makefile.srcs.
 $(call prometheia-stamp,$(OBJDIR))

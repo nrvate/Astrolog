@@ -738,48 +738,18 @@ static void TestAboutVersionQt()
 
 // The About dialog names the Swiss Ephemeris this binary runs and where its
 // code lives. Found by object name, since the credits say "Swiss Ephemeris"
-// too. Which form it must show depends on how this binary was linked
-// (SWE=system|bundled, end of Makefile.srcs), and the test requires that
-// form exactly: a build that compiled the vendored copy in while the
-// installed fork sat unused is the misreport this line exists to end.
-//
-// Linked against libswe.so, the version must be the library's full runtime
-// string -- the fork's, with its "-ts." suffix -- and the path must be the
-// file the kernel says is mapped, read from /proc/self/maps rather than
-// asked of dladdr() a second time, which is what the dialog asked. Compiled
-// in, dladdr() names the executable as argv[0] -- "./astrolog-qt-test"
-// under the runner -- so the dialog names it by its absolute path, and a
-// broken comparison would show "from".
-
-#ifdef SWE_SYSTEM
-// Every distinct file mapped into this process whose name is libswe*.
-static QStringList RgstrMappedSweQt()
-{
-  QStringList rgstr;
-  QFile file("/proc/self/maps");
-  if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
-    return rgstr;
-  // The maps line is "range perms offset dev inode path"; the path is the
-  // sixth field, absolute, and may hold spaces, so it is everything from
-  // the first "/" after the inode.
-  for (const QByteArray &ba : file.readAll().split('\n')) {
-    int ich = ba.indexOf(" /");
-    if (ich < 0)
-      continue;
-    QString str = QString::fromLocal8Bit(ba.mid(ich + 1)).trimmed();
-    if (QFileInfo(str).fileName().startsWith("libswe") && !rgstr.contains(str))
-      rgstr.append(str);
-  }
-  return rgstr;
-}
-#endif
+// too. The library reports its path through dladdr(), which for code in the
+// executable itself is argv[0] -- "./astrolog-qt-test" under the runner --
+// so the dialog names the executable by its absolute path when the two are
+// one file, and the test requires that branch: this build compiles the
+// library in statically, and a broken comparison would show "from".
 
 static void TestAboutSwissQt()
 {
   // swe_get_library_path() terminates a path of AS_MAXCH bytes at
   // s[AS_MAXCH], one past the buffer size swephexp.h documents.
   char szVer[AS_MAXCH], szPath[AS_MAXCH + 1];
-  QString strGot, strExpected;
+  QString strGot;
   flag fFound = fFalse;
 
   Group("About names the Swiss Ephemeris");
@@ -794,41 +764,19 @@ static void TestAboutSwissQt()
     if (!FClickButtonQt(pw, "IDOK"))
       pw->close();
   });
-  QString strVer = QString::fromLatin1(szVer),
-    strExe = QCoreApplication::applicationFilePath();
-#ifdef SWE_SYSTEM
-  QStringList rgstrMap = RgstrMappedSweQt();
-  Check(strVer.contains("-ts."), "linked against the installed library, "
-    "swe_version() says \"%s\", which is not the thread-safe fork's full "
-    "string", szVer);
-  Check(rgstrMap.size() == 1, "/proc/self/maps lists %d libswe files, "
-    "wanted exactly one: %s", (int)rgstrMap.size(),
-    rgstrMap.join(", ").toLocal8Bit().constData());
-  if (rgstrMap.size() != 1)
-    return;
-  Check(QFileInfo(QString::fromLocal8Bit(szPath)).canonicalFilePath() ==
-    rgstrMap[0], "swe_get_library_path() says \"%s\", which is not the "
-    "mapped %s", szPath, rgstrMap[0].toLocal8Bit().constData());
-  Check(QFileInfo(rgstrMap[0]).canonicalFilePath() !=
-    QFileInfo(strExe).canonicalFilePath(),
-    "the mapped libswe is this executable, %s",
-    strExe.toLocal8Bit().constData());
-  strExpected = QString("Swiss Ephemeris %1, from %2").arg(strVer,
-    QDir::toNativeSeparators(rgstrMap[0]));
-#else
+  QString strExe = QCoreApplication::applicationFilePath();
   Check(szPath[0] && QFileInfo(QString::fromLocal8Bit(szPath)).
     canonicalFilePath() == QFileInfo(strExe).canonicalFilePath(),
     "swe_get_library_path() says \"%s\", which is not this executable, %s",
     szPath, strExe.toLocal8Bit().constData());
-  strExpected = QString("Swiss Ephemeris %1, built into %2").arg(strVer,
-    QDir::toNativeSeparators(strExe));
-#endif
   Check(fFound, "no label named SwissLibrary in the About dialog");
   if (!fFound)
     return;
-  Check(strGot.contains(strVer),
+  Check(strGot.contains(QString::fromLatin1(szVer)),
     "the About Swiss line \"%s\" does not carry swe_version()'s \"%s\"",
     strGot.toLocal8Bit().constData(), szVer);
+  QString strExpected = QString("Swiss Ephemeris %1, built into %2").arg(
+    QString::fromLatin1(szVer), QDir::toNativeSeparators(strExe));
   Check(strGot == strExpected, "the About Swiss line says \"%s\", "
     "wanted \"%s\"", strGot.toLocal8Bit().constData(),
     strExpected.toLocal8Bit().constData());

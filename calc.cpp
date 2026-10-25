@@ -2920,45 +2920,12 @@ void CreateElemTable(ET *pet)
 // On some systems "ret" is defined within system headers.
 #undef ret
 #include "swephexp.h"
-#ifdef SWE_SYSTEM
-// Linked against the installed thread-safe fork's libswe.so (SWE=system,
-// end of Makefile.srcs), whose swephexp.h the makefile has already
-// force-included. Its internal headers come from the fork's checkout by
-// absolute path, since the quote form would find the vendored copies
-// beside this file first. Like eph_srv.cpp's, they do not wrap themselves
-// for C++, and the library's swi_* are C symbols.
-extern "C" {
-#include SWE_SYSTEM_SWEPH_H
-#include SWE_SYSTEM_SWEPHLIB_H
-}
-// The fork's swi_* that read library state take a context first; the
-// vendored ones do not. These overloads give this file and the shared
-// ephsrv headers below the vendored spelling, on the default context --
-// the one every legacy swe_X() call here resolves to -- so the planes,
-// orbits and node rates compute against the same state as the charts.
-static inline void swi_bias(double *x, double tjd, int32 iflag,
-  AS_BOOL backward)
-  { swi_bias(swi_default_ctx(), x, tjd, iflag, backward); }
-static inline int swi_precess(double *R, double J, int32 iflag,
-  int direction)
-  { return swi_precess(swi_default_ctx(), R, J, iflag, direction); }
-static inline void swi_precess_speed(double *xx, double t, int32 iflag,
-  int direction)
-  { swi_precess_speed(swi_default_ctx(), xx, t, iflag, direction); }
-static inline double swi_epsiln(double J, int32 iflag)
-  { return swi_epsiln(swi_default_ctx(), J, iflag); }
-static inline int swi_nutation(double J, int32 iflag, double *nutlo)
-  { return swi_nutation(swi_default_ctx(), J, iflag, nutlo); }
-#else
 #include "swephlib.h"
 #include "sweph.h"
-#endif
 // A.8's fixed sidereal planes, shared with astrolog-ephd so the application
 // and the server cannot drift: EPHEMERIS_ACCURACY_REGISTRY.md 4.1. No
-// EPHSID_FORK here -- in the bundled build the vendored Swiss sources
-// compile into this binary and their swi_precess() and swi_epsiln() take
-// no context, and in the system build the overloads above stand in for
-// them.
+// EPHSID_FORK here -- the vendored Swiss sources compile into this binary and
+// their swi_precess() and swi_epsiln() take no context.
 #include "ephsrv/ephsidplane.h"
 // The four astrometric binaries, shared with astrolog-ephd for the same
 // reason: EPHEMERIS_ACCURACY_REGISTRY.md 2.4.
@@ -3475,16 +3442,6 @@ void SwissEnsurePath()
       "of %d were ignored.", edl.cDropped, cDirEphemMax);
     PrintWarning(szT);
   }
-#ifdef SWE_SYSTEM
-  // The thread-safe fork does not substitute Moshier for a missing .se1
-  // file, or for a date outside one, unless asked: it returns an error
-  // where upstream answers from Moshier, says so in serr ("... not found in
-  // PATH ..."), and succeeds. Everything here was written for upstream's
-  // answer -- a chart for a body or date the files do not cover still
-  // draws, at Moshier's precision -- so the system build asks for it back,
-  // by default. SWE_FALLBACK=0 at make time keeps the fork's refusal.
-  swe_set_ephe_fallback(SWE_EPHE_FALLBACK);
-#endif
   // The JPL file (-bP jpl.file). Swiss keeps only the NAME it is given and
   // looks for it on the search path, whatever directory came with it --
   // so a file named with its directory has that directory added to the

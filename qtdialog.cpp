@@ -4976,19 +4976,10 @@ void ShowAboutDialogQt()
   playout->addWidget(new QLabel(QString("Released %1").arg(szDateCore)));
 #ifdef SWISS
   // Which Swiss Ephemeris computed the charts, and from where, so a bug
-  // report can say. Both answers are the running library's own, never this
-  // build's headers: swe_version() is the full string the library was
-  // built as -- "2.10.03-ts.19" for the thread-safe fork the Linux Qt
-  // builds link by default, "2.10.03" for the vendored copy -- and the
-  // library names the file its code is in through dladdr().
-  //
-  // From a shared library that is the name the loader opened, which can be
-  // a symlink (libswe.so -> libswe.so.2.10.3 in a packaged install), so the
-  // line names the file it resolves to: the one actually mapped, the one
-  // /proc/self/maps lists, and the one a version question is about. For
-  // code in the executable dladdr() answers argv[0] -- relative, or a bare
-  // name off PATH -- so when it is this executable, as in SWE=bundled, the
-  // line says "built into" and names it by its absolute path instead.
+  // report can say. The library names the file its code is in through
+  // dladdr(), which for code in the executable is argv[0] -- relative, or a
+  // bare name off PATH -- so when that is this executable, as in every build
+  // here, the line names it by its absolute path instead.
   {
     // +1: a path of AS_MAXCH bytes is terminated at s[AS_MAXCH].
     char szVer[AS_MAXCH], szLib[AS_MAXCH + 1];
@@ -4998,14 +4989,11 @@ void ShowAboutDialogQt()
       strExe = QCoreApplication::applicationFilePath(),
       strSwe = QString("Swiss Ephemeris %1").arg(QString::fromLatin1(szVer)),
       strCanon = QFileInfo(strExe).canonicalFilePath();
-    QString strLibCanon = QFileInfo(strLib).canonicalFilePath();
-    if (!strCanon.isEmpty() && strLibCanon == strCanon)
+    if (!strCanon.isEmpty() && QFileInfo(strLib).canonicalFilePath() ==
+      strCanon)
       strSwe += ", built into " + QDir::toNativeSeparators(strExe);
     else if (!strLib.isEmpty())
-      // The raw name only when it no longer resolves (the file removed
-      // since it was loaded), as the one thing still known.
-      strSwe += ", from " + QDir::toNativeSeparators(
-        strLibCanon.isEmpty() ? strLib : strLibCanon);
+      strSwe += ", from " + QDir::toNativeSeparators(strLib);
     QLabel *plabelSwe = new QLabel(strSwe);
     // Named so a test finds it: the credits say "Swiss Ephemeris" too.
     plabelSwe->setObjectName("SwissLibrary");

@@ -11566,7 +11566,8 @@ this is the note that explains the wall of dialogs.
     about a build that was itself the bug.
 
 285. **The Linux Qt builds run the installed Swiss Ephemeris, and About
-    says so.** 2026-10-24, after the maintainer read item 284's line
+    says so.** **Undone on 2026-10-25 by item 288**: every build compiles
+    the vendored copy again. 2026-10-24, after the maintainer read item 284's line
     and asked why it said "2.10.03, built into ..." on a machine whose
     Swiss Ephemeris is the thread-safe fork, 2.10.03-ts.19, installed
     as `/usr/local/lib/libswe.so`. The line was not lying: every build
@@ -11870,6 +11871,42 @@ this is the note that explains the wall of dialogs.
     Test, the keys, the mouse, Browse, and what OK writes surviving the
     settings writer; its real-data legs skip, saying so, without the
     files, and `-Yi4`/`-Yi5`/`-Yi6` on the command line bring them in.
+
+288. **One Swiss Ephemeris again: the vendored copy, in every build.**
+    2026-10-25. Item 285 is undone. The maintainer is coupling this fork
+    to Ephemeris Prometheia (the default source, a required checkout) and
+    keeping Swiss as a selectable source only. A second Swiss -- the
+    installed thread-safe fork, linked by the four Linux Qt makefiles when
+    it was usable -- bought nothing in that arrangement and cost two
+    things that had already bitten:
+
+    - *It was never the build you thought.* "Usable" needed the fork's
+      INTERNAL headers (calc.cpp and the shared sidereal-plane, star-orbit
+      and node-rate headers call `swi_precess()` and four more, which the
+      fork exports with a context argument), and the fork installs only
+      its public ones, so they came from its checkout, whose version had
+      to equal the installed one. On 10-24 the fork was installed as ts.20
+      with the checkout still at ts.19: every Linux Qt build dropped back
+      to the vendored copy with a one-line make warning, and every binary
+      in the tree was bundled -- `ldd` showed no libswe -- while the plan
+      said they linked it.
+    - *Two Swisses on one machine.* The console `astrolog` was always the
+      vendored copy, so the two Linux binaries could compute with
+      different code, and neither was what the Windows and macOS releases
+      ship (always vendored: no fork on those runners).
+
+    Installing the internal headers from the fork was weighed and dropped
+    (the fork's main takes changes by PR; its session was told and holds
+    nothing for it). Reverted as the exact reverse of da9a57c's diff for
+    the nine build and tool files, none of them touched since; calc.cpp,
+    qttest.cpp and qtdialog.cpp by hand where later commits had moved
+    them. *Net:* calc.cpp preprocessed under the test build's flags is
+    identical, line for line, to what the bundled build compiled before
+    (the `#else` branch is the new text), so the shipped arithmetic did
+    not move; `about-swiss` (back to "built into <executable>"),
+    `about-version` and `oracle` 603 passed, 0 failed, under nrvate.as;
+    the warning gate, clang gate, stale-object and system-header checks
+    clean; `ldd astrolog-qt-test` names no libswe.
 
 ## Features this fork adds to both builds
 

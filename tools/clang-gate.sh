@@ -48,12 +48,6 @@
 # No clang at all is a skip, not a failure: a release runner or a user's
 # machine may not have one, and the macOS job is the gate of record there.
 set -e
-# The vendored Swiss sources, always: the macOS job compiles them (it has no
-# installed fork), while on a machine that has one the Qt makefiles would
-# link its libswe.so and leave SRC_SWISS out (end of Makefile.srcs) -- a
-# gate that reads clean by compiling less. Exported, so make sees it.
-SWE=bundled
-export SWE
 cd "$(dirname "$0")/.." || exit 1
 # Canonical spelling, because the cache root is keyed on this string and
 # this checkout answers to two: /shares/Astrolog and, through the symlink,
