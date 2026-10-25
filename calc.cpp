@@ -3228,6 +3228,25 @@ CONST char *SzSwissPathSet()
 }
 
 
+// Whether a body was answered by a DIFFERENT ephemeris than the one asked
+// for since the last reset: the library substitutes Moshier for a missing
+// Swiss file (and the Swiss files for a missing JPL one) and still
+// succeeds, so a selection whose files are not there computes the Sun and
+// Moon anyway. Ephemeris Settings' Test reads this so that is not called
+// working. True resets it.
+#define grfSwissEph (SEFLG_JPLEPH | SEFLG_SWIEPH | SEFLG_MOSEPH)
+static flag fSwissEphSubstituted = fFalse;
+
+flag FSwissEphSubstituted(flag fReset)
+{
+  flag f = fSwissEphSubstituted;
+
+  if (fReset)
+    fSwissEphSubstituted = fFalse;
+  return f;
+}
+
+
 // Set up path for Swiss Ephemeris to search in for ephemeris files.
 
 void SwissEnsurePath()
@@ -4482,6 +4501,8 @@ flag FSwissPlanet(int ind, real jd, int indCent,
     else
       // Alternate position orbiting an unusual central object.
       nRet = swe_calc_pctr(jde, ss.iobj, ss.iobjCent, iflagCall, xx, serr);
+    if (nRet >= 0 && (nRet & grfSwissEph) != (iflagCall & grfSwissEph))
+      fSwissEphSubstituted = fTrue;
     // A body's rates are differenced from the positions we report, like a
     // mean point's below. Swiss's speed is the rate of a less-corrected
     // quantity than the apparent position it returns: a topocentric Moon's

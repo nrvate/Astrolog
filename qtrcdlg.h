@@ -1902,34 +1902,30 @@ static CONST RCCTL rgctlObjectSel[] = {
 #define dxObjectSel 344
 #define dyObjectSel 322
 
-// dlgEphem -- 262 x 240 dialog units, from astrolog.rc
+// dlgEphem -- 262 x 236 dialog units, from astrolog.rc
 #define szTitleEphem "Ephemeris Settings"
 static CONST RCCTL rgctlEphem[] = {
-  {ctlButton, "OK", "IDOK", -1, 207,221,50,14},
-  {ctlButton, "Cancel", "IDCANCEL", -1, 152,221,50,14},
-  {ctlButton, "Connec&t", "dbEp_ct", -1, 5,221,50,14},
-  {ctlLabel,  "&Primary Source:", "IDC_STATIC", -1, 5,5,60,8},
+  {ctlButton, "OK", "IDOK", -1, 207,217,50,14},
+  {ctlButton, "Cancel", "IDCANCEL", -1, 152,217,50,14},
+  {ctlButton, "&Test", "dbEp_ct", -1, 5,217,50,14},
+  {ctlLabel,  "&Ephemeris:", "IDC_STATIC", -1, 5,5,60,8},
   {ctlList,   "", "dlEp_src", -1, 5,14,252,66},
   {ctlLabel,  "", "dsEp_ds", -1, 5,84,252,16},
-  {ctlLabel,  "&Fallback Order:", "IDC_STATIC", -1, 5,104,70,8},
-  {ctlEdit,   "", "deEp_chain", -1, 5,114,252,13},
-  {ctlLabel,  "", "", -1, 5,129,210,8},
-  {ctlLabel,  "", "dsEp_st", -1, 5,140,252,8},
-  {ctlLabel,  "Parameters:", "IDC_STATIC", -1, 5,152,60,8},
-  {ctlLabel,  "", "dsEp_p", 1, 5,164,100,8},
-  {ctlEdit,   "", "deEp_p", 1, 110,162,126,13},
-  {ctlButton, "...", "dbEp_b", 1, 240,161,18,14},
-  {ctlLabel,  "", "dsEp_p", 2, 5,178,100,8},
-  {ctlEdit,   "", "deEp_p", 2, 110,176,126,13},
-  {ctlButton, "...", "dbEp_b", 2, 240,175,18,14},
-  {ctlLabel,  "", "dsEp_p", 3, 5,192,100,8},
-  {ctlEdit,   "", "deEp_p", 3, 110,190,126,13},
-  {ctlButton, "...", "dbEp_b", 3, 240,189,18,14},
-  {ctlLabel,  "", "dsEp_p", 4, 5,206,100,8},
-  {ctlEdit,   "", "deEp_p", 4, 110,204,126,13},
-  {ctlButton, "...", "dbEp_b", 4, 240,203,18,14},
+  {ctlLabel,  "", "dsEp_p", 1, 5,106,100,8},
+  {ctlEdit,   "", "deEp_p", 1, 110,104,126,13},
+  {ctlButton, "...", "dbEp_b", 1, 240,103,18,14},
+  {ctlLabel,  "", "dsEp_p", 2, 5,120,100,8},
+  {ctlEdit,   "", "deEp_p", 2, 110,118,126,13},
+  {ctlButton, "...", "dbEp_b", 2, 240,117,18,14},
+  {ctlLabel,  "", "dsEp_p", 3, 5,134,100,8},
+  {ctlEdit,   "", "deEp_p", 3, 110,132,126,13},
+  {ctlButton, "...", "dbEp_b", 3, 240,131,18,14},
+  {ctlLabel,  "", "dsEp_p", 4, 5,148,100,8},
+  {ctlEdit,   "", "deEp_p", 4, 110,146,126,13},
+  {ctlButton, "...", "dbEp_b", 4, 240,145,18,14},
+  {ctlLabel,  "", "dsEp_st", -1, 5,166,252,44},
 };
 #define cctlEphem (int)(sizeof(rgctlEphem) / sizeof(RCCTL))
 #define dxEphem 262
-#define dyEphem 240
+#define dyEphem 236
 

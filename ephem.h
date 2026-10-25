@@ -119,6 +119,13 @@ typedef struct _EphParamRow {
 
 extern CONST EPHPARAMROW rgephparam[cEphParam];
 
+// The one Ephemeris Settings row that is not a source parameter: the
+// folder the Swiss Ephemeris and JPL files are searched for in, which is
+// -Yi1 ("point -Yi1 to ephemeris dir"), not a -bP. CEphDialogRowsOf()
+// hands it back with this index, one past the parameter table, so a
+// dialog can keep its values in one array of cEphParam+1.
+#define iepRowPath cEphParam
+
 // A source's parameters are reached by its key, with CEphParamOfSrc()
 // and IepOfSrc() -- declared in extern.h with every other function,
 // since the P(()) macro is not in scope here. That pair is the ONLY way

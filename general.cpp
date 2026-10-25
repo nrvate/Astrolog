@@ -1501,11 +1501,45 @@ void PrintNotice(CONST char *sz)
 }
 
 
+// A caller that collects warnings instead of showing them: Ephemeris
+// Settings' Test asks one source for a few bodies and reports what went
+// wrong in its own result line, rather than a box per failed body. While
+// a buffer is set, PrintWarning() and PrintError() append to it, joined
+// by "; ", and show nothing. NULL ends the capture.
+
+static char *szWarnCapture = NULL;
+static int cchWarnCapture = 0;
+
+void SetWarningCapture(char *sz, int cch)
+{
+  szWarnCapture = cch > 0 ? sz : NULL;
+  cchWarnCapture = cch;
+  if (szWarnCapture != NULL)
+    *szWarnCapture = chNull;
+}
+
+
+static flag FWarningCaptured(CONST char *sz)
+{
+  int cch;
+
+  if (szWarnCapture == NULL)
+    return fFalse;
+  cch = CchSz(szWarnCapture);
+  if (cch < cchWarnCapture - 1)
+    sprintf2(szWarnCapture + cch, cchWarnCapture - cch, "%s%s",
+      cch > 0 ? "; " : "", sz);
+  return fTrue;
+}
+
+
 // Print a warning message given a string. This is called in non-fatal cases
 // in which normal execution is resumed after printing the string.
 
 void PrintWarning(CONST char *sz)
 {
+  if (FWarningCaptured(sz))
+    return;
 #ifdef QT
   PrintWarningQt(sz, fFalse);
   return;
@@ -1536,6 +1570,8 @@ void PrintWarning(CONST char *sz)
 
 void PrintError(CONST char *sz)
 {
+  if (FWarningCaptured(sz))
+    return;
 #ifdef QT
   // Note this returns rather than calling Terminate(), which is what the
   // plain non-Windows path does: a missing file shouldn't end the session.

@@ -3024,13 +3024,14 @@ alone: its old lines keep loading.
 - **Qt.** `ShowEphemDialogQt` in qtdialog.cpp; the menu item in qtdriver.cpp
   `BuildSettingMenu`.
 
-**Controls**
-- a primary-source list, where unavailable sources are shown with their reason;
-- the fallback order;
-- a status line (state and provenance), refreshed by a Win32 timer or a Qt
-  signal;
-- Connect/Test;
-- four generic parameter rows: a label, an edit field, and Browse for paths.
+**Controls** (as rebuilt 2026-10-24, QT_GUI_PLAN.md work log item 286)
+- a source list, where unavailable sources are shown with their reason; the
+  one picked is the setting, and OK writes it alone -- the dialog has no
+  fallback order any more, though `-bE a,b` still takes one;
+- the picked source's own rows: its search folder (`-Yi1`) for swiss and
+  jpl, then its parameters; a label, an edit field, and Browse for paths;
+- a status line: the source's live state, then a Test result;
+- Test: `FEphTestSource()`, the picked source alone with the values typed.
 
 **What leaves Calculation Settings.** The method combo, and the Qt-only
 server-address and token rows. `QT_ONLY_ROWS` for dlgCalc is removed from

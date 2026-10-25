@@ -7969,11 +7969,18 @@ void SzEphSrvStatusQt(char *sz, int cch)
       esrv.welc.serverName.c_str());
   else if (esrv.est == esConnecting)
     snprintf(sz, cch, "Ephemeris Server %s: connecting", szAddr);
+  // The reason the last attempt failed, when there is one: "not
+  // connected" alone is what Ephemeris Settings' Test said about a typo'd
+  // port and a server that is down alike.
   else if (esrv.ptim != NULL && esrv.ptim->isActive())
-    snprintf(sz, cch, "Ephemeris Server %s: retry in %ds", szAddr,
-      (esrv.ptim->remainingTime() + 999) / 1000);
+    snprintf(sz, cch, "Ephemeris Server %s: retry in %ds%s%s", szAddr,
+      (esrv.ptim->remainingTime() + 999) / 1000,
+      esrv.strErr.isEmpty() ? "" : " -- ",
+      esrv.strErr.toLocal8Bit().constData());
   else
-    snprintf(sz, cch, "Ephemeris Server %s: not connected", szAddr);
+    snprintf(sz, cch, "Ephemeris Server %s: not connected%s%s", szAddr,
+      esrv.strErr.isEmpty() ? "" : " -- ",
+      esrv.strErr.toLocal8Bit().constData());
 }
 
 

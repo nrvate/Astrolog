@@ -10651,7 +10651,7 @@ static void TestDialogQuirksQt()
     ciCore = ciSav; ciMain = ciMainSav;
   }
 
-  // Ephemeris Settings opens with the focus on the fallback field.
+  // Ephemeris Settings opens with the focus on the list of sources.
   str.clear();
   DriveModalQt(ShowEphemDialogQt, [&str](QWidget *pw) {
     QWidget *pwF = pw->focusWidget();
@@ -10659,8 +10659,8 @@ static void TestDialogQuirksQt()
       str = pwF->objectName();
     pw->close();
   });
-  Check(str == "deEp_chain", "Ephemeris Settings opens on the fallback "
-    "order field (\"%s\")", str.toLatin1().constData());
+  Check(str == "dlEp_src", "Ephemeris Settings opens on the source list "
+    "(\"%s\")", str.toLatin1().constData());
 
   // Every colour a Moon Object Settings list offers is one its OK takes.
   szBad[0] = chNull;
@@ -10936,8 +10936,8 @@ static void TestDialogQuirksQt()
         c++;
     pw->close();
   });
-  Check(c == 2, "both labelled fields of Ephemeris Settings answer their "
-    "Alt letter (%d)", c);
+  Check(c == 1, "the source list of Ephemeris Settings answers its Alt "
+    "letter (%d)", c);
 
   // Every object's definition text reads back as that object: "Asc" is
   // not an Arabic part and "Tit" is not Titania.
@@ -24177,55 +24177,81 @@ static void TestEphemRegistryQt()
   ciMain = ciMainSav;
 }
 
-// The Ephemeris Settings dialog's live wiring: what OK applies, what a
-// refused value leaves behind, what Connect can honestly say, and that
-// what OK applies survives the settings writer and a fresh read. Driven
+// The Ephemeris Settings dialog's live wiring: pick one ephemeris, see its
+// own settings, Test that it works, and OK writes what was shown. Driven
 // from outside the dialog function through the object names the rc
-// builder gives every control, the same discipline the Generate
-// Animation and replace-file groups use, so the group asserts what a
-// user sees rather than the dialog's internals.
+// builder gives every control, the same discipline the Generate Animation
+// and replace-file groups use, so the group asserts what a user sees
+// rather than the dialog's internals.
+
+// Select the list row of a source key; false when it has none.
+static flag FPickEphQt(QWidget *pw, CONST char *szKey)
+{
+  QListWidget *plist = pw->findChild<QListWidget *>("dlEp_src");
+  int isrc = IEphSrcFromKey(szKey), i;
+
+  if (plist == NULL || isrc < 0)
+    return fFalse;
+  for (i = 0; i < plist->count(); i++)
+    if (plist->item(i)->data(Qt::UserRole).toInt() == isrc) {
+      plist->setCurrentRow(i);
+      return fTrue;
+    }
+  return fFalse;
+}
+
+// The visible rows' labels, joined, for asserting what a pick shows.
+static QString StrEphRowsQt(QWidget *pw)
+{
+  QStringList rgstr;
+
+  for (QLabel *pl : pw->findChildren<QLabel *>("dsEp_p"))
+    if (pl->isVisible())
+      rgstr << pl->text();
+  return rgstr.join("|");
+}
+
+// The edit of the visible row a label names, or NULL.
+static QLineEdit *PeEphRowQt(QWidget *pw, CONST QString &strLabel)
+{
+  QList<QLabel *> rgpl = pw->findChildren<QLabel *>("dsEp_p");
+  QList<QLineEdit *> rgpe = pw->findChildren<QLineEdit *>("deEp_p");
+  int i;
+
+  for (i = 0; i < rgpl.size() && i < rgpe.size(); i++)
+    if (rgpl[i]->isVisible() && rgpl[i]->text() == strLabel)
+      return rgpe[i];
+  return NULL;
+}
+
 static void TestEphemDialogQt()
 {
-  char szChainSav[cchSzMax], szFileSav[cchSzMax], szTokSav[cchSzMax];
-  char szHead[cchSzDef], szPath[cchSzMax];
-  int iep, iepFile = -1, iepTok = -1;
+  QByteArray baChainSav(SzSet(us.szEphemSource));
+  QByteArray baPathSav(SzSet(us.rgszPath[1]));
+  QByteArray rgbaParamSav[cEphParam];
+  QString strFolder = QString("Ephemeris Folder:");
+  QString strJpl = QString("%1:").arg(rgephparam[epJplFile].ep.szLabel);
+  QString strUrl = QString("%1:").arg(rgephparam[epServerUrl].ep.szLabel);
+  QString strTok = QString("%1:").arg(rgephparam[epServerToken].ep.szLabel);
+  char szPath[cchSzMax], szHead[cchSzDef];
+  int iep;
 
   Group("Ephemeris settings dialog");
+  for (iep = 0; iep < cEphParam; iep++)
+    rgbaParamSav[iep] = QByteArray(SzSet(us.rgszEphParam[iep]));
 
-  // A file parameter and a token one, found by asking their SOURCES
-  // rather than by scanning the table for a kind. The kind used to
-  // identify one row each, and stopped when the Prometheia parameters
-  // were corrected to the file kind they always were -- at which point
-  // "the last epkFile row" was a perturber kernel that no dialog showed.
-  for (iep = 0; iep < CEphParamOfSrc("jpl"); iep++)
-    if (rgephparam[IepOfSrc("jpl", iep)].ep.nKind == epkFile)
-      iepFile = IepOfSrc("jpl", iep);
-  for (iep = 0; iep < CEphParamOfSrc("server"); iep++)
-    if (rgephparam[IepOfSrc("server", iep)].ep.nKind == epkToken)
-      iepTok = IepOfSrc("server", iep);
-  Check(iepFile >= 0 && iepTok >= 0,
-    "the table carries a file parameter and a token one");
-  sprintf2(S(szChainSav), "%s", SzSet(us.szEphemSource));
-  sprintf2(S(szFileSav), "%s", SzSet(us.rgszEphParam[iepFile]));
-  sprintf2(S(szTokSav), "%s", SzSet(us.rgszEphParam[iepTok]));
-
-  // What the dialog builds: the registry itself as the list, the whole
-  // chain in the edit with its head's row selected, the state in the
-  // status line, and parameter rows labelled by the generated table.
+  // What the dialog builds: the registry itself as the list, the setting's
+  // source selected, and that source's own rows -- for Swiss, the folder
+  // its files are searched for in, which no dialog offered before.
+  EphSourceSet("swiss");
   {
     char szWhy[cchSzDef];
-    SzEphChainHead(us.szEphemSource, S(szHead));
-    int isrcHead = IEphSrcFromKey(szHead);
-    QString strChain = QString::fromUtf8(SzSet(us.szEphemSource));
+    int isrcSwiss = IEphSrcFromKey("swiss");
 
     DriveModalQt(ShowEphemDialogQt, [&](QWidget *pw) {
       QListWidget *plist = pw->findChild<QListWidget *>("dlEp_src");
-      QLineEdit *peChain = pw->findChild<QLineEdit *>("deEp_chain");
-      QLabel *plStatus = pw->findChild<QLabel *>("dsEp_st");
-      QList<QLabel *> rgpl = pw->findChildren<QLabel *>("dsEp_p");
-      QList<QLineEdit *> rgpe = pw->findChildren<QLineEdit *>("deEp_p");
-      QList<QPushButton *> rgppb = pw->findChildren<QPushButton *>("dbEp_b");
-      int i, j;
+      QLineEdit *pe;
+      int i;
 
       Check(plist != NULL && plist->count() == CEphSrc(),
         "the source list is the registry itself (%d rows)",
@@ -24236,388 +24262,248 @@ static void TestEphemDialogQt()
         Check(strRow.startsWith(QString::fromUtf8(PephsrcGet(i)->szName)),
           "list row %d leads with the source's own name (\"%s\")", i,
           strRow.toLocal8Bit().constData());
-        // An unavailable row carries the reason its own callback gives,
-        // so a user can see why it cannot serve before picking it.
         if (!PephsrcGet(i)->FAvailable(S(szWhy)))
           Check(strRow.contains(" - "),
             "an unavailable row carries its reason (\"%s\")",
             strRow.toLocal8Bit().constData());
       }
-      Check(isrcHead < 0 || (plist != NULL && plist->currentItem() != NULL &&
-        plist->currentItem()->data(Qt::UserRole).toInt() == isrcHead),
-        "the chain's head has its row selected");
-      Check(peChain != NULL && peChain->text() == strChain,
-        "the chain edit is the whole chain as set (\"%s\")",
-        peChain == NULL ? "" : peChain->text().toLocal8Bit().constData());
-      Check(plStatus != NULL &&
-        plStatus->text().startsWith(QString("%1:").arg(szHead)),
-        "the status line names the head and its state (\"%s\")",
-        plStatus == NULL ? "" : plStatus->text().toLocal8Bit().constData());
-
-      Check(rgpl.size() == 4 && rgpe.size() == 4 && rgppb.size() == 4,
-        "four parameter rows are built (%d labels, %d edits, %d buttons)",
-        rgpl.size(), rgpe.size(), rgppb.size());
-      // The rows are the CHAIN HEAD'S OWN parameters, in the generated
-      // table's order, and a row past that source's count is hidden
-      // rather than showing another source's. Both builds used a
-      // hand-written list of four indexes across two sources until
-      // 2026-09-18, which is why a catalog and a perturber kernel had no
-      // way in from any dialog and a JPL file row sat beside a server
-      // token no selection could use together.
-      {
-        int rgiepExp[4], cExp = CEphParamRows(rgiepExp, 4);
-        Check(cExp == CEphParamOfSrc(szHead),
-          "the rows are exactly the head's parameters (%d of %d)", cExp,
-          CEphParamOfSrc(szHead));
-        for (i = cExp; i < rgpl.size() && i < rgpe.size(); i++)
-          Check(!rgpl[i]->isVisible() && !rgpe[i]->isVisible(),
-            "row %d is hidden: this source has no such parameter", i);
-      }
-      for (i = 0; i < rgpl.size() && i < rgpe.size() && i < rgppb.size();
-        i++) {
-        // Each live row is identified by its label, not its position, so
-        // which parameters the dialog shows stays the dialog's choice.
-        QString strLabel = rgpl[i]->text();
-        int iepRow = -1;
-        if (!rgpl[i]->isVisible())
-          continue;
-        Check(strLabel.endsWith(':'),
-          "row %d's label is a caption (\"%s\")", i,
-          strLabel.toLocal8Bit().constData());
-        for (j = 0; j < cEphParam; j++)
-          if (strLabel == QString("%1:").arg(rgephparam[j].ep.szLabel))
-            iepRow = j;
-        Check(iepRow >= 0, "row %d's label is the table's own (\"%s\")", i,
-          strLabel.toLocal8Bit().constData());
-        if (iepRow < 0)
-          continue;
-        Check(FEqSz(rgephparam[iepRow].szSrc, szHead),
-          "row %d's parameter belongs to the head source (%s, not %s)", i,
-          rgephparam[iepRow].szSrc, szHead);
-        Check(rgpe[i]->text() == QString::fromUtf8(
-          SzSet(us.rgszEphParam[iepRow])),
-          "row %d opens on its parameter's value", i);
-        Check(rgppb[i]->isVisible() ==
-          (rgephparam[iepRow].ep.nKind == epkPath ||
-          rgephparam[iepRow].ep.nKind == epkFile),
-          "row %d offers Browse only for a path (visible %d)", i,
-          rgppb[i]->isVisible());
-        if (rgephparam[iepRow].ep.nKind == epkToken)
-          Check(rgpe[i]->echoMode() == QLineEdit::PasswordEchoOnEdit,
-            "the token row is masked until it takes focus");
-      }
+      Check(plist != NULL && plist->currentItem() != NULL &&
+        plist->currentItem()->data(Qt::UserRole).toInt() == isrcSwiss,
+        "the selected source has its row selected");
+      Check(pw->findChild<QLineEdit *>("deEp_chain") == NULL,
+        "there is no fallback order field");
+      Check(StrEphRowsQt(pw) == strFolder,
+        "Swiss shows exactly its folder (\"%s\")",
+        StrEphRowsQt(pw).toLocal8Bit().constData());
+      pe = PeEphRowQt(pw, strFolder);
+      Check(pe != NULL && pe->text() == QString::fromLocal8Bit(baPathSav),
+        "the folder row opens on -Yi1 (\"%s\")",
+        pe == NULL ? "" : pe->text().toLocal8Bit().constData());
       if (!FClickButtonQt(pw, "IDCANCEL"))
         pw->close();
     });
   }
 
-  // A long chain is stored WHOLE, not truncated (phase 8 review, E4).
-  // The dialog validated the full text and then copied it through a
-  // 255-byte field, so a chain over 254 characters was accepted and a
-  // different, shorter one stored -- ending in a partial key. The
-  // settings file that came out refused to load ("Unknown ephemeris
-  // source 'swi'"), and a refused line ABORTS the load, so every setting
-  // after it was dropped and no chart was drawn.
-  {
-    QString strLong;
-    char szHeadLong[cchSzDef];
-    int iRep;
+  // Picking a source re-makes the rows as that source's own: a row another
+  // source owns is never left on screen, where whatever is typed into it
+  // would go to the wrong setting.
+  DriveModalQt(ShowEphemDialogQt, [&](QWidget *pw) {
+    QLabel *plDesc = pw->findChild<QLabel *>("dsEp_ds");
+    QLineEdit *pe;
 
-    // Valid keys throughout, repeated well past the old ceiling.
-    strLong = "swiss";
-    for (iRep = 0; strLong.length() < 400; iRep++)
-      strLong += (iRep & 1) ? ",moshier" : ",matrix";
+    FPickEphQt(pw, "jpl");
+    Check(StrEphRowsQt(pw) == strFolder + "|" + strJpl,
+      "JPL shows its folder and its file (\"%s\")",
+      StrEphRowsQt(pw).toLocal8Bit().constData());
+    FPickEphQt(pw, "server");
+    Check(StrEphRowsQt(pw) == strUrl + "|" + strTok,
+      "the server shows its address and token (\"%s\")",
+      StrEphRowsQt(pw).toLocal8Bit().constData());
+    pe = PeEphRowQt(pw, strTok);
+    Check(pe != NULL && pe->echoMode() == QLineEdit::PasswordEchoOnEdit,
+      "the token row is masked until it takes focus");
+    // Typed text survives looking at another source and coming back.
+    pe = PeEphRowQt(pw, strUrl);
+    if (pe != NULL)
+      pe->setText("keep.example:9");
+    FPickEphQt(pw, "moshier");
+    Check(StrEphRowsQt(pw).isEmpty() && plDesc != NULL &&
+      plDesc->text().contains("Nothing to set up"),
+      "Moshier shows no rows and says so (\"%s\")",
+      plDesc == NULL ? "" : plDesc->text().toLocal8Bit().constData());
+    FPickEphQt(pw, "server");
+    pe = PeEphRowQt(pw, strUrl);
+    Check(pe != NULL && pe->text() == "keep.example:9",
+      "an address typed, then another source looked at, is still there");
+    if (!FClickButtonQt(pw, "IDCANCEL"))
+      pw->close();
+  });
+  Check(FEqSz(SzSet(us.rgszEphParam[epServerUrl]),
+    rgbaParamSav[epServerUrl].constData()), "Cancel applies nothing");
+
+  // A setting naming several sources is said on open, and OK keeps only
+  // the one picked: one ephemeris, no fallback behind it.
+  EphSourceSet("server,swiss,moshier");
+  DriveModalQt(ShowEphemDialogQt, [&](QWidget *pw) {
+    QLabel *plStatus = pw->findChild<QLabel *>("dsEp_st");
+    Check(plStatus != NULL && plStatus->text().contains("more than one"),
+      "a chain from a settings file is pointed out (\"%s\")",
+      plStatus == NULL ? "" : plStatus->text().toLocal8Bit().constData());
+    FPickEphQt(pw, "moshier");
+    if (!FClickButtonQt(pw, "IDOK"))
+      pw->close();
+  });
+  Check(FEqSz(SzSet(us.szEphemSource), "moshier"),
+    "OK writes the one source picked (\"%s\")", SzSet(us.szEphemSource));
+  // And OK with no pick changed keeps the source, alone.
+  EphSourceSet("server,swiss");
+  DriveModalQt(ShowEphemDialogQt, [&](QWidget *pw) {
+    if (!FClickButtonQt(pw, "IDOK"))
+      pw->close();
+  });
+  Check(FEqSz(SzSet(us.szEphemSource), "server"),
+    "OK on an untouched chain keeps its first source alone (\"%s\")",
+    SzSet(us.szEphemSource));
+  EphSrvFinalizeQt();
+
+  // Test: the values ON SCREEN, the picked source ALONE, and the settings
+  // in force untouched afterwards. Each read inside the click, before the
+  // refresh timer could take the line back -- though a result holds it.
+  {
+    QTemporaryDir dirEmpty;
+    QString strEmpty = dirEmpty.path();
+    char *rgszPathSav[10];
+    int i;
+
     EphSourceSet("swiss");
     DriveModalQt(ShowEphemDialogQt, [&](QWidget *pw) {
-      QLineEdit *peChain = pw->findChild<QLineEdit *>("deEp_chain");
-      if (peChain != NULL)
-        peChain->setText(strLong);
-      if (!FClickButtonQt(pw, "IDOK"))
+      QLabel *plStatus = pw->findChild<QLabel *>("dsEp_st");
+      QString str;
+
+      // The folder in force: the Swiss files are there in every
+      // configuration the suite runs under, Chiron's included.
+      FClickButtonQt(pw, "dbEp_ct");
+      str = plStatus != NULL ? plStatus->text() : QString();
+      Check(str.startsWith("Works:") && !str.contains("Chiron: none"),
+        "Test on the Swiss files in force works, Chiron too (\"%s\")",
+        str.toLocal8Bit().constData());
+      FPickEphQt(pw, "matrix");
+      FClickButtonQt(pw, "dbEp_ct");
+      str = plStatus != NULL ? plStatus->text() : QString();
+      Check(str.startsWith("Works:"), "Test on Matrix works (\"%s\")",
+        str.toLocal8Bit().constData());
+      FPickEphQt(pw, "none");
+      FClickButtonQt(pw, "dbEp_ct");
+      str = plStatus != NULL ? plStatus->text() : QString();
+      Check(str.startsWith("Does not work:"),
+        "Test on None does not work (\"%s\")", str.toLocal8Bit().constData());
+      // An unreachable server says why, in the connection's own words.
+      FPickEphQt(pw, "server");
+      if (PeEphRowQt(pw, strUrl) != NULL)
+        PeEphRowQt(pw, strUrl)->setText("127.0.0.1:1");
+      FClickButtonQt(pw, "dbEp_ct");
+      str = plStatus != NULL ? plStatus->text() : QString();
+      Check(str.startsWith("Does not work:") && str.contains("127.0.0.1:1"),
+        "Test on an unreachable server says so, naming it (\"%s\")",
+        str.toLocal8Bit().constData());
+      if (!FClickButtonQt(pw, "IDCANCEL"))
         pw->close();
     });
-    Check(FEqSz(SzSet(us.szEphemSource),
-      strLong.toLocal8Bit().constData()),
-      "a %d-character chain is stored whole (%d stored)",
-      strLong.length(), (int)CchSz(SzSet(us.szEphemSource)));
-    // And it still ends in a whole key, which is what a truncation broke.
-    SzEphChainHead(us.szEphemSource, S(szHeadLong));
-    Check(FEphSrcKeyKnown(szHeadLong),
-      "and its head is still a key this build defines (%s)", szHeadLong);
-    EphSourceSet(szChainSav);
-  }
+    EphSrvFinalizeQt();
 
-  // Picking a source KEEPS THE FALLBACK TAIL (phase 8 review, E3). The
-  // composer stopped its tail pointer ON the comma, so the token scan
-  // that follows could not advance and broke before appending anything:
-  // a user with "server,swiss,moshier" who clicked another row to look
-  // at it and pressed OK was left with that source alone, its fallbacks
-  // silently gone. Asked through the dialog rather than the composer, so
-  // it covers what a user actually does.
-  {
-    EphSourceSet("server,swiss,moshier");
-    DriveModalQt(ShowEphemDialogQt, [&](QWidget *pw) {
-      QListWidget *plist = pw->findChild<QListWidget *>("dlEp_src");
-      QLineEdit *peChain = pw->findChild<QLineEdit *>("deEp_chain");
-      int iJpl = IEphSrcFromKey("jpl"), i, iRow = -1;
-
-      if (plist == NULL || peChain == NULL || iJpl < 0) { pw->close(); return; }
-      for (i = 0; i < plist->count(); i++)
-        if (plist->item(i)->data(Qt::UserRole).toInt() == iJpl)
-          iRow = i;
-      if (iRow >= 0)
-        plist->setCurrentRow(iRow);
-      // The picked key, then the old chain's TAIL -- the old head is
-      // replaced, not kept, which is this composer's stated contract.
-      // Before the fix the tail went too and this read just "jpl".
-      Check(peChain->text() == QString("jpl,swiss,moshier"),
-        "picking a source keeps the fallbacks behind it (\"%s\")",
-        peChain->text().toLocal8Bit().constData());
-      pw->close();
-    });
-    EphSourceSet(szChainSav);
-  }
-
-  // Picking a source in the list re-makes the parameter rows (phase 8
-  // review, D5). They were built once at open and never again, so with
-  // the shipped default -- "swiss", which declares NO parameters -- every
-  // row was hidden and picking the Ephemeris Server left no way to type
-  // an address in that visit. Worse in the other direction: opening on
-  // "jpl" left its "JPL file" row on screen after picking the server, so
-  // a URL typed there was written to epJplFile on OK.
-  {
-    EphSourceSet("jpl");
-    DriveModalQt(ShowEphemDialogQt, [&](QWidget *pw) {
-      QListWidget *plist = pw->findChild<QListWidget *>("dlEp_src");
-      QList<QLabel *> rgpl = pw->findChildren<QLabel *>("dsEp_p");
-      int iSrv = IEphSrcFromKey("server"), i, iRowSrv = -1;
-
-      if (plist == NULL || rgpl.isEmpty() || iSrv < 0) {
-        pw->close(); return;
-      }
-      // Opened on jpl: one row, and it is jpl's.
-      Check(rgpl[0]->isVisible() && rgpl[0]->text() ==
-        QString("%1:").arg(rgephparam[epJplFile].ep.szLabel),
-        "opened on jpl, row 1 is the JPL file (\"%s\")",
-        rgpl[0]->text().toLocal8Bit().constData());
-
-      for (i = 0; i < plist->count(); i++)
-        if (plist->item(i)->data(Qt::UserRole).toInt() == iSrv)
-          iRowSrv = i;
-      Check(iRowSrv >= 0, "the server has a row to pick");
-      if (iRowSrv >= 0)
-        plist->setCurrentRow(iRowSrv);
-
-      // Picked the server: the rows are ITS parameters now, not jpl's.
-      Check(rgpl[0]->isVisible() && rgpl[0]->text() ==
-        QString("%1:").arg(rgephparam[epServerUrl].ep.szLabel),
-        "after picking the server, row 1 is its address (\"%s\")",
-        rgpl[0]->text().toLocal8Bit().constData());
-      Check(rgpl.size() > 1 && rgpl[1]->isVisible() && rgpl[1]->text() ==
-        QString("%1:").arg(rgephparam[epServerToken].ep.szLabel),
-        "and row 2 is its token");
-      pw->close();
-    });
-    EphSourceSet(szChainSav);
-  }
-
-  // Picking a row and OK: the picked key becomes the chain's head with
-  // the old chain riding behind it, and the picked source is not also
-  // duplicated somewhere in that tail.
-  {
-    int isrcMosh = IEphSrcFromKey("moshier");
-    CONST char *pch;
-    Check(isrcMosh >= 0, "the registry carries moshier");
-    if (isrcMosh >= 0) {
-      DriveModalQt(ShowEphemDialogQt, [&](QWidget *pw) {
-        QListWidget *plist = pw->findChild<QListWidget *>("dlEp_src");
-        if (plist != NULL)
-          for (int j = 0; j < plist->count(); j++)
-            if (plist->item(j)->data(Qt::UserRole).toInt() == isrcMosh) {
-              plist->setCurrentRow(j);
-              break;
-            }
-        if (!FClickButtonQt(pw, "IDOK"))
-          pw->close();
-      });
-      SzEphChainHead(us.szEphemSource, S(szHead));
-      Check(FEqSz(szHead, "moshier"),
-        "a row picked and OKed becomes the chain's head (%s)", szHead);
-      pch = strstr(us.szEphemSource, "moshier");
-      Check(pch == us.szEphemSource && strstr(pch+1, "moshier") == NULL,
-        "and the chain behind it keeps its order without a duplicate "
-        "(\"%s\")", us.szEphemSource);
+    // A folder with no files. Every other -Yi path is set aside for the
+    // visit, since the search takes them all and any one of them holding
+    // files would answer. The Swiss Ephemeris still computes the Sun and
+    // Moon then -- from Moshier, successfully -- so a Test that only
+    // asked whether positions came back would call this working.
+    for (i = 0; i < 10; i++) {
+      rgszPathSav[i] = us.rgszPath[i];
+      us.rgszPath[i] = NULL;
     }
-  }
-
-  // OK on a chain naming a key no source defines: refused inline, the
-  // dialog left open with the text as typed, the selection untouched.
-  // The warning box the refusal raises is closed by a net of the
-  // visitor's own, started only once the dialog is in hand -- a net
-  // armed before the drive would race DriveModalQt's own poll and close
-  // the dialog itself -- and it closes message boxes only, so it can
-  // never take the dialog out from under the checks that follow.
-  {
-    char szBefore[cchSzMax];
-    QVector<QString> rgstrBox;
-    sprintf2(S(szBefore), "%s", us.szEphemSource);
+    FCloneSz(baPathSav.constData(), &us.rgszPath[1]);
+    is.fSwissPathSet = fFalse;
     DriveModalQt(ShowEphemDialogQt, [&](QWidget *pw) {
-      QLineEdit *peChain = pw->findChild<QLineEdit *>("deEp_chain");
-      QTimer tClose;
-      QObject::connect(&tClose, &QTimer::timeout, [&]() {
-        QMessageBox *pmb = qobject_cast<QMessageBox *>(
-          QApplication::activeModalWidget());
-        if (pmb == NULL)
-          return;
-        rgstrBox.append(pmb->text());
-        pmb->close();
-      });
-      if (peChain != NULL)
-        peChain->setText("swiss,bogus,moshier");
-      tClose.start(50 * nScaleTest);
-      FClickButtonQt(pw, "IDOK");
-      tClose.stop();
-      Check(pw->isVisible(), "a refused chain leaves the dialog open");
-      pw->close();
+      QLabel *plStatus = pw->findChild<QLabel *>("dsEp_st");
+      QLineEdit *pe = PeEphRowQt(pw, strFolder);
+      QString str;
+
+      if (pe != NULL)
+        pe->setText(strEmpty);
+      FClickButtonQt(pw, "dbEp_ct");
+      str = plStatus != NULL ? plStatus->text() : QString();
+      Check(str.startsWith("Does not work:") && str.contains("Moshier"),
+        "Test on a folder with no files does not work, and says the "
+        "positions were Moshier's (\"%s\")", str.toLocal8Bit().constData());
+      if (!FClickButtonQt(pw, "IDCANCEL"))
+        pw->close();
     });
-    Check(FEqSz(us.szEphemSource, szBefore),
-      "and the selection is untouched (\"%s\")", us.szEphemSource);
-    Check(rgstrBox.size() == 1 && rgstrBox[0].contains("bogus"),
-      "one box names the offending token (%d: \"%s\")", rgstrBox.size(),
-      rgstrBox.isEmpty() ? "" : rgstrBox[0].toLocal8Bit().constData());
+    Check(FEqSz(SzSet(us.rgszPath[1]), baPathSav.constData()) &&
+      FEqSz(SzSet(us.szEphemSource), "swiss"),
+      "Test then Cancel leaves the folder and the source as they were "
+      "(\"%s\", \"%s\")", SzSet(us.rgszPath[1]), SzSet(us.szEphemSource));
+    FCloneSz(NULL, &us.rgszPath[1]);
+    for (i = 0; i < 10; i++)
+      us.rgszPath[i] = rgszPathSav[i];
+    is.fSwissPathSet = fFalse;
   }
 
-  // Parameters typed into the dialog apply on OK, and what OK applies
-  // survives the writer and a fresh read: dialog terms, -bE and -bP
-  // emission, replay, same state.
+  // What OK applies is what was typed, for every source visited, and it
+  // survives the writer and a fresh read.
   {
     QByteArray baFileOutSav(SzSet(is.szFileOut));
     flag fFileOutSav = is.szFileOut != NULL;
     int nWriteFormatSav = us.nWriteFormat, cLine;
     flag fNoWriteSav = us.fNoWrite;
 
-    // One source at a time: the rows are the chain head's own, so a file
-    // parameter and a token one belonging to different sources are two
-    // visits rather than one. Each types into the row its own label
-    // names, so neither depends on row order.
-    {
-      struct { CONST char *szChain; int iep; CONST char *szVal; } rgvis[] = {
-        {"jpl", iepFile, "eph5-file-value"},
-        {"server", iepTok, "eph5-token-value"}
-      };
-      int iVis;
-
-      for (iVis = 0; iVis < 2; iVis++) {
-        int iepWant = rgvis[iVis].iep;
-        CONST char *szValWant = rgvis[iVis].szVal;
-        EphSourceSet(rgvis[iVis].szChain);
-        DriveModalQt(ShowEphemDialogQt, [&](QWidget *pw) {
-          QList<QLabel *> rgpl = pw->findChildren<QLabel *>("dsEp_p");
-          QList<QLineEdit *> rgpe = pw->findChildren<QLineEdit *>("deEp_p");
-          for (int i = 0; i < rgpl.size() && i < rgpe.size(); i++)
-            if (rgpl[i]->isVisible() && rgpl[i]->text() ==
-              QString("%1:").arg(rgephparam[iepWant].ep.szLabel))
-              rgpe[i]->setText(QString::fromUtf8(szValWant));
-          if (!FClickButtonQt(pw, "IDOK"))
-            pw->close();
-        });
-        Check(FEqSz(SzSet(us.rgszEphParam[iepWant]), szValWant),
-          "the %s parameter typed in the dialog applies on OK (\"%s\")",
-          rgephparam[iepWant].szSrc, SzSet(us.rgszEphParam[iepWant]));
-        // OK recasts, and a recast with the server selected starts the
-        // legacy Qt adapter -- ComputeEphem() still reaches it through
-        // its own branch rather than through the registry until phase
-        // 6's transport lands. Put it back after every visit, or the
-        // connection outlives this group and the next one's loopback
-        // reads this group's HELLO before its own REQUEST.
-        EphSrvFinalizeQt();
-      }
-    }
+    EphSourceSet("swiss");
+    DriveModalQt(ShowEphemDialogQt, [&](QWidget *pw) {
+      QLineEdit *pe;
+      FPickEphQt(pw, "jpl");
+      if ((pe = PeEphRowQt(pw, strJpl)) != NULL)
+        pe->setText("eph5-file-value");
+      FPickEphQt(pw, "server");
+      if ((pe = PeEphRowQt(pw, strTok)) != NULL)
+        pe->setText("eph5-token-value");
+      if (!FClickButtonQt(pw, "IDOK"))
+        pw->close();
+    });
+    EphSrvFinalizeQt();
+    Check(FEqSz(SzSet(us.szEphemSource), "server") &&
+      FEqSz(SzSet(us.rgszEphParam[epJplFile]), "eph5-file-value") &&
+      FEqSz(SzSet(us.rgszEphParam[epServerToken]), "eph5-token-value"),
+      "OK applies the source picked and what was typed for each source "
+      "visited (\"%s\")", SzSet(us.szEphemSource));
 
     SzScratchPathQt(S(szPath), "eph5round", ".as");
     us.fNoWrite = fFalse;
     us.nWriteFormat = 'd';
     FCloneSz(szPath, &is.szFileOut);
     Check(FOutputSettings(), "FOutputSettings() wrote a settings file");
-
-    // Wipe in memory, so anything the file failed to carry stays wrong.
     EphSourceSet("swiss");
-    FEphParamSet(iepFile, "");
-    FEphParamSet(iepTok, "");
-    SzEphChainHead(us.szEphemSource, S(szHead));
-    Check(FEqSz(szHead, "swiss") && !FSzSet(us.rgszEphParam[iepFile]) &&
-      !FSzSet(us.rgszEphParam[iepTok]), "the wipe took");
-
+    FEphParamSet(epJplFile, "");
+    FEphParamSet(epServerToken, "");
     cLine = CReplaySettingsQt(szPath, FWantEphQt);
-    Check(cLine == 3, "the file carries one -bE and two -bP lines (%d)",
-      cLine);
+    Check(cLine == 3 + (rgbaParamSav[epServerUrl].isEmpty() ? 0 : 1),
+      "the file carries one -bE and the -bP lines (%d)", cLine);
     SzEphChainHead(us.szEphemSource, S(szHead));
-    Check(FEqSz(szHead, "server"),
-      "the chain a dialog OK set survives save and load (%s)", szHead);
-    Check(FEqSz(SzSet(us.rgszEphParam[iepFile]), "eph5-file-value") &&
-      FEqSz(SzSet(us.rgszEphParam[iepTok]), "eph5-token-value"),
-      "and both parameters do");
-
+    Check(FEqSz(szHead, "server") &&
+      FEqSz(SzSet(us.rgszEphParam[epJplFile]), "eph5-file-value") &&
+      FEqSz(SzSet(us.rgszEphParam[epServerToken]), "eph5-token-value"),
+      "and both survive save and load (%s)", szHead);
     remove(szPath);
     FCloneSz(fFileOutSav ? baFileOutSav.constData() : NULL, &is.szFileOut);
     us.nWriteFormat = nWriteFormatSav;
     us.fNoWrite = fNoWriteSav;
   }
 
-  // Connect's honest degradation, read inside the click before the
-  // refresh timer can take the line back: a key this build's registry
-  // does not resolve has no transport to try, and the line says so
-  // rather than pretending. The server source is REGISTERED now (phase
-  // 6) -- what it lacks in this build is a transport, which is a
-  // different sentence from "no such source" and has to read as one.
-  {
-    char szHeadBefore[cchSzDef];
-    SzEphChainHead(us.szEphemSource, S(szHeadBefore));
-    DriveModalQt(ShowEphemDialogQt, [&](QWidget *pw) {
-      QLineEdit *peChain = pw->findChild<QLineEdit *>("deEp_chain");
-      QLabel *plStatus = pw->findChild<QLabel *>("dsEp_st");
-      if (peChain != NULL && plStatus != NULL) {
-        peChain->setText("server");
-        FClickButtonQt(pw, "dbEp_ct");
-        // The Qt build BINDS a transport now (phase 6c), so the honest
-        // line is that the server is not reachable, not that this build
-        // cannot reach one. It must also not claim to be online, and it
-        // must name an address rather than printing a null for the user
-        // who never set one -- which it did until the default branch
-        // was reachable.
-        Check(plStatus->text().contains("Ephemeris Server") &&
-          !plStatus->text().contains("online") &&
-          !plStatus->text().contains("(null)"),
-          "a bound transport that cannot reach a server says so, with an "
-          "address (\"%s\")",
-          plStatus->text().toLocal8Bit().constData());
-        peChain->setText("nosuchsource");
-        FClickButtonQt(pw, "dbEp_ct");
-        Check(plStatus->text().contains("not a source this program defines"),
-          "an unknown key is refused (\"%s\")",
-          plStatus->text().toLocal8Bit().constData());
-      }
-      if (!FClickButtonQt(pw, "IDCANCEL"))
-        pw->close();
-    });
-    SzEphChainHead(us.szEphemSource, S(szHead));
-    Check(FEqSz(szHead, szHeadBefore),
-      "Connect never touched the chain (%s, was %s)", szHead, szHeadBefore);
-  }
+  // The folder typed applies on OK as -Yi1, and resets the search.
+  DriveModalQt(ShowEphemDialogQt, [&](QWidget *pw) {
+    QLineEdit *pe;
+    FPickEphQt(pw, "swiss");
+    if ((pe = PeEphRowQt(pw, strFolder)) != NULL)
+      pe->setText("eph-folder-value");
+    if (!FClickButtonQt(pw, "IDOK"))
+      pw->close();
+  });
+  Check(FEqSz(SzSet(us.rgszPath[1]), "eph-folder-value") &&
+    FEqSz(SzSet(us.szEphemSource), "swiss"),
+    "the folder typed applies as -Yi1 (\"%s\")", SzSet(us.rgszPath[1]));
 
-  // This group drove the dialog with the server selected, and OK casts --
-  // which starts the adapter. Put it back, or the next group inherits a
-  // connector it did not start and its own WELCOME limits are not the
-  // ones it set (measured: the request-bytes legs of the server group
-  // fail, and only when this group ran first).
+  // The server was picked and OKed above, and OK casts -- which starts the
+  // adapter. Put it back, or the next group inherits a connector it did
+  // not start.
   EphSrvFinalizeQt();
 
   // Back where the suite was, through the same accessors the dialog used.
-  EphSourceSet(szChainSav);
-  FEphParamSet(iepFile, szFileSav);
-  FEphParamSet(iepTok, szTokSav);
+  for (iep = 0; iep < cEphParam; iep++)
+    FEphParamSet(iep, rgbaParamSav[iep].constData());
+  FCloneSz(baPathSav.isEmpty() ? NULL : baPathSav.constData(),
+    &us.rgszPath[1]);
+  is.fSwissPathSet = fFalse;
+  EphSourceSet(baChainSav.constData());
   RecastAndRedrawQt();
-  printf("  what Ephemeris Settings applies is what it shows, a refusal\n"
-         "  leaves the dialog open, and what it sets survives the writer\n");
+  printf("  Ephemeris Settings shows one source's own settings, Test says\n"
+         "  whether it works, and what OK applies survives the writer\n");
 }
 
 static CONST QTTESTENTRY rgqttestQt[] = {

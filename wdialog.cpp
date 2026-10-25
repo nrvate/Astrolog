@@ -2373,54 +2373,64 @@ flag API DlgCalc(HWND hdlg, uint message, WORD wParam, LONG lParam)
 }
 
 
-// The ephemeris settings dialog (EPHEMERIS_PLUGINS_PLAN.md 5.4): the
-// selection as the source registry itself sees it -- the chain, the
-// compiled-in sources with their availability, and the source parameters.
-// No source is named in this dialog: the list is rgephsrc[] at runtime, so
-// a build with a plugin this one predates shows the extra row with nothing
-// here edited, and a source a build did not compile is listed with the
-// reason it gives for being unavailable rather than hidden.
-
-// The four parameter rows bind these of the shared index space (section
-// 4.3): the JPL file, the one parameter whose source is in every build and
-// which no setting could name before; the Ephemeris Server's address and
-// token, which Calculation Settings used to carry beside its method combo
-// and which moved here when the combo did; and Prometheia's ephemeris
-// file, so a build with that plugin has its main setting without this
-// dialog growing a row. The rows are otherwise generic: the label and the
-// kind come from the generated table, an epkToken row is masked, and
-// Browse is offered to the path kinds only, so a regenerated table changes
-// what the rows say without this file being touched.
-
-// The rows are CEphParamRows()' now -- the chain head's own parameters,
-// from the generated table -- so this file names no parameter either.
-#define cEphParamRowW 4
-
-// Which parameters the rows are showing, computed when the dialog opens
-// and read again when OK writes them back. Static because a Win32 dialog
-// procedure sees WM_INITDIALOG and WM_COMMAND as separate calls, and this
-// dialog is modal, so there is one at a time.
-static int rgiepParam[cEphParamRowW], cParamRow;
-
-
-// The parameter rows, applied whenever the selection changes rather than
-// once at open: they are the chain head's own parameters, so picking a
-// different source must re-label, re-fill and re-hide them. They did not,
-// until the phase 8 review (D5) -- opening on the shipped default
-// (swiss, which declares NO parameters) and picking the Ephemeris Server
-// left every row hidden with no way to type an address, and opening on
-// jpl left its row on screen so a URL typed there went to epJplFile.
+// The ephemeris settings dialog (EPHEMERIS_PLUGINS_PLAN.md 5.4): pick ONE
+// ephemeris, set it up, and Test that it works. The list is rgephsrc[] at
+// runtime, so a build with a plugin this one predates shows the extra row
+// with nothing here edited, and a source a build did not compile is
+// listed with the reason it gives for being unavailable.
 //
-// Reads the chain EDIT, not us.szEphemSource: the pick is not applied
-// until OK.
-static void SetEphemParamRowsW(HWND hdlg)
+// There is no fallback order here any more: a comma-separated field beside
+// the list edited the same -bE setting, and answered a question nobody
+// using the dialog has. A chain is still a -bE spelling for a settings
+// file that wants one; OK here writes the one source picked.
+
+// The rows are CEphDialogRowsOf()'s -- the picked source's search folder
+// when it reads Swiss or JPL files, then its own parameters from the
+// generated table -- so this file names no parameter either.
+#define cEphParamRowW 4
+#define cchEphValW (cchSzMax*4)
+
+// The dialog's state across messages, since a Win32 dialog procedure sees
+// WM_INITDIALOG, WM_TIMER and WM_COMMAND as separate calls; the dialog is
+// modal, so there is one at a time. Every setting the dialog can show is
+// kept as typed -- the parameters and, at iepRowPath, the search folder --
+// so looking at another source and back keeps what was typed.
+static int rgiepParam[cEphParamRowW], cParamRow;
+static char *rgszEphVal[cEphParam + 1];
+static char szEphKeyW[cchSzDef];
+
+
+// Read the shown rows' text back into the kept values.
+static void GetEphemRowsW(HWND hdlg)
 {
-  CONST EPHPARAMROW *pep;
-  char szChainT[cchSzMax], sz[cchSzMax];
+  char sz[cchEphValW];
   int i;
 
-  GetEdit(deEp_chain, szChainT);
-  cParamRow = CEphParamRowsOf(szChainT, rgiepParam, cEphParamRowW);
+  for (i = 0; i < cParamRow; i++) {
+    GetDlgItemText(hdlg, deEp_p1 + i, sz, cchEphValW);
+    FCloneSz(sz, &rgszEphVal[rgiepParam[i]]);
+  }
+}
+
+
+// Show the picked source: its description, its rows filled from what was
+// typed, the rows it does not use hidden.
+static void SetEphemRowsW(HWND hdlg)
+{
+  EPHSRCDEF *pephsrc = PephsrcGet(IEphSrcFromKey(szEphKeyW));
+  CONST char *szLabel;
+  char sz[cchSzMax];
+  int i, iep, nKind;
+
+  cParamRow = *szEphKeyW ?
+    CEphDialogRowsOf(szEphKeyW, rgiepParam, cEphParamRowW) : 0;
+  if (pephsrc == NULL)
+    SetEdit(dsEp_ds, "Pick an ephemeris.");
+  else {
+    sprintf2(S(sz), "%s%s", pephsrc->szDesc,
+      cParamRow == 0 ? " Nothing to set up." : "");
+    SetEdit(dsEp_ds, sz);
+  }
   for (i = 0; i < cEphParamRowW; i++) {
     flag fLive = i < cParamRow;
     ShowWindow(GetDlgItem(hdlg, dsEp_p1 + i), fLive ? SW_SHOW : SW_HIDE);
@@ -2429,92 +2439,44 @@ static void SetEphemParamRowsW(HWND hdlg)
       ShowWindow(GetDlgItem(hdlg, dbEp_b1 + i), SW_HIDE);
       continue;
     }
-    pep = &rgephparam[rgiepParam[i]];
-    sprintf2(S(sz), "%s:", pep->ep.szLabel);
+    iep = rgiepParam[i];
+    szLabel = iep == iepRowPath ? "Ephemeris Folder" :
+      rgephparam[iep].ep.szLabel;
+    nKind = iep == iepRowPath ? epkPath : rgephparam[iep].ep.nKind;
+    sprintf2(S(sz), "%s:", szLabel);
     SetEdit(dsEp_p1 + i, sz);
-    SetEdit(deEp_p1 + i, SzSet(us.rgszEphParam[rgiepParam[i]]));
+    SetEdit(deEp_p1 + i, SzSet(rgszEphVal[iep]));
     SendDlgItemMessage(hdlg, deEp_p1 + i, EM_SETPASSWORDCHAR,
-      pep->ep.nKind == epkToken ? (WPARAM)'*' : 0, 0);
+      nKind == epkToken ? (WPARAM)'*' : 0, 0);
     ShowWindow(GetDlgItem(hdlg, dbEp_b1 + i),
-      pep->ep.nKind == epkPath || pep->ep.nKind == epkFile ?
-      SW_SHOW : SW_HIDE);
+      nKind == epkPath || nKind == epkFile ? SW_SHOW : SW_HIDE);
   }
 }
 
 
-// Compose the status line: the primary source's state and the once-per-cast
-// notice that a fallback served something. A chain head this build's
-// registry does not resolve is named for what it is rather than reported as
-// an error, which is the same rule the fallback walk follows; the
-// connecting state cycles its dots, because a wait that stands still reads
-// as broken, although no source reports it before phase 6's remote ones.
-
+// The line under the rows for the picked source, until a Test replaces it.
+// A local source's state is always "ready", which says nothing about
+// whether its files are there; only Test can say that.
 static void SetEphemStatusW(HWND hdlg, int nTick)
 {
   EPHSRCDEF *pephsrc;
-  char sz[cchSzMax], szHead[cchSzDef], szState[cchSzDef];
-  char *pch;
+  char sz[cchSzMax], szState[cchSzDef];
   int nState;
 
-  SzEphChainHead(us.szEphemSource, S(szHead));
-  pephsrc = PephsrcGet(IEphSrcFromKey(szHead));
-  if (pephsrc != NULL) {
-    nState = pephsrc->State(S(szState));
-    if (nState == esConnecting)
-      sprintf2(S(sz), "%s: %s%.*s", szHead, szState, nTick % 3 + 1, "...");
-    else
-      sprintf2(S(sz), "%s: %s", szHead, szState);
-  } else if (FEphSrcKeyKnown(szHead))
-    sprintf2(S(sz), "'%s' is not built into this program", szHead);
+  pephsrc = PephsrcGet(IEphSrcFromKey(szEphKeyW));
+  if (pephsrc == NULL) {
+    SetEdit(dsEp_st, "");
+    return;
+  }
+  nState = pephsrc->State(S(szState));
+  if (nState == esConnecting)
+    sprintf2(S(sz), "%s: %s%.*s", pephsrc->szName, szState, nTick % 3 + 1,
+      "...");
+  else if (nState == esReady && FEqSz(szState, "ready"))
+    sprintf2(S(sz), "%s", "Press Test to check that it works.");
   else
-    sprintf2(S(sz), "'%s' is not a source this program defines", szHead);
-  if (FEphFallbackNotice()) {
-    pch = sz; while (*pch) pch++;
-    sprintf2(SO(pch, sz), "; a fallback source served part of the last cast");
-  }
+    sprintf2(S(sz), "%s. Press Test to check that it works.", szState);
   SetEdit(dsEp_st, sz);
-}
-
-
-// Put the chain together for a newly picked primary: the picked source
-// first, then the old chain's tail with the picked source dropped from it,
-// so choosing a different head never duplicates a source the walk would
-// otherwise ask twice. Tokens the user typed are kept as typed; OK is
-// where anything unknown is refused.
-
-static void SetEphemChainW(HWND hdlg, CONST char *szKey)
-{
-  char sz[cchSzMax], szT[cchSzMax];
-  CONST char *pch, *pchTail, *pchTok;
-  char *pchDst;
-
-  GetEdit(deEp_chain, szT);
-  for (pchTail = szT; *pchTail && *pchTail != ','; pchTail++)
-    ;
-  // PAST the comma, not at it. Standing on the separator, the token scan
-  // below cannot advance -- its first pch equals its first pchTok, so it
-  // breaks before appending anything and the whole fallback tail is
-  // dropped. A user with "server,swiss,moshier" who clicked another row
-  // to look at it and pressed OK was left with that source alone, its
-  // fallbacks gone, and nothing said so (phase 8 review, E3).
-  if (*pchTail == ',')
-    pchTail++;
-  sprintf2(S(sz), "%s", szKey);
-  pchDst = sz + CchSz(sz);
-  for (pchTok = pchTail; ; pchTok = pch + 1) {
-    for (pch = pchTok; *pch && *pch != ','; pch++)
-      ;
-    if (pch == pchTok)
-      break;
-    sprintf2(S(szT), "%.*s", (int)(pch - pchTok), pchTok);
-    if (!FEqSz(szT, szKey)) {
-      sprintf2(SO(pchDst, sz), ",%s", szT);
-      pchDst += CchSz(pchDst);
-    }
-    if (*pch != ',')
-      break;
-  }
-  SetEdit(deEp_chain, sz);
 }
 
 
@@ -2524,21 +2486,20 @@ static void SetEphemChainW(HWND hdlg, CONST char *szKey)
 flag API DlgEphem(HWND hdlg, uint message, WORD wParam, LONG lParam)
 {
   EPHSRCDEF *pephsrc;
-  CONST EPHPARAMROW *pep;
-  char sz[cchSzMax], szHead[cchSzDef], szT[cchSzMax];
-  CONST char *pch, *pchTok;
-  int i, j;
-  // The dialog's own state, kept across the messages like DlgObjectSel
-  // keeps its rows: the list row whose selection was last applied (so the
-  // poll below only acts on a change the user made), the status line's
-  // tick (the connecting dots), and for how many more ticks a Connect
-  // report holds the line before the live state takes it back.
-  static int isrcLast = -1, nTick = 0, nHoldStatus = 0;
+  char sz[cchSzMax*4], szHead[cchSzDef], szT[cchSzMax];
+  char *pch;
+  int i, j, rgisrc[cEphSrcBuiltIn];
+  // The list row whose selection was last applied (so the poll below only
+  // acts on a change the user made), the status line's tick, and whether
+  // a Test result holds the line.
+  static int isrcLast = -1, nTick = 0;
+  static flag fHold = fFalse;
 
   switch (message) {
   case WM_INITDIALOG:
-    // The list is the registry, in its fallback quality order, with each
-    // unavailable source showing the reason its own callback gives.
+    for (i = 0; i < cEphParam; i++)
+      FCloneSz(us.rgszEphParam[i], &rgszEphVal[i]);
+    FCloneSz(us.rgszPath[1], &rgszEphVal[iepRowPath]);
     for (i = 0; i < CEphSrc(); i++) {
       pephsrc = PephsrcGet(i);
       if (pephsrc->FAvailable(S(szT)))
@@ -2548,27 +2509,34 @@ flag API DlgEphem(HWND hdlg, uint message, WORD wParam, LONG lParam)
       j = SetListSz(hdlg, dlEp_src, sz);
       SendDlgItemMessage(hdlg, dlEp_src, LB_SETITEMDATA, j, (LPARAM)i);
     }
-    // The chain's head selects its row, when the head is one of this
-    // build's sources; a head from a newer build's settings file has no
-    // row, and the edit below shows it as it is.
+    // The setting's first source is the one selected. A key this build has
+    // no row for -- a newer build's settings file -- selects nothing, and
+    // OK then leaves the setting alone.
     SzEphChainHead(us.szEphemSource, S(szHead));
     i = IEphSrcFromKey(szHead);
-    if (i >= 0)
+    szEphKeyW[0] = chNull;
+    if (i >= 0) {
+      sprintf2(S(szEphKeyW), "%s", szHead);
       for (j = 0; j < CEphSrc(); j++)
         if ((int)SendDlgItemMessage(hdlg, dlEp_src, LB_GETITEMDATA, j, 0) == i) {
           SendDlgItemMessage(hdlg, dlEp_src, LB_SETCURSEL, j, 0);
           break;
         }
+    }
     isrcLast = i;
-    SetEdit(deEp_chain, SzSet(us.szEphemSource));
-    if (i >= 0)
-      SetEdit(dsEp_ds, PephsrcGet(i)->szDesc);
-    else
-      SetEdit(dsEp_ds, "The primary source is not one this build compiles in.");
-    SetEphemParamRowsW(hdlg);
+    SetEphemRowsW(hdlg);
+    fHold = fFalse;
     SetEphemStatusW(hdlg, nTick);
+    // A setting naming more than one source is said once, since OK keeps
+    // only the one picked here.
+    if (CEphChainSrc(us.szEphemSource, rgisrc, cEphSrcBuiltIn) > 1) {
+      sprintf2(S(sz), "Your settings name more than one source (%s). OK "
+        "keeps only the ephemeris selected here.", us.szEphemSource);
+      SetEdit(dsEp_st, sz);
+      fHold = fTrue;
+    }
     SetTimer(hdlg, 1, 250, NULL);
-    SetFocus(GetDlgItem(hdlg, deEp_chain));
+    SetFocus(GetDlgItem(hdlg, dlEp_src));
     return fFalse;
 
   case WM_TIMER:
@@ -2576,115 +2544,115 @@ flag API DlgEphem(HWND hdlg, uint message, WORD wParam, LONG lParam)
       break;
     nTick++;
     // The dialog procs here take a 16 bit wParam, which is where a list
-    // box's LBN_SELCHANGE would arrive, so the selection is polled instead:
-    // a row the user picks applies once, and typing in the chain edit is
-    // never fought over.
+    // box's LBN_SELCHANGE would arrive, so the selection is polled instead.
     j = (int)SendDlgItemMessage(hdlg, dlEp_src, LB_GETCURSEL, 0, 0);
     i = j >= 0 ? (int)SendDlgItemMessage(hdlg, dlEp_src, LB_GETITEMDATA, j, 0)
       : -1;
-    if (i != isrcLast) {
+    if (i != isrcLast && i >= 0) {
       isrcLast = i;
-      if (i >= 0) {
-        pephsrc = PephsrcGet(i);
-        SetEdit(dsEp_ds, pephsrc->szDesc);
-        SetEphemChainW(hdlg, pephsrc->szKey);
-        SetEphemParamRowsW(hdlg);   // the rows are the new head's
-
-      }
+      GetEphemRowsW(hdlg);
+      sprintf2(S(szEphKeyW), "%s", PephsrcGet(i)->szKey);
+      SetEphemRowsW(hdlg);
+      fHold = fFalse;
     }
-    // A Connect report holds the line for a few ticks, then the live state
-    // takes it back.
-    if (nHoldStatus > 0)
-      nHoldStatus--;
-    else
+    if (!fHold)
       SetEphemStatusW(hdlg, nTick);
     return fTrue;
 
   case WM_COMMAND:
     if (wParam == dbEp_ct) {
-      // Connect, or for a local source, test it: the registry's own
-      // availability and state, reported through the status line. A source
-      // this build's registry does not resolve has no transport to try --
-      // the remote plugins are phase 6's -- and saying so is the honest
-      // answer, not an error.
-      GetEdit(deEp_chain, sz);
-      SzEphChainHead(sz, S(szHead));
-      pephsrc = PephsrcGet(IEphSrcFromKey(szHead));
-      if (pephsrc != NULL) {
-        if (pephsrc->FAvailable(S(szT))) {
-          pephsrc->State(S(sz));
-          sprintf2(S(szT), "%s: %s", szHead, sz);
-          SetEdit(dsEp_st, szT);
-        } else {
-          sprintf2(S(sz), "%s: unavailable - %s", szHead, szT);
-          SetEdit(dsEp_st, sz);
-        }
-      } else if (FEphSrcKeyKnown(szHead)) {
-        sprintf2(S(sz), "Connect: '%s' has no transport in this build",
-          szHead);
-        SetEdit(dsEp_st, sz);
-      } else {
-        sprintf2(S(sz), "Connect: '%s' is not a source this program defines",
-          szHead);
-        SetEdit(dsEp_st, sz);
+      // Test: put what is on screen into force, ask the picked source
+      // ALONE for three bodies at the chart's moment (FEphTestSource), and
+      // put the saved settings back.
+      char *rgszSav[cEphParam], *szPathSav = NULL, *szChainSav = NULL;
+      flag fOk;
+
+      if (!*szEphKeyW) {
+        SetEdit(dsEp_st, "Pick an ephemeris to test.");
+        fHold = fTrue;
+        return fTrue;
       }
-      nHoldStatus = 12;
+      GetEphemRowsW(hdlg);
+      for (i = 0; i < cEphParam; i++) {
+        rgszSav[i] = NULL;
+        FCloneSz(us.rgszEphParam[i], &rgszSav[i]);
+        FEphParamSet(i, rgszEphVal[i]);
+      }
+      FCloneSz(us.rgszPath[1], &szPathSav);
+      FCloneSz(us.szEphemSource, &szChainSav);
+      FCloneSz(rgszEphVal[iepRowPath], &us.rgszPath[1]);
+      EphSourceSet(szEphKeyW);
+      is.fSwissPathSet = fFalse;
+      SetEdit(dsEp_st, "Testing...");
+      UpdateWindow(GetDlgItem(hdlg, dsEp_st));
+      fOk = FEphTestSource(szEphKeyW, sz, sizeof(sz));
+      for (i = 0; i < cEphParam; i++) {
+        FEphParamSet(i, rgszSav[i]);
+        FCloneSz(NULL, &rgszSav[i]);
+      }
+      FCloneSz(szPathSav, &us.rgszPath[1]);
+      EphSourceSet(szChainSav);
+      FCloneSz(NULL, &szPathSav);
+      FCloneSz(NULL, &szChainSav);
+      is.fSwissPathSet = fFalse;
+      pch = (char *)PAllocate(cchSzMax*5, "test");
+      if (pch != NULL) {
+        sprintf2(pch, cchSzMax*5, "%s%s", fOk ? "Works: " :
+          "Does not work: ", sz);
+        SetEdit(dsEp_st, pch);
+        DeallocateP(pch);
+      }
+      fHold = fTrue;
       return fTrue;
     }
 
-    // Browse for the one row's parameter that is path shaped today; the
-    // buttons of the other rows stay hidden (above), and a regenerated
-    // parameter table re-decides which they are.
-    for (i = 0; i < 4; i++) {
+    // Browse: a file for a file parameter, and for the search folder a
+    // file IN it, whose folder is kept -- the common file dialog is the one
+    // picker this dialog already uses.
+    for (i = 0; i < cEphParamRowW; i++) {
+      flag fDir;
       if ((int)wParam != dbEp_b1 + i)
         continue;
+      fDir = i < cParamRow && rgiepParam[i] == iepRowPath;
       GetEdit(deEp_p1 + i, sz);
-      sprintf2(S(szFileName), "%.*s", cchSzMaxFile-1, sz);
-      ofn.lpstrFilter = "Ephemeris Files (*.eph)\0*.eph\0All Files (*.*)\0*.*\0";
-      ofn.lpstrTitle = "Browse";
-      if (GetOpenFileName((LPOPENFILENAME)&ofn))
+      sprintf2(S(szFileName), "%.*s", cchSzMaxFile-1, fDir ? "" : sz);
+      ofn.lpstrFilter = fDir ?
+        "Ephemeris Files (*.se1)\0*.se1\0All Files (*.*)\0*.*\0" :
+        "Ephemeris Files (*.eph)\0*.eph\0All Files (*.*)\0*.*\0";
+      ofn.lpstrTitle = fDir ? "Pick any file in the ephemeris folder" :
+        "Browse";
+      if (GetOpenFileName((LPOPENFILENAME)&ofn)) {
+        if (fDir) {
+          for (pch = szFileName; *pch; pch++)
+            ;
+          while (pch > szFileName && *pch != '\\' && *pch != '/')
+            pch--;
+          *pch = chNull;
+        }
         SetEdit(deEp_p1 + i, szFileName);
+      }
       return fTrue;
     }
 
     if (wParam == IDOK) {
-      // The chain is validated exactly as the -bE switch validates it
-      // (switch.cpp): every comma token must name a source some build
-      // defines, and the refusal names the token, never truncating it into
-      // a different key. Refused means the dialog stays open; nothing is
-      // applied and nothing is silently dropped.
-      GetEdit(deEp_chain, sz);
-      for (pchTok = sz; ; pchTok = pch + 1) {
-        for (pch = pchTok; *pch && *pch != ','; pch++)
-          ;
-        if (pch == pchTok) {
-          if (pch == sz && *pch == chNull)
-            break;   // An empty chain is the default chain, as "" is for -bE.
-          PrintWarning("The fallback order needs a source key between its "
-            "commas, like \"swiss\" or \"server,swiss,moshier\".");
-          return fTrue;
-        }
-        if (!FEphSrcKeyKnownN(pchTok, (int)(pch - pchTok))) {
-          sprintf2(S(szT), "Unknown ephemeris source '%.*s' in the fallback "
-            "order", (int)(pch - pchTok), pchTok);
-          PrintWarning(szT);
-          return fTrue;
-        }
-        if (*pch != ',')
-          break;
+      // Every setting as typed, then the one source picked.
+      GetEphemRowsW(hdlg);
+      for (i = 0; i < cEphParam; i++)
+        if (!FEqSz(SzSet(us.rgszEphParam[i]), SzSet(rgszEphVal[i])))
+          FEphParamSet(i, rgszEphVal[i]);
+      if (!FEqSz(SzSet(us.rgszPath[1]), SzSet(rgszEphVal[iepRowPath]))) {
+        FCloneSz(FSzSet(rgszEphVal[iepRowPath]) ? rgszEphVal[iepRowPath] :
+          NULL, &us.rgszPath[1]);
+        is.fSwissPathSet = fFalse;
       }
-      // The rows the user edited are the head's as the dialog OPENED, so
-      // they are written before the new chain takes effect.
-      for (i = 0; i < cParamRow; i++) {
-        char szP[cchSzMax];
-        GetEdit(deEp_p1 + i, szP);
-        FEphParamSet(rgiepParam[i], szP);
-      }
-      EphSourceSet(sz);
+      if (*szEphKeyW)
+        EphSourceSet(szEphKeyW);
       wi.fCast = fTrue;
     }
     if (wParam == IDOK || wParam == IDCANCEL) {
       KillTimer(hdlg, 1);
+      for (i = 0; i <= cEphParam; i++)
+        FCloneSz(NULL, &rgszEphVal[i]);
       EndDialog(hdlg, fTrue);
       return fTrue;
     }

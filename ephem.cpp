@@ -444,6 +444,171 @@ int CEphParamRows(int *rgiep, int cMax)
 }
 
 
+// The rows Ephemeris Settings shows for ONE source: the folder its data
+// files are searched for in, when it reads Swiss Ephemeris or JPL files
+// (iepRowPath), then its own parameters. Swiss had no row at all before,
+// so the dialog's commonest source showed "Parameters:" over nothing and
+// the one setting that decides whether it works -- where its files are
+// -- could only be typed into astrolog.as.
+
+int CEphDialogRowsOf(CONST char *szKey, int *rgiep, int cMax)
+{
+  int cRow = 0;
+
+  if (rgiep == NULL || cMax <= 0)
+    return 0;
+  if (FEqSz(szKey, "swiss") || FEqSz(szKey, "jpl"))
+    rgiep[cRow++] = iepRowPath;
+  return cRow + CEphParamRowsOf(szKey, rgiep + cRow, cMax - cRow);
+}
+
+
+// Test one source, ALONE: ask it for the Sun, the Moon and Chiron at the
+// current chart's moment, through the same chain walk a cast uses but
+// with a chain of that source only, and write what came back -- each
+// body's position, or why it has none. True when it works: the Sun and
+// the Moon answered, from the ephemeris asked for.
+//
+// "From the ephemeris asked for" is the half that matters. With its files
+// missing the Swiss Ephemeris still answers the Sun and Moon -- from the
+// Moshier formulas, and successfully -- so a check that only asked
+// whether positions came back would pass a selection with no files at
+// all. FSwissEphSubstituted() says when that happened. Chiron is reported
+// but not required: it needs an asteroid file even when the planets do
+// not, and Moshier has none at all, so its absence is a note rather than
+// a failure. The warnings a source raises while answering are captured
+// into the result rather than shown, so a missing file is one line here
+// and not a box per body.
+//
+// The caller decides which settings the source sees: Ephemeris Settings
+// puts the values as typed into force around this call and restores
+// them after, so Test answers for what is on screen, not what was saved.
+
+static CONST char *SzEphErr(int nErr)
+{
+  switch (nErr) {
+  case ephErrUnknownBody:     return "unknown body";
+  case ephErrUnsupported:     return "this source does not compute it";
+  case ephErrOutsideCover:    return "outside the data's time coverage";
+  case ephErrDataUnavailable: return "data unavailable";
+  case ephErrPointUndefined:  return "undefined for this orbit";
+  case ephErrAmbiguous:       return "ambiguous name";
+  case ephErrNumerical:       return "numerical failure";
+  default:                    return "internal error";
+  }
+}
+
+flag FEphTestSource(CONST char *szKey, char *sz, int cch)
+{
+  static EPHQUERY eq;   // Big; and the test is modal, one at a time.
+  CONST int rgobj[3] = {oSun, oMoo, oChi};
+  EPHSRCDEF *pes;
+  EPHCAPS caps;
+  char szWhy[cchSzMax], szCap[cchSzMax*2];
+  char *pch;
+  int isrc, i;
+  flag fNoEphSav, rgfOk[3], fSubst = fFalse, fOk;
+
+  isrc = IEphSrcFromKey(szKey);
+  pes = PephsrcGet(isrc);
+  if (pes == NULL) {
+    sprintf2(sz, cch, "'%s' is not built into this program.", szKey);
+    return fFalse;
+  }
+  if (!pes->FAvailable(S(szWhy))) {
+    sprintf2(sz, cch, "not available: %s.", szWhy);
+    return fFalse;
+  }
+  ClearB((pbyte)&caps, sizeof(EPHCAPS));
+  pes->GetCaps(&caps);
+  if (caps.fLegacyCast) {
+    // Matrix and None answer through CastChart()'s own hook, not a query.
+    if (FEqSz(szKey, "none")) {
+      sprintf2(sz, cch, "%s", "None computes no positions: every body "
+        "reads 0Ari00'00\".");
+      return fFalse;
+    }
+    sprintf2(sz, cch, "%s", "formulas built into the program; there are "
+      "no files or connection that could be missing.");
+    return fTrue;
+  }
+
+  EphQueryInit(&eq, JulianDayFromTime(is.T));
+  for (i = 0; i < 3; i++)
+    FEphQueryAdd(&eq, rgobj[i], 0, oEar, NULL);
+  fNoEphSav = is.fNoEphFile;
+  is.fNoEphFile = fFalse;   // So a missing file is said, here, once.
+#ifdef SWISS
+  FSwissEphSubstituted(fTrue);
+#endif
+  SetWarningCapture(szCap, sizeof(szCap));
+  FEphSubmitChain(&eq, &isrc, 1);
+  SetWarningCapture(NULL, 0);
+#ifdef SWISS
+  fSubst = FSwissEphSubstituted(fTrue);
+#endif
+  is.fNoEphFile = fNoEphSav;
+
+  for (i = 0; i < 3; i++)
+    rgfOk[i] = eq.rgisrc[i] != ephSrcNone && eq.rgrow[i].nErr == ephErrNone;
+  fOk = rgfOk[0] && rgfOk[1] && !fSubst;
+
+  *sz = chNull;
+  pch = sz;
+  if (fSubst) {
+    sprintf2(pch, cch, "%s files were not found, so these came from %s: ",
+      FEqSz(szKey, "jpl") ? "The JPL" : "The Swiss Ephemeris",
+      FEqSz(szKey, "jpl") ? "another ephemeris" : "the Moshier formulas");
+    pch += CchSz(pch);
+  }
+  for (i = 0; i < 3; i++) {
+    CONST char *szPos;
+    if (rgfOk[i]) {
+      // SzZodiac() pads its degrees to two places for a column.
+      for (szPos = SzZodiac(Mod(eq.rgrow[i].rg[0] + is.rSid));
+        *szPos == ' '; szPos++)
+        ;
+      sprintf2(pch, cch - (int)(pch - sz), "%s%s %s", i > 0 ? ", " : "",
+        szObjDisp[rgobj[i]], szPos);
+    }
+    else
+      sprintf2(pch, cch - (int)(pch - sz), "%s%s: none", i > 0 ? ", " : "",
+        szObjDisp[rgobj[i]]);
+    pch += CchSz(pch);
+  }
+  sprintf2(pch, cch - (int)(pch - sz), "%s", " at the chart's moment.");
+  pch += CchSz(pch);
+  if (!(rgfOk[0] && rgfOk[1] && rgfOk[2])) {
+    // The source's own words first; the walk's summary when it had none;
+    // the row's error code as the last resort.
+    if (FSzSet(szCap))
+      sprintf2(pch, cch - (int)(pch - sz), " %s", szCap);
+    else if (FSzSet(SzEphNoSourceWhy()))
+      sprintf2(pch, cch - (int)(pch - sz), " %s", SzEphNoSourceWhy());
+    else
+      for (i = 0; i < 3; i++)
+        if (!rgfOk[i]) {
+          sprintf2(pch, cch - (int)(pch - sz), " %s: %s.",
+            szObjDisp[rgobj[i]], SzEphErr(eq.rgrow[i].nErr));
+          break;
+        }
+    pch += CchSz(pch);
+    // And the source's state, for a remote one: why it is not connected.
+    if (pes->State(S(szWhy)) != esReady && FSzSet(szWhy)) {
+      sprintf2(pch, cch - (int)(pch - sz), " %s%s", szWhy,
+        szWhy[CchSz(szWhy)-1] == '.' ? "" : ".");
+      pch += CchSz(pch);
+    }
+  }
+#ifdef SWISS
+  if (FEqSz(szKey, "swiss") || FEqSz(szKey, "jpl"))
+    sprintf2(pch, cch - (int)(pch - sz), " Files from: %s",
+      FSzSet(SzSwissPathSet()) ? SzSwissPathSet() : "(no folder found)");
+#endif
+  return fOk;
+}
+
+
 int IepOfSrc(CONST char *szKey, int i)
 {
   int iep, c = 0;

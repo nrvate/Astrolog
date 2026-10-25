@@ -1,0 +1,24 @@
+# The Windows half of Ephemeris Settings (QT_GUI_PLAN.md item 286): the
+# dialog opens from Setting / Ephemeris Settings, Test runs and the dialog
+# survives it, and Escape closes it. The Qt suite asserts what Test SAYS;
+# Wine has no way to read a static control's text, so the shots are for
+# looking at, and the expect lines are what this scenario proves.
+expect-window Astrolog
+focus Astrolog
+# By arrows, not "p": E&phemeris shares its letter with &Planetary Moons,
+# because every letter of "Ephemeris Settings" is already some other
+# Setting item's (QT_GUI_PLAN.md item 286), and "p" lands on the submenu.
+# The menu opens on its first item; Up wraps to Display Settings, and Up
+# again is Ephemeris Settings.
+menu s Up
+key Up
+key Return
+expect-window Ephemeris Settings
+focus Ephemeris Settings
+shot /tmp/claude-1000/-nvmraid-shares-Astrolog/958455c5-760e-4152-aabc-0b427d8fe47a/scratchpad/win/ephem-open.png
+key alt+t
+sleep 2
+expect-window Ephemeris Settings
+shot /tmp/claude-1000/-nvmraid-shares-Astrolog/958455c5-760e-4152-aabc-0b427d8fe47a/scratchpad/win/ephem-tested.png
+key Escape
+expect-no-window Ephemeris Settings

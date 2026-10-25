@@ -11657,6 +11657,73 @@ this is the note that explains the wall of dialogs.
     reach a printed digit there. `ldd astrolog-qt`: `libswe.so =>
     /usr/local/lib/libswe.so`.
 
+286. **Ephemeris Settings: pick one ephemeris, set it up, Test it.**
+    2026-10-24, from the maintainer: "I'd expect I could select one
+    ephemeris, and when I select it from the list, I get the options for
+    that ephemeris plus a button to test it ... i dont need a fallback
+    order." The dialog had been built around the chain instead, and a
+    review against that expectation found four things wrong with it, in
+    both builds:
+
+    - *Two controls for one setting.* The list and a comma-separated
+      "Fallback Order" field both wrote `-bE`; a pick only rewrote the
+      field's first token, and the dialog opened with the focus in the
+      field. **The field is gone.** OK writes the one source picked; a
+      settings file with a chain is pointed out on open ("OK keeps only
+      the ephemeris selected here"). `-bE a,b` itself is unchanged.
+    - *Connect tested nothing.* Every local source's `State()` is a
+      constant "ready", and "available" means compiled in, so it said
+      `swiss: ready` with no ephemeris on disk. It also read the settings
+      in force rather than the ones typed, and never started anything.
+      **Test** (`dbEp_ct`, same id) calls `FEphTestSource()` in ephem.cpp,
+      shared by both builds: the picked source ALONE, through the chain
+      walk with a one-source chain, for the Sun, Moon and Chiron at the
+      chart's moment, with the values on screen put into force around the
+      call and restored after (the server connection is dropped on both
+      sides, so it connects to the address typed and the next cast to the
+      one in force). Warnings raised meanwhile go into the result through
+      `SetWarningCapture()` (general.cpp) instead of a box per body.
+    - *A pass that is not one.* With no files the Swiss library still
+      answers the Sun and Moon -- from Moshier, successfully (upstream,
+      and the fork with `SWE_FALLBACK=1`) -- so "did positions come back"
+      passes a selection with nothing on disk. `FSwissPlanet()` now
+      notes when the ephemeris that answered is not the one asked
+      (`FSwissEphSubstituted()`), and Test calls that "Does not work".
+      Chiron is reported but not required: Moshier has no asteroids.
+    - *Swiss had nothing to configure.* Its one setting -- where its
+      files are -- was in no dialog on either build. `CEphDialogRowsOf()`
+      gives Swiss and JPL an **Ephemeris Folder** row (`-Yi1`, at
+      `iepRowPath`, one past the parameter table) before their own
+      parameters. Values typed for one source survive looking at another,
+      and OK writes all of them.
+
+    Two messages got their reason on the way: Prometheia's start failure
+    reached the walk only as "attempted nothing" (it now calls
+    `SetEphSubmitWhy()`), and the server's status said "not connected"
+    for a typo and a dead server alike (it now carries the connection's
+    own error, which About shows too).
+
+    *Net.* `ephemeris-dialog` rewritten: 35 checks, including Test on a
+    folder with no files (with every other `-Yi` set aside) and Test then
+    Cancel leaving the settings in force. Falsified: with
+    `FSwissEphSubstituted()` never set, the empty folder reads "Works"
+    and the check fails; with Test not restoring `-Yi1`, the
+    Cancel check fails. Measured by probe against a live `astrolog-ephd`:
+    the server's Sun, Moon and Chiron equal the local Swiss files' to the
+    printed second.
+
+    *Closed with a reason: the menu letter.* Driving the Windows build
+    under Wine (`tools/scenarios/win-ephem.txt`, new) found that
+    Setting / "E&phemeris Settings..." shares `p` with "&Planetary
+    Moons", so Alt+S, P opens the moons submenu. Not fixable by moving
+    the `&`: all thirteen distinct letters of "Ephemeris Settings" are
+    already other Setting items' mnemonics, every one of them
+    upstream's, and moving one of those breaks a Windows user's muscle
+    memory, which is what `rc_mnemonic_audit.py` exists to prevent. The
+    item stays reachable by the arrow keys, which is how the scenario
+    opens it; under Wine Test reads "Works: Sun 26Sco47,
+    Moon 16Sag09, Chiron 9Ari48", the chart's own Sun and Moon.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

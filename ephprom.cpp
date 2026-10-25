@@ -1206,8 +1206,13 @@ static flag FSubmitProm(EPHQUERY *pq)
   EPHROW *prow;
   int i, naif, naifCent;
 
-  if (!FEphPromStart(szWhy, (int)sizeof(szWhy)))
+  if (!FEphPromStart(szWhy, (int)sizeof(szWhy))) {
+    // Why, in the plugin's words, for the walk to report if nothing
+    // behind this source answers -- "attempted nothing" is all Ephemeris
+    // Settings' Test could say about a missing ephemeris file otherwise.
+    SetEphSubmitWhy(szWhy);
     return fFalse;               // the walk asks the next source
+  }
 
   for (i = 0; i < pq->cobj; i++) {
     rgpf[i] = eph::Profile();
