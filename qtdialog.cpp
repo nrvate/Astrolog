@@ -118,6 +118,8 @@
 #include <QtCore/QDir>
 #include <QtCore/QDateTime>
 #include <QtCore/QTemporaryFile>
+#include <QtCore/QPointer>
+#include <QtWidgets/QScrollBar>
 
 #ifdef QT
 
@@ -5597,6 +5599,113 @@ extern void EphSrvFinalizeQt();
 
 // Ephemeris Settings, transcribed from dlgEphem.
 
+#ifdef PROMETHEIA
+// Ephemeris Settings' Debug window, on the Prometheia page: everything the
+// program knows about the engine -- the library, the files it opened and
+// the years they answer, where a file name is looked for, the chain and
+// what each source in it has answered, the Delta T, and statistics of the
+// engine's work, down to the last cast object by object -- as text, live,
+// that can be copied into a bug report. The report is SzEphPromDebug()
+// (ephprom.cpp); this is its window. One at a time: Debug on a window
+// already open brings it forward.
+//
+// It outlives the dialog that opened it. Opened while Ephemeris Settings
+// is up, it is that dialog's child, the only kind of window a modal dialog
+// lets the user touch; when the dialog closes, it moves to the main
+// window (ShowEphemDialogQt()) and stays, refreshing while charts are cast
+// -- which is when its numbers move.
+QString StrConsoleFontQt(void);
+static QPointer<QDialog> pdlgPromDebugQt;
+
+static void ShowPromDebugQt(QWidget *pwParent)
+{
+  if (!pdlgPromDebugQt.isNull()) {
+    pdlgPromDebugQt->show();
+    pdlgPromDebugQt->raise();
+    pdlgPromDebugQt->activateWindow();
+    return;
+  }
+  QDialog *pdlg = new QDialog(pwParent, Qt::Window);
+  pdlgPromDebugQt = pdlg;
+  pdlg->setAttribute(Qt::WA_DeleteOnClose);
+  pdlg->setObjectName("PromDebugQt");
+  pdlg->setWindowTitle("Ephemeris Prometheia - Debug");
+
+  QVBoxLayout *pvl = new QVBoxLayout(pdlg);
+  QPlainTextEdit *pte = new QPlainTextEdit(pdlg);
+  pte->setObjectName("PromDebugText");
+  pte->setReadOnly(fTrue);
+  pte->setLineWrapMode(QPlainTextEdit::NoWrap);
+  // The console font, which text charts are drawn in: the report is laid
+  // out in columns like one.
+  QFont font(StrConsoleFontQt().isEmpty() ? QString("Liberation Mono") :
+    StrConsoleFontQt());
+  font.setStyleHint(QFont::Monospace);
+  font.setFixedPitch(fTrue);
+  font.setPointSize(Max(QApplication::font().pointSize(), 8));
+  pte->setFont(font);
+  pvl->addWidget(pte);
+
+  QHBoxLayout *phl = new QHBoxLayout();
+  QPushButton *ppbRefresh = new QPushButton("&Refresh", pdlg);
+  QCheckBox *pcbLive = new QCheckBox("&Live, every second", pdlg);
+  QPushButton *ppbCopy = new QPushButton("&Copy", pdlg);
+  QPushButton *ppbReset = new QPushButton("Re&set Statistics", pdlg);
+  QPushButton *ppbClose = new QPushButton("Close", pdlg);
+  ppbRefresh->setObjectName("PromDebugRefresh");
+  pcbLive->setObjectName("PromDebugLive");
+  ppbCopy->setObjectName("PromDebugCopy");
+  ppbReset->setObjectName("PromDebugReset");
+  pcbLive->setChecked(fTrue);
+  phl->addWidget(ppbRefresh);
+  phl->addWidget(pcbLive);
+  phl->addStretch(1);
+  phl->addWidget(ppbCopy);
+  phl->addWidget(ppbReset);
+  phl->addWidget(ppbClose);
+  pvl->addLayout(phl);
+
+  // Refreshed in place: where the reader had scrolled to stays put, and
+  // an unchanged report is not set again, so a selection survives.
+  auto Refresh = [pte]() {
+    QString str = QString::fromUtf8(SzEphPromDebug());
+    if (str == pte->toPlainText())
+      return;
+    int yScroll = pte->verticalScrollBar()->value(),
+      xScroll = pte->horizontalScrollBar()->value();
+    pte->setPlainText(str);
+    pte->verticalScrollBar()->setValue(yScroll);
+    pte->horizontalScrollBar()->setValue(xScroll);
+  };
+  QTimer *ptim = new QTimer(pdlg);
+  ptim->setInterval(1000);
+  QObject::connect(ptim, &QTimer::timeout, pdlg, [=]() {
+    if (pcbLive->isChecked())
+      Refresh();
+  });
+  QObject::connect(ppbRefresh, &QPushButton::clicked, pdlg, Refresh);
+  QObject::connect(ppbCopy, &QPushButton::clicked, pdlg, [pte]() {
+    QApplication::clipboard()->setText(pte->toPlainText());
+  });
+  QObject::connect(ppbReset, &QPushButton::clicked, pdlg, [=]() {
+    EphPromDebugReset();
+    EphSrcTallyReset();
+    Refresh();
+  });
+  QObject::connect(ppbClose, &QPushButton::clicked, pdlg, &QDialog::close);
+
+  Refresh();
+  // Wide enough for the widest table, the last cast's, and tall enough to
+  // read most of the report without scrolling.
+  QFontMetrics fm(font);
+  pdlg->resize(fm.horizontalAdvance(QChar('M')) * 112 + 40,
+    Min(fm.height() * 48 + 80, 900));
+  pdlg->show();
+  ptim->start();
+}
+#endif
+
+
 void ShowEphemDialogQt()
 {
   QDialog dlg(gi.qwind);
@@ -5622,6 +5731,23 @@ void ShowEphemDialogQt()
   QPushButton *ppbTest = (QPushButton *)PwRcFindQt(rgbuilt, "dbEp_ct");
   QPushButton *ppbOK = (QPushButton *)PwRcFindQt(rgbuilt, "IDOK");
   QPushButton *ppbCancel = (QPushButton *)PwRcFindQt(rgbuilt, "IDCANCEL");
+  QPushButton *ppbDebug = NULL;
+#ifdef PROMETHEIA
+  // Debug, on the Prometheia page only: a button of this build's, not the
+  // resource's -- the Win32 oracle has no Prometheia -- placed beside
+  // Test and sized like it.
+  if (ppbTest != NULL) {
+    ppbDebug = new QPushButton("&Debug...", &dlg);
+    ppbDebug->setObjectName("dbEp_dbg");
+    ppbDebug->setGeometry(ppbTest->x() + ppbTest->width() +
+      ppbTest->height() / 3, ppbTest->y(), ppbTest->width(),
+      ppbTest->height());
+    ppbDebug->setVisible(fFalse);
+    QObject::connect(ppbDebug, &QPushButton::clicked, &dlg, [&dlg]() {
+      ShowPromDebugQt(&dlg);
+    });
+  }
+#endif
   for (i = 0; i < cEphParamRowQt; i++) {
     rgplRow[i] = (QLabel *)PwRcFindIdxQt(rgbuilt, "dsEp_p", i+1);
     rgpeRow[i] = (QLineEdit *)PwRcFindIdxQt(rgbuilt, "deEp_p", i+1);
@@ -5691,6 +5817,8 @@ void ShowEphemDialogQt()
         (fAvail && cRow == 0 ? " Nothing to set up." : ""));
     if (ppbOK != NULL)
       ppbOK->setEnabled(pephsrc == NULL || fAvail);
+    if (ppbDebug != NULL)
+      ppbDebug->setVisible(strKey == "prometheia");
     for (iR = 0; iR < cEphParamRowQt; iR++) {
       flag fLive = iR < cRow;
       int iep = fLive ? rgiepRow[iR] : -1;
@@ -5921,7 +6049,18 @@ void ShowEphemDialogQt()
 
   PrepareDialogQt(&dlg);
   FocusDialogQt(plist);
-  if (dlg.exec() != QDialog::Accepted) {
+  flag fAccepted = dlg.exec() == QDialog::Accepted;
+#ifdef PROMETHEIA
+  // A Debug window opened from here outlives the dialog: it moves to the
+  // main window, where it is no longer blocked and keeps refreshing.
+  if (!pdlgPromDebugQt.isNull() && pdlgPromDebugQt->parent() == &dlg) {
+    QRect rc = pdlgPromDebugQt->geometry();
+    pdlgPromDebugQt->setParent(gi.qwind, Qt::Window);
+    pdlgPromDebugQt->setGeometry(rc);
+    pdlgPromDebugQt->show();
+  }
+#endif
+  if (!fAccepted) {
     // A Test let the main window's own redraws, if any came while it
     // waited on a server, run under the settings being tested.
     if (fTested)

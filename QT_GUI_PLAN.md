@@ -12381,6 +12381,58 @@ this is the note that explains the wall of dialogs.
       which must pass, and the same tree without the body catalog, which
       must fail. Put back to the old line, the first case fails.
 
+295. **Ephemeris Settings' Debug window** (2026-10-25, the maintainer: "a
+    debug 'stats for nerds' sort of button ... on the prometheia page ...
+    impress me"). A **Debug...** button beside Test, shown only on the
+    Prometheia page, opens a live text report. `SzEphPromDebug()` in
+    ephprom.cpp writes it, and the window refreshes it every second,
+    keeping the scroll position. It covers:
+    - the library version and ABI, the engine's state, and how long it
+      took to open;
+    - the built-in stars, the hypotheticals and where the fictitious
+      bodies' elements came from;
+    - each file in use, with its path, size and date, and whether the
+      setting named it or the shipped default was used;
+    - the years the planets files answer, from the library's own spans;
+    - the search path in the order a bare file name is looked for, each
+      folder marked if it is missing;
+    - the chain, with the positions each source answered and how many of
+      those were fallbacks (a tally added to `FEphSubmitChain()`);
+    - the Delta T at the current chart, with the tidal term paired to it;
+    - statistics since the start or the last reset:
+      - casts and positions, the outcomes with declines by reason, and
+        objects with no v4 form;
+      - mean and slowest time per position and per cast, and positions a
+        second;
+      - counts and mean time by kind;
+      - a catalog body's first position, which integrates its orbit,
+        against later ones, which reuse the cached trajectory (about
+        0.8 ms against 3.6 us);
+      - p50/p90/p99 and a log2 histogram of time per position.
+    - the last cast object by object: NAIF id, kind (planet, catalog, moon,
+      centre, node/apse, hypothetical, star), time, 1-sigma, and which
+      file answered, with sources as lettered references.
+
+    The 1-sigma is asked for by the window itself, once per catalog body
+    of the cast it shows, since a cast does not ask (it costs the library
+    twelve extra integrations a body). Neither the shipped catalog nor
+    Prometheia's full one carries covariance, so it reads "n/a" with a
+    footnote saying why. Getting it would mean fetching JPL's `cov=mat`
+    per body.
+
+    Opened while the modal dialog is up, the window is that dialog's
+    child, the only kind of window the user can then touch. When the
+    dialog closes it moves to the main window and stays. It has Copy for a
+    bug report and Reset Statistics. Five `ephemeris-dialog` checks cover
+    it:
+    - the button is on the Prometheia page and not on Swiss;
+    - the window names the planets file in use;
+    - it outlives the dialog;
+    - a cast is counted, and the last cast names the Sun;
+    - Reset zeroes the count.
+
+    With the move to the main window disabled, the last three fail.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

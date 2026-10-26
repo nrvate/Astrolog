@@ -90,6 +90,7 @@
 #include <QtCore/QCoreApplication>
 #include <QtCore/QFile>
 #include <QtCore/QRegularExpression>
+#include <QtWidgets/QPlainTextEdit>
 // Before astrolog.h: its own macros (space, ret) collide with Qt's
 // headers, so every Qt include here sits above it, as in qtdriver.cpp.
 // The Ephemeris Server group runs its state machine against a real
@@ -24653,6 +24654,70 @@ static void TestEphemDialogQt()
     if (!FClickButtonQt(pw, "IDCANCEL"))
       pw->close();
   });
+
+  // The Debug window, on the Prometheia page alone: what it opens says
+  // which files are in use and counts the engine's work, it outlives the
+  // dialog by moving to the main window, a cast moves its numbers, and
+  // Reset Statistics zeroes them.
+  EphSourceSet(SzEphSourceDefault());
+  DriveModalQt(ShowEphemDialogQt, [&](QWidget *pw) {
+    QPushButton *ppbDbg = pw->findChild<QPushButton *>("dbEp_dbg");
+    flag fSwissHidden;
+    FPickEphQt(pw, "swiss");
+    fSwissHidden = ppbDbg != NULL && !ppbDbg->isVisible();
+    FPickEphQt(pw, "prometheia");
+    Check(ppbDbg != NULL && ppbDbg->isVisible() && fSwissHidden,
+      "Debug is on the Prometheia page and not on the Swiss one");
+    if (ppbDbg != NULL)
+      ppbDbg->click();
+    QWidget *pwDbg = pw->findChild<QWidget *>("PromDebugQt");
+    QPlainTextEdit *pte = pwDbg == NULL ? NULL :
+      pwDbg->findChild<QPlainTextEdit *>("PromDebugText");
+    QString str = pte == NULL ? QString() : pte->toPlainText();
+    Check(pwDbg != NULL && pwDbg->isVisible() &&
+      str.contains("LIBRARY AND ENGINE") && str.contains("SEARCH PATH") &&
+      str.contains("EPHEMERIS SOURCE CHAIN") && str.contains("STATISTICS") &&
+      str.contains("linux_p1900p2100.441"), "it opens a window naming the "
+      "planets file in use (\"%s\")", str.left(300).toLocal8Bit().
+      constData());
+    ShotEphQt(pw, "prometheia-debug-button");
+    if (!FClickButtonQt(pw, "IDCANCEL"))
+      pw->close();
+  });
+  {
+    QDialog *pdlgDbg = gi.qwind->findChild<QDialog *>("PromDebugQt");
+    QPlainTextEdit *pte = pdlgDbg == NULL ? NULL :
+      pdlgDbg->findChild<QPlainTextEdit *>("PromDebugText");
+    QPushButton *ppbReset = pdlgDbg == NULL ? NULL :
+      pdlgDbg->findChild<QPushButton *>("PromDebugReset");
+    QPushButton *ppbRefresh = pdlgDbg == NULL ? NULL :
+      pdlgDbg->findChild<QPushButton *>("PromDebugRefresh");
+    QString str;
+    Check(pdlgDbg != NULL && pdlgDbg->isVisible(), "the Debug window "
+      "outlives the dialog, on the main window");
+    if (ppbReset != NULL)
+      ppbReset->click();
+    is.fNoEphFile = fFalse;
+    CastChart(0);
+    if (ppbRefresh != NULL)
+      ppbRefresh->click();
+    str = pte == NULL ? QString() : pte->toPlainText();
+    Check(str.contains(QRegularExpression("work +1 cast, [1-9]")) &&
+      str.contains("LAST CAST (") && str.contains(QRegularExpression(
+      "\\n  Sun +10  planet ")), "a cast is counted, and the last cast "
+      "names the Sun (\"%s\")", str.mid(str.indexOf("STATISTICS"), 200).
+      toLocal8Bit().constData());
+    if (pdlgDbg != NULL)
+      ShotEphQt(pdlgDbg, "prometheia-debug");
+    if (ppbReset != NULL)
+      ppbReset->click();
+    str = pte == NULL ? QString() : pte->toPlainText();
+    Check(str.contains(QRegularExpression("work +0 casts, 0 positions")),
+      "and Reset Statistics zeroes the count (\"%s\")", str.mid(
+      str.indexOf("STATISTICS"), 120).toLocal8Bit().constData());
+    if (pdlgDbg != NULL)
+      pdlgDbg->close();
+  }
   EphSourceSet(baChainSav.constData());
 #endif
 

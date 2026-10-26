@@ -1308,6 +1308,33 @@ flag FEphSubmitSide(EPHQUERY *pq)
 
 static flag fEphFallbackServed = fFalse;
 
+// Positions each source has answered this session, and how many of those
+// it answered as a fallback -- after a source ahead of it in the chain
+// declined them -- plus those no source answered. For the Debug window
+// (SzEphPromDebug()): "the Swiss Ephemeris answered 27, all of them
+// fallbacks" is how a planetary moon shows up.
+static long rgcEphSrcWon[cEphSrcBuiltIn], rgcEphSrcFell[cEphSrcBuiltIn],
+  cEphSrcNone = 0;
+
+void EphSrcTally(int isrc, long *pcWon, long *pcFell, long *pcNone)
+{
+  flag fIn = isrc >= 0 && isrc < cEphSrcBuiltIn;
+
+  if (pcWon != NULL)
+    *pcWon = fIn ? rgcEphSrcWon[isrc] : 0;
+  if (pcFell != NULL)
+    *pcFell = fIn ? rgcEphSrcFell[isrc] : 0;
+  if (pcNone != NULL)
+    *pcNone = cEphSrcNone;
+}
+
+void EphSrcTallyReset(void)
+{
+  ClearB((pbyte)rgcEphSrcWon, sizeof(rgcEphSrcWon));
+  ClearB((pbyte)rgcEphSrcFell, sizeof(rgcEphSrcFell));
+  cEphSrcNone = 0;
+}
+
 // Why nothing answered, when nothing did: the sources' own reasons, in
 // chain order. A chain of unavailable sources is the one failure that
 // looks exactly like a successful cast -- every body at 0Ari00'00", no
@@ -1421,14 +1448,19 @@ flag FEphSubmitChain(EPHQUERY *pq, CONST int *rgisrcChain, int cisrc)
       if (pq->rgisrc[i] == ephSrcNone && pq->rgrow[i].nErr == ephErrNone) {
         pq->rgisrc[i] = rgisrcChain[isrc];
         pq->rgrow[i].szSrc = pephsrc->szKey;
-        if (isrc > 0)
+        rgcEphSrcWon[rgisrcChain[isrc]]++;
+        if (isrc > 0) {
           fFallback = fTrue;
+          rgcEphSrcFell[rgisrcChain[isrc]]++;
+        }
       }
   }
   fEphFallbackServed = fFallback;
   for (i = 0; i < pq->cobj; i++)
     if (pq->rgisrc[i] != ephSrcNone)
       fAny = fTrue;
+    else
+      cEphSrcNone++;
   return fAny;
 }
 

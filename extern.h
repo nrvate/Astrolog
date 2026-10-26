@@ -639,6 +639,8 @@ extern flag FEphReadRaw P((CONST EPHQUERY *, int, real *));
 extern CONST char *SzEphSourceDefault P((void));
 extern CONST char *SzEphSourceForKey P((CONST char *));
 extern flag FEphChainBeyondDialog P((void));
+extern void EphSrcTally P((int, long *, long *, long *));
+extern void EphSrcTallyReset P((void));
 extern void SzEphChainHead P((CONST char *, char *, int));
 extern void EphSourceChanged P((void));
 extern int IEphParamFromKey P((CONST char *));

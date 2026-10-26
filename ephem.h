@@ -349,6 +349,9 @@ extern flag FEphElemGet(int i, double *pjdEpoch, int *pnEquinox,
 extern EPHSRCDEF ephsrcPrometheia;
 extern void SzEphPromEmpty(int iep, flag fLong, char *sz, int cch);
 extern void SzEphPromSpans(char *sz, int cch);
+// The Debug window's report, and its statistics' reset (ephprom.cpp).
+extern CONST char *SzEphPromDebug(void);
+extern void EphPromDebugReset(void);
 #define cEphSrcPrometheia 1
 #else
 #define cEphSrcPrometheia 0

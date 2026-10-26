@@ -343,6 +343,12 @@ double REphPromElemDiff(CONST char *szFile)
 #include "ephreq.h"
 #include <prometheia/prometheia.h>
 #include <math.h>
+#include <stdarg.h>
+#include <time.h>
+#include <chrono>
+#include <set>
+#include <string>
+#include <vector>
 
 // --------------------------------------------------------------------------
 // Parameters (4.2/4.3). The DECLARATIONS are rows of the generated table
@@ -390,6 +396,50 @@ static flag fEphPromOpen = fFalse;      // resolved and opened
 static char szEphPromState[512];        // the current state text
 static char szEphPromEphe[300], szEphPromCat[300], szEphPromPert[300],
   szEphPromLong[300];
+
+// The Debug window's statistics (SzEphPromDebug(), below): kept by the
+// engine's open, FEphPromCompute() per object and FSubmitProm() per cast.
+typedef std::chrono::steady_clock EPHPROMCLOCK;
+
+enum {
+  epkPlanet, epkSmall, epkPoint, epkHypo, epkStar, epkMoon, epkCentre,
+  cepkStat
+};
+static CONST char *rgszEpkStat[cepkStat] = {"planets, Sun, Moon",
+  "catalog bodies", "nodes and apsides", "hypotheticals", "fixed stars",
+  "planetary moons", "planet centres"};
+static CONST char *rgszEpkShort[cepkStat] = {"planet", "catalog",
+  "node/apse", "hypothet.", "star", "moon", "centre"};
+
+#define cEphPromHist 24    // log2 microsecond buckets: <1us .. >=8s
+
+typedef struct _ephpromlast {
+  int naif, nKind;
+  int iObjQuery;           // the Astrolog query's index, -1 if none
+  double rUs, rSigma;      // rSigma < 0: no covariance
+  flag fSigmaAsked;        // the Debug window has asked for rSigma
+  uint16_t nErr;
+  char szName[48], szSrc[160], szErr[256];
+} EPHPROMLAST;
+
+static struct {
+  long cObj, cOk, rgcKind[cepkStat], rgcErr[16];
+  long rgcHist[cEphPromHist];
+  double rUsTotal, rUsMax, rgUsKind[cepkStat];
+  char szMax[64];
+  long cCold, cWarm;               // catalog bodies, first time and after
+  double rUsCold, rUsWarm;
+  long cCast, cCastObj, cHandedOn, cNoForm;
+  double rUsCast, rUsCastMax;
+  long cOpen;
+  double rMsOpen;
+  time_t tOpen, tReset;
+  double rCastJd;
+  int cLastObj;
+  double rUsLastCast;
+} sEPS;
+static std::set<int> setEphPromSeen;   // catalog bodies computed so far
+static std::vector<EPHPROMLAST> rgEphPromLast, rgEphPromCur;
 
 // What the open engine was opened FROM, so a parameter that has moved
 // since is noticed here rather than announced from elsewhere. A
@@ -835,6 +885,7 @@ flag FEphPromStart(char *szWhy, int cch)
         prometheia_abi_version(), PROMETHEIA_ABI_VERSION);
     return fFalse;
   }
+  EPHPROMCLOCK::time_point tOpen0 = EPHPROMCLOCK::now();
   if (prometheia_engine_open(szEphPromEphe, &pephProm, &err) !=
     PROMETHEIA_OK) {
     pephProm = NULL;
@@ -894,6 +945,10 @@ flag FEphPromStart(char *szWhy, int cch)
       rLong = RTidAccOfDenum(res.denum);
     prometheia_engine_set_delta_t(pephProm, FEnumDeltaTProm, NULL);
     fEphPromOpen = fTrue;
+    sEPS.cOpen++;
+    sEPS.tOpen = time(NULL);
+    sEPS.rMsOpen = std::chrono::duration<double, std::milli>(
+      EPHPROMCLOCK::now() - tOpen0).count();
     if (rLong != 0.0 && rLong != rEphPromTidAcc)
       sprintf2(S(szEphPromState), "ready: %s (the long-span file's lunar "
         "tidal term differs; Delta-T uses the main file's)",
@@ -1085,6 +1140,95 @@ flag FEphPromStarResolve(CONST char *sz, int *pidx, uint16_t *pnErr,
 // parts plus the i64 product of row and step, converted once to double,
 // exactly as the spec's own arithmetic; a list row was summed by the
 // host.
+// --------------------------------------------------------------------------
+// What the engine has done this session, for Ephemeris Settings' Debug
+// window (SzEphPromDebug() below). Kept by FEphPromCompute() per object and
+// by FSubmitProm() per cast; cheap enough to keep always -- two clock reads
+// an object -- and reset only when asked.
+
+
+void EphPromDebugReset(void)
+{
+  time_t tOpen = sEPS.tOpen;
+  double rMsOpen = sEPS.rMsOpen;
+  long cOpen = sEPS.cOpen;
+
+  memset(&sEPS, 0, sizeof(sEPS));
+  setEphPromSeen.clear();
+  rgEphPromLast.clear();
+  sEPS.tReset = time(NULL);
+  // The engine's opening is not a statistic of the session's casts: it
+  // stays, so a reset does not make the files look never opened.
+  sEPS.tOpen = tOpen; sEPS.rMsOpen = rMsOpen; sEPS.cOpen = cOpen;
+}
+
+static int NEpkOf(CONST eph::Object *po, int naif)
+{
+  switch (po->kind) {
+  case eph::kObjOrbitPoint: return epkPoint;
+  case eph::kObjHypothetical: case eph::kObjElements: return epkHypo;
+  case eph::kObjStar: return epkStar;
+  default:
+    if (naif >= 1000000)
+      return epkSmall;
+    // NAIF's numbering: a planet's centre is its barycentre's digit and
+    // 99, its moons the same digit and 01 to 98. Mercury, Venus and the
+    // Earth are their own centres, and the Moon is 301.
+    if (naif >= 400 && naif <= 999 && naif % 100 == 99)
+      return epkCentre;
+    if (naif >= 401 && naif <= 998)
+      return epkMoon;
+    return epkPlanet;
+  }
+}
+
+static void EphPromStatObj(CONST eph::Object *po, CONST EPHPROMANSWER *pa,
+  double rUs, CONST char *szSrc, double rSigma, flag fStar)
+{
+  EPHPROMLAST el;
+  int nKind = fStar ? epkStar : NEpkOf(po, pa->naif), iB;
+  double r;
+
+  sEPS.cObj++;
+  if (pa->rowsOk > 0) {
+    sEPS.cOk++;
+    sEPS.rgcKind[nKind]++;
+    sEPS.rgUsKind[nKind] += rUs;
+  } else
+    sEPS.rgcErr[pa->errCode < 16 ? pa->errCode : 15]++;
+  sEPS.rUsTotal += rUs;
+  for (iB = 0, r = 1.0; iB < cEphPromHist - 1 && rUs >= r; iB++, r *= 2.0)
+    ;
+  sEPS.rgcHist[iB]++;
+  el.naif = fStar ? -1 : pa->naif;
+  el.nKind = nKind;
+  el.iObjQuery = -1;
+  el.rUs = rUs;
+  el.rSigma = rSigma;
+  el.fSigmaAsked = rSigma >= 0.0;
+  el.nErr = pa->rowsOk > 0 ? 0 : pa->errCode;
+  sprintf2(S(el.szName), "%s", po->name.c_str());
+  if (!FSzSet(el.szName) && !fStar)
+    sprintf2(S(el.szName), "%d", (int)po->naif);
+  sprintf2(S(el.szSrc), "%s", szSrc != NULL ? szSrc : "");
+  sprintf2(S(el.szErr), "%s", pa->rowsOk > 0 ? "" : pa->szErr);
+  if (rUs > sEPS.rUsMax) {
+    sEPS.rUsMax = rUs;
+    sprintf2(S(sEPS.szMax), "%s", el.szName);
+  }
+  // A catalog body's first position integrates its orbit from the
+  // record's epoch; later ones reuse the trajectory. The two are kept
+  // apart, because together they average into a number that is neither.
+  if (nKind == epkSmall && pa->rowsOk > 0) {
+    if (setEphPromSeen.insert(pa->naif).second) {
+      sEPS.cCold++; sEPS.rUsCold += rUs;
+    } else {
+      sEPS.cWarm++; sEPS.rUsWarm += rUs;
+    }
+  }
+  rgEphPromCur.push_back(el);
+}
+
 static double RInstantRow(CONST EPHPROMQ *pq, int iRow)
 {
   if (pq->prgJd != NULL)
@@ -1196,6 +1340,7 @@ flag FEphPromCompute(CONST EPHPROMQ *pq, EPHPROMANSWER rga[])
   if (pephProm == NULL)
     return fFalse;
   g_rDeltaTSec = pq->rDeltaTSec;
+  rgEphPromCur.clear();
   for (int iObj = 0; iObj < pq->cobj; iObj++) {
     CONST eph::Object *po = &pq->pargobj[iObj];
     EPHPROMANSWER *pa = &rga[iObj];
@@ -1203,6 +1348,17 @@ flag FEphPromCompute(CONST EPHPROMQ *pq, EPHPROMANSWER rga[])
     prometheia_options opts;
     flag fStar = fFalse;
     int naif = po->naif, iStar = -1;
+    // The Debug window's record of this object, written however the body
+    // below leaves it -- most of its exits are a continue.
+    struct STATGUARD {
+      CONST eph::Object *po; EPHPROMANSWER *pa; flag *pfStar;
+      EPHPROMCLOCK::time_point t0;
+      char szSrc[160]; double rSigma;
+      ~STATGUARD() {
+        EphPromStatObj(po, pa, std::chrono::duration<double, std::micro>(
+          EPHPROMCLOCK::now() - t0).count(), szSrc, rSigma, *pfStar);
+      }
+    } sg = {po, pa, &fStar, EPHPROMCLOCK::now(), "", -1.0};
 
     pa->rowsOk = 0;
     pa->errCode = eph::kOErrNone;
@@ -1378,6 +1534,8 @@ flag FEphPromCompute(CONST EPHPROMQ *pq, EPHPROMANSWER rga[])
         continue;
       }
       FillRow(ppf, &r, pa, rDeltaT, iRow);
+      sprintf2(S(sg.szSrc), "%s", r.source != NULL ? r.source : "");
+      sg.rSigma = (r.flags & PROMETHEIA_HAS_SIGMA) ? r.sigma_arcsec : -1.0;
       if (!fStar && pa->rowsOk == 0)
         pa->naif = naif;
       pa->rowsOk++;
@@ -1494,8 +1652,31 @@ static flag FSubmitProm(EPHQUERY *pq)
   q.rDeltaTSec = req.deltaTSec;
   q.cprof = (int)req.profiles.size(); q.pargprof = req.profiles.data();
   q.cobj = (int)req.objs.size(); q.pargobj = req.objs.data();
-  if (!FEphPromCompute(&q, rga))
-    return fFalse;               // the engine could not serve the cast
+  {
+    EPHPROMCLOCK::time_point t0 = EPHPROMCLOCK::now();
+    flag fOk = FEphPromCompute(&q, rga);
+    double rUs = std::chrono::duration<double, std::micro>(
+      EPHPROMCLOCK::now() - t0).count();
+    if (!fOk)
+      return fFalse;             // the engine could not serve the cast
+    // The Debug window's cast: its objects named as the chart names them.
+    sEPS.cCast++;
+    sEPS.cCastObj += (long)rgEphPromCur.size();
+    sEPS.rUsCast += rUs;
+    if (rUs > sEPS.rUsCastMax)
+      sEPS.rUsCastMax = rUs;
+    sEPS.rUsLastCast = rUs;
+    sEPS.rCastJd = pq->rJD;
+    for (i = 0; i < pq->cobj; i++)
+      if (!rgfAsked[i])
+        sEPS.cNoForm++;
+    for (iM = 0; iM < cMap; iM++)
+      if (rgmap[iM].iObjReq < (int)rgEphPromCur.size())
+        rgEphPromCur[rgmap[iM].iObjReq].iObjQuery = pq->rgobj[
+          rgmap[iM].iObjQuery];
+    rgEphPromLast = rgEphPromCur;
+    sEPS.cLastObj = (int)rgEphPromLast.size();
+  }
 
   for (iM = 0; iM < cMap; iM++) {
     i = rgmap[iM].iObjQuery;
@@ -1503,6 +1684,7 @@ static flag FSubmitProm(EPHQUERY *pq)
     prow = &pq->rgrow[i];
     if (rga[iO].rowsOk < 1) {
       prow->nErr = rga[iO].errCode;   // the A.17 values are the ephErr* ones
+      sEPS.cHandedOn++;
       continue;
     }
     // Star rows are the entry point's own six (ephem.h), and they carry
@@ -1581,6 +1763,387 @@ static int NLookupProm(CONST char *sz, EPHMATCH *rgm, int cMax)
     cm++;
   }
   return cm;
+}
+
+// --------------------------------------------------------------------------
+// The Debug window's report: everything this program knows about the
+// engine, as text a user can read and paste into a bug report. Ephemeris
+// Settings' Debug button shows it (qtdialog.cpp), refreshing it live.
+
+static std::string strEphPromDebug;
+
+static void DbgAdd(CONST char *szFmt, ...)
+{
+  char sz[1024];
+  va_list ap;
+
+  va_start(ap, szFmt);
+  vsnprintf(sz, sizeof(sz), szFmt, ap);
+  va_end(ap);
+  strEphPromDebug += sz;
+}
+
+static void DbgDate(double jd, char *sz, int cch)
+{
+  int y, m;
+  double day;
+
+  prometheia_civil_from_jd(jd, &y, &m, &day);
+  sprintf2(sz, cch, "%04d-%02d-%02d", y, m, (int)day);
+}
+
+static void DbgCount(long l, char *sz, int cch)
+{
+  char szT[32];
+  int cch0, i, j = 0;
+
+  sprintf2(S(szT), "%ld", l);
+  cch0 = CchSz(szT);
+  for (i = 0; i < cch0 && j < cch - 1; i++) {
+    if (i > 0 && (cch0 - i) % 3 == 0 && szT[i-1] != '-' && j < cch - 2)
+      sz[j++] = ',';
+    sz[j++] = szT[i];
+  }
+  sz[j] = chNull;
+}
+
+// A time in microseconds, in the unit that reads best.
+static void DbgUs(double rUs, char *sz, int cch)
+{
+  if (rUs < 1000.0)
+    sprintf2(sz, cch, "%.1f us", rUs);
+  else if (rUs < 1000000.0)
+    sprintf2(sz, cch, "%.2f ms", rUs / 1000.0);
+  else
+    sprintf2(sz, cch, "%.2f s", rUs / 1000000.0);
+}
+
+// One file: where it is, its size and date, and what the setting says.
+static void DbgFile(CONST char *szLabel, CONST char *szPath, int iParam)
+{
+  struct stat st;
+  char szT[32];
+  CONST char *szSet = iParam >= 0 ? SzEphPromParam(iParam) : "";
+
+  if (!FSzSet(szPath)) {
+    DbgAdd("  %-20s (none)%s\n", szLabel, FSzSet(szSet) ? "" :
+      "  -- empty setting, and no default file found");
+    return;
+  }
+  DbgAdd("  %-20s %s\n", szLabel, szPath);
+  if (stat(szPath, &st) == 0) {
+    strftime(szT, sizeof(szT), "%Y-%m-%d %H:%M", localtime(&st.st_mtime));
+    DbgAdd("  %-20s %.2f MB, modified %s\n", "",
+      (double)st.st_size / 1048576.0, szT);
+  }
+  if (iParam >= 0)
+    DbgAdd("  %-20s %s%s%s\n", "", FSzSet(szSet) ? "named in settings: \"" :
+      "settings: empty, so the shipped default", szSet, FSzSet(szSet) ?
+      "\"" : "");
+}
+
+static CONST char *SzDbgErr(int nErr)
+{
+  static CONST char *rgsz[] = {"none", "unknown body", "unsupported",
+    "outside coverage", "data missing", "undefined point", "ambiguous",
+    "numerical failure", "internal error", "undefined here"};
+
+  return nErr >= 0 && nErr < (int)(sizeof(rgsz)/sizeof(*rgsz)) ?
+    rgsz[nErr] : "other";
+}
+
+CONST char *SzEphPromDebug(void)
+{
+  char sz[cchSzMax*2], szA[48], szB[48], szC[48];
+  int rgisrc[cEphSrcBuiltIn], cisrc, i, iB, cHist;
+  long cWon, cFell, cNone, lHistMax;
+  time_t tNow = time(NULL);
+
+  strEphPromDebug.clear();
+  strftime(szA, sizeof(szA), "%Y-%m-%d %H:%M:%S", localtime(&tNow));
+  DbgAdd("EPHEMERIS PROMETHEIA -- DEBUG                   %s\n", szA);
+  DbgAdd("The settings in force. What is typed in Ephemeris Settings takes "
+    "effect on OK.\n\n");
+
+  // The library and the engine.
+  DbgAdd("LIBRARY AND ENGINE\n");
+  DbgAdd("  %-20s Prometheia %s, ABI %d (this build compiled for %d)\n",
+    "library", prometheia_version(), prometheia_abi_version(),
+    PROMETHEIA_ABI_VERSION);
+  NEphPromState(S(sz));
+  DbgAdd("  %-20s %s\n", "state", FSzSet(sz) ? sz : "closed; it opens on "
+    "the next chart");
+  if (sEPS.cOpen > 0) {
+    strftime(szA, sizeof(szA), "%H:%M:%S", localtime(&sEPS.tOpen));
+    DbgAdd("  %-20s %ld time%s this session, the last at %s in %.1f ms\n",
+      "opened", sEPS.cOpen, sEPS.cOpen == 1 ? "" : "s", szA, sEPS.rMsOpen);
+  }
+  DbgAdd("  %-20s %d named fixed stars, built in\n", "stars",
+    prometheia_star_count());
+  if (pephProm != NULL)
+    DbgAdd("  %-20s %d named by token\n", "hypotheticals",
+      prometheia_hypothetical_count(pephProm));
+  {
+    char szFile[cchSzMax + 16];
+    int cSets = CEphPromElemSets(S(szFile));
+    DbgAdd("  %-20s %d element sets, %s\n", "fictitious bodies", cSets,
+      FSzSet(szFile) ? szFile : "compiled in (no seorbel.txt found)");
+  }
+  DbgAdd("\n");
+
+  // The files.
+  DbgAdd("FILES\n");
+  DbgFile("Planets", fEphPromOpen ? szEphPromEphe : NULL, epPromEphemeris);
+  DbgFile("Planets, other years", fEphPromOpen ? szEphPromLong : NULL,
+    epPromLongspan);
+  DbgFile("Asteroid catalog", fEphPromOpen ? szEphPromCat : NULL,
+    epPromCatalog);
+  DbgFile("Asteroid perturbers", fEphPromOpen ? szEphPromPert : NULL,
+    epPromPerturbers);
+  if (pephProm != NULL) {
+    int c = prometheia_engine_ephemeris_count(pephProm);
+    for (i = 0; i < c; i++) {
+      double jd0, jd1;
+      CONST char *szSrc = NULL;
+      prometheia_error err;
+      if (prometheia_engine_ephemeris_span(pephProm, i, &jd0, &jd1, &szSrc,
+        &err) != PROMETHEIA_OK)
+        continue;
+      DbgDate(jd0, S(szA)); DbgDate(jd1, S(szB));
+      DbgAdd("  %-20s %s to %s (JD %.1f to %.1f)%s%s\n", i == 0 ?
+        "planets answer" : "then", szA, szB, jd0, jd1, FSzSet(szSrc) ?
+        ": " : "", SzSet(szSrc));
+    }
+    if (c > 0)
+      DbgAdd("  %-20s %s\n", "", "outside these, the next source in the "
+        "chain answers");
+  }
+  if (!fEphPromOpen)
+    DbgAdd("  (the engine is not open: files are resolved when it opens)\n");
+  DbgAdd("\n");
+
+  // Where a bare file name is looked for, in order (FEphPromFindFile()).
+  DbgAdd("SEARCH PATH (a bare file name is looked for here, in order)\n");
+  for (i = 0, iB = 1; i < 10; i++) {
+    char szDir[cchSzMax];
+    if (!FSzSet(us.rgszPath[i]))
+      continue;
+    SzPathDirAbs(us.rgszPath[i], S(szDir));
+    DbgAdd("  %2d. %-50s -Yi%d%s\n", iB++, szDir, i, FDirExists(szDir) ? "" :
+      "  (not there)");
+  }
+  {
+    char szDir[cchSzMax];
+    SzPathDirAbs("ephem", S(szDir));
+    DbgAdd("  %2d. %-50s the program's own%s\n", iB++, szDir,
+      FDirExists(szDir) ? "" : "  (not there)");
+  }
+  DbgAdd("  %2d. %-50s the working directory's\n\n", iB, "ephe");
+
+  // The chain, and what each source in it has answered.
+  DbgAdd("EPHEMERIS SOURCE CHAIN\n");
+  DbgAdd("  %-20s %s\n", "setting", SzSet(us.szEphemSource));
+  cisrc = CEphChainSrc(us.szEphemSource, rgisrc, cEphSrcBuiltIn);
+  for (i = 0; i < cisrc; i++) {
+    EPHSRCDEF *pes = PephsrcGet(rgisrc[i]);
+    if (pes == NULL)
+      continue;
+    EphSrcTally(rgisrc[i], &cWon, &cFell, NULL);
+    DbgCount(cWon, S(szA)); DbgCount(cFell, S(szB));
+    DbgAdd("  %d. %-17s answered %s position%s%s%s%s\n", i + 1, pes->szName,
+      szA, cWon == 1 ? "" : "s", i > 0 && cWon > 0 ? ", " : "",
+      i > 0 && cWon > 0 ? szB : "", i > 0 && cWon > 0 ?
+      " after a source ahead of it declined" : "");
+  }
+  EphSrcTally(-1, NULL, NULL, &cNone);
+  if (cNone > 0) {
+    DbgCount(cNone, S(szA));
+    DbgAdd("  %-20s %s position%s no source could answer\n", "", szA,
+      cNone == 1 ? "" : "s");
+  }
+  DbgAdd("\n");
+
+  // Time.
+  DbgAdd("TIME\n");
+  DbgDate(is.JD, S(szA));
+  DbgAdd("  %-20s %s, JD %.5f UT\n", "current chart", szA, (double)is.JD);
+  DbgAdd("  %-20s %.3f s at the current chart (tidal term %.2f\"/cy^2, "
+    "matched to the open DE)\n", "Delta T", (double)RDeltaTV4Sec(is.JD,
+    rEphPromTidAcc), rEphPromTidAcc);
+  DbgAdd("\n");
+
+  // The statistics.
+  if (sEPS.tReset != 0) {
+    strftime(szA, sizeof(szA), "%H:%M:%S", localtime(&sEPS.tReset));
+    DbgAdd("STATISTICS (since reset at %s)\n", szA);
+  } else
+    DbgAdd("STATISTICS (since the program started)\n");
+  DbgCount(sEPS.cCast, S(szA)); DbgCount(sEPS.cObj, S(szB));
+  DbgAdd("  %-20s %s cast%s, %s position%s computed\n", "work", szA,
+    sEPS.cCast == 1 ? "" : "s", szB, sEPS.cObj == 1 ? "" : "s");
+  if (sEPS.cObj > 0) {
+    DbgCount(sEPS.cOk, S(szA)); DbgCount(sEPS.cObj - sEPS.cOk, S(szB));
+    DbgAdd("  %-20s %s answered, %s declined and handed on\n", "outcome",
+      szA, szB);
+    for (i = 1; i < 16; i++)
+      if (sEPS.rgcErr[i] > 0) {
+        DbgCount(sEPS.rgcErr[i], S(szA));
+        DbgAdd("  %-20s   %s %s\n", "", szA, SzDbgErr(i));
+      }
+    if (sEPS.cNoForm > 0) {
+      DbgCount(sEPS.cNoForm, S(szA));
+      DbgAdd("  %-20s %s object%s with no form this engine can be asked "
+        "for (the South Node, ...), passed straight on\n", "", szA,
+        sEPS.cNoForm == 1 ? "" : "s");
+    }
+    DbgUs(sEPS.rUsTotal / sEPS.cObj, S(szA)); DbgUs(sEPS.rUsMax, S(szB));
+    DbgAdd("  %-20s %s mean per position; slowest %s (%s)\n", "speed", szA,
+      szB, sEPS.szMax);
+    if (sEPS.rUsTotal > 0.0)
+      DbgAdd("  %-20s %.0f positions a second of engine time\n", "",
+        sEPS.cObj / (sEPS.rUsTotal / 1000000.0));
+    if (sEPS.cCast > 0) {
+      DbgUs(sEPS.rUsCast / sEPS.cCast, S(szA)); DbgUs(sEPS.rUsCastMax,
+        S(szB));
+      DbgAdd("  %-20s %s mean per cast, %s the longest\n", "", szA, szB);
+    }
+    DbgAdd("  %-20s\n", "by kind");
+    for (i = 0; i < cepkStat; i++)
+      if (sEPS.rgcKind[i] > 0) {
+        DbgCount(sEPS.rgcKind[i], S(szA));
+        DbgUs(sEPS.rgUsKind[i] / sEPS.rgcKind[i], S(szB));
+        DbgAdd("  %-20s   %-20s %10s, %s each\n", "", rgszEpkStat[i], szA,
+          szB);
+      }
+    if (sEPS.cCold > 0) {
+      DbgUs(sEPS.rUsCold / sEPS.cCold, S(szA));
+      if (sEPS.cWarm > 0)
+        DbgUs(sEPS.rUsWarm / sEPS.cWarm, S(szB));
+      DbgCount(sEPS.cCold, S(szC));
+      DbgAdd("  %-20s %s catalog bod%s integrated, %s each the first time"
+        "%s%s%s\n", "trajectories", szC, sEPS.cCold == 1 ? "y" : "ies", szA,
+        sEPS.cWarm > 0 ? "; " : "", sEPS.cWarm > 0 ? szB : "",
+        sEPS.cWarm > 0 ? " each after that, from the cached trajectory" :
+        "");
+    }
+
+    // The distribution, as a histogram of log2 microsecond buckets, and
+    // the percentiles read off it.
+    for (iB = cEphPromHist - 1; iB > 0 && sEPS.rgcHist[iB] == 0; iB--)
+      ;
+    cHist = iB + 1;
+    for (i = 0; i < cHist && sEPS.rgcHist[i] == 0; i++)
+      ;
+    lHistMax = 1;
+    for (iB = 0; iB < cHist; iB++)
+      if (sEPS.rgcHist[iB] > lHistMax)
+        lHistMax = sEPS.rgcHist[iB];
+    {
+      CONST double rgrP[3] = {0.50, 0.90, 0.99};
+      CONST char *rgszP[3] = {"p50", "p90", "p99"};
+      char szP[3][24];
+      for (int ip = 0; ip < 3; ip++) {
+        long lAt = 0, lWant = (long)ceil(rgrP[ip] * sEPS.cObj);
+        for (iB = 0; iB < cHist; iB++) {
+          lAt += sEPS.rgcHist[iB];
+          if (lAt >= lWant)
+            break;
+        }
+        DbgUs(ldexp(1.0, iB), S(szP[ip]));
+      }
+      DbgAdd("  %-20s %s under %s, %s under %s, %s under %s\n",
+        "percentiles", rgszP[0], szP[0], rgszP[1], szP[1], rgszP[2], szP[2]);
+    }
+    DbgAdd("  %-20s\n", "time per position");
+    for (iB = i; iB < cHist; iB++) {
+      char szBar[52];
+      int cBar = (int)(50.0 * sEPS.rgcHist[iB] / lHistMax + 0.5);
+      if (sEPS.rgcHist[iB] > 0 && cBar == 0)
+        cBar = 1;
+      memset(szBar, '#', cBar);
+      szBar[cBar] = chNull;
+      DbgUs(ldexp(1.0, iB), S(szA));
+      DbgCount(sEPS.rgcHist[iB], S(szB));
+      DbgAdd("  %-14s<%9s %9s %s\n", "", szA, szB, szBar);
+    }
+  }
+  DbgAdd("\n");
+
+  // The last cast, object by object.
+  if (!rgEphPromLast.empty()) {
+    std::vector<std::string> rgstrSrc;
+    flag fNoCov = fFalse;
+    // Each catalog body's uncertainty, asked for here and once: a cast
+    // does not ask -- it costs the library twelve extra integrations a
+    // body -- so the Debug window does, for the bodies of the cast it
+    // shows, and keeps the answer with the row.
+    for (i = 0; i < (int)rgEphPromLast.size(); i++) {
+      EPHPROMLAST *pl = &rgEphPromLast[i];
+      prometheia_options opt;
+      prometheia_result res;
+      prometheia_error err;
+      if (pl->fSigmaAsked || pl->nKind != epkSmall || pl->nErr != 0 ||
+        pephProm == NULL)
+        continue;
+      pl->fSigmaAsked = fTrue;
+      prometheia_options_init(&opt);
+      opt.sigma = 1;
+      if (prometheia_calc_ut(pephProm, pl->naif, sEPS.rCastJd, &opt, &res,
+        &err) == PROMETHEIA_OK && (res.flags & PROMETHEIA_HAS_SIGMA))
+        pl->rSigma = res.sigma_arcsec;
+    }
+    DbgDate(sEPS.rCastJd, S(szA));
+    DbgUs(sEPS.rUsLastCast, S(szB));
+    DbgAdd("LAST CAST (%s, JD %.5f UT, %d object%s in %s)\n", szA,
+      sEPS.rCastJd, sEPS.cLastObj, sEPS.cLastObj == 1 ? "" : "s", szB);
+    DbgAdd("  %-14s %10s  %-10s %10s %11s  %s\n", "object", "NAIF/SPK",
+      "kind", "time", "1 sigma", "answered by");
+    for (i = 0; i < (int)rgEphPromLast.size(); i++) {
+      CONST EPHPROMLAST *pl = &rgEphPromLast[i];
+      char szN[24], szS[24];
+      int iSrc;
+      if (pl->naif > 0 && pl->naif != (int)eph::kNaifNone)
+        sprintf2(S(szN), "%d", pl->naif);
+      else
+        sprintf2(S(szN), "%s", "-");
+      if (pl->rSigma >= 0.0)
+        sprintf2(S(szS), "%.4f\"", pl->rSigma);
+      else {
+        sprintf2(S(szS), "%s", pl->nKind == epkSmall && pl->nErr == 0 ?
+          "n/a *" : "");
+        if (pl->nKind == epkSmall && pl->nErr == 0)
+          fNoCov = fTrue;
+      }
+      DbgUs(pl->rUs, S(szC));
+      if (pl->nErr == 0) {
+        // The engine's description of what answered, by a letter: the
+        // same few long strings would otherwise fill every row.
+        for (iSrc = 0; iSrc < (int)rgstrSrc.size() &&
+          rgstrSrc[iSrc] != pl->szSrc; iSrc++)
+          ;
+        if (iSrc == (int)rgstrSrc.size())
+          rgstrSrc.push_back(pl->szSrc);
+        sprintf2(S(sz), "[%c]", 'A' + Min(iSrc, 25));
+      } else if (pl->nErr == eph::kOErrUnknownBody)
+        sprintf2(S(sz), "declined: %s, to the next source",
+          SzDbgErr(pl->nErr));
+      else
+        sprintf2(S(sz), "declined: %s (%s)", SzDbgErr(pl->nErr),
+          pl->szErr);
+      DbgAdd("  %-14.14s %10s  %-10s %10s %11s  %s\n", pl->iObjQuery >= 0 ?
+        szObjDisp[pl->iObjQuery] : pl->szName, szN, rgszEpkShort[pl->nKind],
+        szC, szS, sz);
+    }
+    for (i = 0; i < (int)rgstrSrc.size(); i++)
+      DbgAdd("  %s[%c] %s\n", i == 0 ? "\n" : "", 'A' + Min(i, 25),
+        rgstrSrc[i].c_str());
+    if (fNoCov)
+      DbgAdd("  * The catalog's record carries no covariance for this body, "
+        "so the library\n    cannot say how far its orbit could be off.\n");
+  } else
+    DbgAdd("LAST CAST\n  (none yet: Prometheia has not been asked for a "
+      "chart this session)\n");
+  return strEphPromDebug.c_str();
 }
 
 EPHSRCDEF ephsrcPrometheia = {
