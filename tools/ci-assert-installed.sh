@@ -50,15 +50,20 @@ if [ "$(head -c 2 "$bin")" = "#!" ]; then
   exit 1
 fi
 
-chart="-qa 6 15 1990 12:00 0 122W19 47N36 -R1 _X"
+# -YQ 0 and </dev/null, both: with no astrolog.as found -- the very case
+# this must refuse -- the compiled default pages a long chart at 24 rows
+# and waits on stdin for Return. Where stdin is a socket that never closes
+# (a session's shell tool) that waited an hour; where it is closed (a CI
+# runner) the program quit after one page, and only luck put Chiron on it.
+chart="-qa 6 15 1990 12:00 0 122W19 47N36 -R1 _X -YQ 0"
 dir=$(dirname "$bin"); name=$(basename "$bin")
 for how in path name; do
   for src in "" "-bE prometheia"; do
     # shellcheck disable=SC2086
     if [ "$how" = path ]; then
-      out=$(cd / && env -u ASTROLOG "$bin" $chart $src 2>&1) || true
+      out=$(cd / && env -u ASTROLOG "$bin" $chart $src </dev/null 2>&1) || true
     else
-      out=$(cd / && env -u ASTROLOG PATH="$dir:/usr/bin:/bin" "$name" $chart $src 2>&1) || true
+      out=$(cd / && env -u ASTROLOG PATH="$dir:/usr/bin:/bin" "$name" $chart $src </dev/null 2>&1) || true
     fi
     what="run by $how from /${src:+, $src}"
     if [ -z "$out" ]; then
