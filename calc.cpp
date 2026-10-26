@@ -1247,7 +1247,8 @@ void ComputeEphem(real t)
       // come back, because the rest had not (found 2026-10-25).
       if (eq.cobj > 0 && !FEphSubmit(&eq) && !fGeoAny && !is.fNoEphFile &&
         !FEphChainConnecting()) {
-        char szNo[cchSzMax];
+        // A line: the reasons alone can be longer than cchSzMax.
+        char szNo[cchSzLine];
         is.fNoEphFile = fTrue;
         sprintf2(S(szNo), "No ephemeris source could answer this chart%s%s. "
           "Every body reads 0Ari00'00\".",
@@ -3308,7 +3309,8 @@ static char szJplFileSet[cchSzMax*2] = "";
 void SwissEnsurePath()
 {
   static EDL edl;
-  char szPath[AS_MAXCH], szExe[cchSzMax], szT[cchSzMax], szJplDir[cchSzMax];
+  char szPath[AS_MAXCH], szExe[cchSzMax], szData[cchSzMax], szT[cchSzMax],
+    szJplDir[cchSzMax];
   CONST char *pchDir, *pchJpl;
   char *pch;
   int i, cLost, cFound;
@@ -3327,26 +3329,21 @@ void SwissEnsurePath()
     return;
   ClearB((pbyte)&edl, sizeof(EDL));
 
-  // Get directory containing Astrolog executable.
-#ifdef WIN
-  GetModuleFileName(wi.hinst, szExe, cchSzMax);
-#else
-  sprintf2(S(szExe), "%s", is.szProgName != NULL ? is.szProgName : "");
-#endif
-  for (pch = szExe; *pch; pch++)
-    ;
-  while (pch > szExe && *pch != chDirSep)
-    pch--;
-  if (*pch == chDirSep)
-    pch++;
-  *pch = chNull;
+  // The directories of the executable and of its data, which differ only
+  // for an installed copy (GetDataDir(), io.cpp).
+  GetExeDir(S(szExe));
+  GetDataDir(S(szData));
 
-  // The current directory, and the one holding the executable.
+  // The current directory, the one holding the executable, and the
+  // program's data directory when that is somewhere else.
   AddDirEphemQ(&edl, ".", fFalse);
   AddDirEphemQ(&edl, szExe, fFalse);
+  if (!FEqSz(szData, szExe))
+    AddDirEphemQ(&edl, szData, fFalse);
 
   // The directories named by the -Yi switch. A relative one is relative
-  // to the EXECUTABLE, not to the working directory, which is worth
+  // to the program's DATA directory -- the executable's, but for an
+  // installed copy -- not to the working directory, which is worth
   // knowing before writing a script: a bundle whose binary sits in
   // Contents/MacOS turned a cwd-relative path into that path prefixed
   // with itself. See QT_TESTING.md.
@@ -3356,7 +3353,7 @@ void SwissEnsurePath()
       continue;
     if ((FCapCh(*pchDir) || FUncapCh(*pchDir) || FNumCh(*pchDir)) &&
       !(pchDir[1] == ':'))
-      sprintf2(S(szT), "%s%s", szExe, pchDir);
+      sprintf2(S(szT), "%s%s", szData, pchDir);
     else
       sprintf2(S(szT), "%s", pchDir);
     AddDirEphemQ(&edl, szT, fTrue);

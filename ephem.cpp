@@ -647,7 +647,8 @@ flag FEphTestSource(CONST char *szKey, char *sz, int cch)
   CONST int rgobj[3] = {oSun, oMoo, oChi};
   EPHSRCDEF *pes;
   EPHCAPS caps;
-  char szWhy[cchSzMax*2], szCap[cchSzMax*2], szT[cchSzMax*3];
+  // szT a line: it receives SzEphNoSourceWhy(), which is one.
+  char szWhy[cchSzMax*2], szCap[cchSzMax*2], szT[cchSzLine];
   char *pch;
   int isrc, i, nState;
   flag fNoEphSav, rgfOk[3], fSubst = fFalse, fOk, fAny;
@@ -1286,8 +1287,9 @@ static flag fEphFallbackServed = fFalse;
 // looks exactly like a successful cast -- every body at 0Ari00'00", no
 // error, the houses correct because they are computed from the time and
 // place rather than from an ephemeris. CLAUDE.md names that reading as
-// the trap it is; this is the host saying so out loud.
-char szEphNoSourceWhy[cchSzMax] = "";
+// the trap it is; this is the host saying so out loud. A line, not a
+// cchSzMax: it holds two sources' reasons, each up to that long.
+char szEphNoSourceWhy[cchSzLine] = "";
 
 CONST char *SzEphNoSourceWhy()
 {
@@ -1299,7 +1301,11 @@ CONST char *SzEphNoSourceWhy()
 // its own words. The walk clears it before each submit and reports it in
 // place of "attempted nothing" when the source filled it in, so a chain
 // with no source behind the one that declined says why it declined.
-static char szEphSubmitWhy[cchSzDef] = "";
+// cchSzMax, not cchSzDef: Prometheia's "no planets file" names the three
+// files it looked for and what to set, about 150 characters, and an 80
+// byte buffer cut it off at the second file name -- the remedy, the one
+// part the reader needs, was what was lost (found 2026-10-25).
+static char szEphSubmitWhy[cchSzMax] = "";
 
 void SetEphSubmitWhy(CONST char *sz)
 {
@@ -1344,7 +1350,7 @@ flag FEphFallbackNotice()
 flag FEphSubmitChain(EPHQUERY *pq, CONST int *rgisrcChain, int cisrc)
 {
   EPHSRCDEF *pephsrc;
-  char szWhy[cchSzDef];
+  char szWhy[cchSzMax];
   int isrc, i, cWhy = 0;
   flag fFallback = fFalse, fAny = fFalse;
 
@@ -1354,7 +1360,7 @@ flag FEphSubmitChain(EPHQUERY *pq, CONST int *rgisrcChain, int cisrc)
     if (rgisrcChain[isrc] < 0 || rgisrcChain[isrc] >= cEphSrcBuiltIn)
       continue;
     pephsrc = PephsrcGet(rgisrcChain[isrc]);
-    if (!pephsrc->FAvailable(szWhy, cchSzDef)) {
+    if (!pephsrc->FAvailable(S(szWhy))) {
       // Why, in the source's own words, in case NOTHING answers: a chain
       // whose every source is unavailable used to cast a chart of zeros
       // and say nothing at all.
@@ -1363,7 +1369,8 @@ flag FEphSubmitChain(EPHQUERY *pq, CONST int *rgisrcChain, int cisrc)
       // (-Wformat-truncation) the moment the first draft was audited.
       if (cWhy < 2) {
         int cchAt = CchSz(szEphNoSourceWhy);
-        sprintf2(szEphNoSourceWhy + cchAt, cchSzMax - cchAt, "%s%s (%s)",
+        sprintf2(szEphNoSourceWhy + cchAt,
+          (int)sizeof(szEphNoSourceWhy) - cchAt, "%s%s (%s)",
           cWhy > 0 ? "; " : "", pephsrc->szKey, szWhy);
       }
       cWhy++;
@@ -1376,7 +1383,8 @@ flag FEphSubmitChain(EPHQUERY *pq, CONST int *rgisrcChain, int cisrc)
     if (!pephsrc->FSubmit(pq)) {
       if (cWhy < 2) {
         int cchAt = CchSz(szEphNoSourceWhy);
-        sprintf2(szEphNoSourceWhy + cchAt, cchSzMax - cchAt,
+        sprintf2(szEphNoSourceWhy + cchAt,
+          (int)sizeof(szEphNoSourceWhy) - cchAt,
           "%s%s (%s)", cWhy > 0 ? "; " : "", pephsrc->szKey,
           FSzSet(szEphSubmitWhy) ? szEphSubmitWhy : "attempted nothing");
       }

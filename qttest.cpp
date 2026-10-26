@@ -23803,12 +23803,18 @@ static void TestEphNoSourceQt()
   // an ephemeris file that is not there cast every body at 0Ari00'00" with
   // nothing said (found 2026-10-24). Cast for real: the withholding is in
   // CastChart(), not in the walk.
+  // The path is long on purpose. The reason passed through two 80 byte
+  // buffers on its way to the warning, and Prometheia's own "no planets
+  // file" text is about 150 characters, so the reader lost the second
+  // half -- the file names and what to set (found 2026-10-25). A path
+  // past 80 characters puts "was not found" beyond where they cut.
   {
-    char szCap[cchSzMax*2], szState[cchSzMax], *szEphSav = NULL;
+    char szCap[cchSzLine], szState[cchSzMax], *szEphSav = NULL;
     FCloneSz(us.rgszEphParam[epPrometheiaEphemeris], &szEphSav);
     {
       EphSelBorrow bChain("prometheia");
-      FEphParamSet(epPrometheiaEphemeris, "/nonexistent/missing-de440.440");
+      FEphParamSet(epPrometheiaEphemeris, "/nonexistent/a-directory-whose-"
+        "name-runs-past-eighty-characters/missing-de440.440");
       is.fNoEphFile = fFalse;
       SetWarningCapture(szCap, sizeof(szCap));
       CastChart(0);
@@ -23817,8 +23823,9 @@ static void TestEphNoSourceQt()
         esFailed && !FEphChainConnecting(), "an engine that could not open "
         "has failed and is not connecting (%s)", szState);
       Check(strstr(szCap, "No ephemeris source could answer") != NULL &&
-        strstr(szCap, "missing-de440.440") != NULL,
-        "and the cast says so, naming the file (%s)", szCap);
+        strstr(szCap, "missing-de440.440' was not found") != NULL &&
+        strstr(szCap, "Every body reads") != NULL,
+        "and the cast says so, naming the file, whole (%s)", szCap);
       FEphParamSet(epPrometheiaEphemeris, szEphSav);
     }
     DeallocatePIf(szEphSav);

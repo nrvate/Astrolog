@@ -80,10 +80,13 @@ make -j4          # ./astrolog (console) and ./astrolog-qt (windowed)
 make install      # optional: both on PATH, plus a menu entry and icons
 ```
 
-`make install` leaves the data where it is — the ephemeris, the atlas,
-the fonts, `astrolog.as` — and installs wrappers that run the in-tree
-binaries, so the checkout has to stay put. `PREFIX=$HOME/.local` needs no
-root.
+`make install` copies both programs to `/usr/local/bin` and their data
+— the ephemeris and Prometheia's data, the atlas, the fonts, the shipped
+`astrolog.as` — to `/usr/local/share/astrolog`, so the checkout can be
+moved or deleted afterwards. `PREFIX=$HOME/.local` needs no root. Your
+own settings go where "File / Save Program Settings" puts them, the
+working directory by default, and that copy is read before the shipped
+one.
 
 Every release stays; nothing is ever pruned.
 
@@ -144,8 +147,8 @@ plain `make` builds the stock X11 version and the Qt port together, and
 `make all` builds the five release builds -- the console, the Qt port,
 its test binary and the two Windows ones.
 
-Re-run `make install` if you move the checkout, or `make uninstall` to
-remove what it wrote.
+`make install` again after a `git pull` updates the installed copy, and
+`make uninstall` (same `PREFIX`) removes what it wrote.
 
 ## Status
 

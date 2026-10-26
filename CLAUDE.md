@@ -309,10 +309,14 @@ make check                       # what CI used to run on every push:
                                  # audit, the Swiss oracle) -- the Linux
                                  # builds' warnings it does gate, every
                                  # file, through the cached audit
-make install                     # two wrappers on PATH, a menu entry and
-                                 # icons; the data stays
-                                 # in the checkout, so the tree has to stay
-                                 # put (PREFIX=$HOME/.local needs no root)
+make install                     # both binaries to $PREFIX/bin, their
+                                 # data to $PREFIX/share/astrolog, a menu
+                                 # entry and icons; the checkout can move
+                                 # afterwards (PREFIX=$HOME/.local needs no
+                                 # root). GetDataDir() in io.cpp is how the
+                                 # binary finds share/astrolog. It was two
+                                 # wrappers into the checkout until
+                                 # 2026-10-25 (QT_GUI_PLAN.md item 292)
 ./run-qt-tests.sh                # the whole suite + startup checks;
 ASTROLOG_QT_TESTS=animation ./run-qt-tests.sh   # just one group, <1s
                                  # (=list names them; see QT_TESTING.md)

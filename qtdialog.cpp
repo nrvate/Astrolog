@@ -388,8 +388,8 @@ public:
 
 // Apply the above to every combo in a dialog. Call just before exec().
 // Astrolog's planet icon, the astrlog3.ico that every Windows dialog
-// shows. Looked for next to the binary and in the working directory, the
-// same two places the bundled fonts are.
+// shows. Looked for next to the binary, in the data directory and in the
+// working directory, the same three places the bundled fonts are.
 static QPixmap PixAstrologIconQt()
 {
   static QPixmap pix;
@@ -399,6 +399,7 @@ static QPixmap PixAstrologIconQt()
     fTried = fTrue;
     QStringList rgstr;
     rgstr << QCoreApplication::applicationDirPath() + "/astrlog3.ico"
+          << StrDataDirQt() + "/astrlog3.ico"
           << QDir::currentPath() + "/astrlog3.ico";
     for (int i = 0; i < rgstr.size(); i++)
       if (QFile::exists(rgstr[i])) {

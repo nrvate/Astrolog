@@ -444,6 +444,7 @@ extern void Terminate P((int));
 extern flag FDirExists P((CONST char *));
 extern flag FFileExists P((CONST char *));
 extern void GetExeDir P((char *, int));
+extern void GetDataDir P((char *, int));
 extern void SzPathDirAbs P((CONST char *, char *, int));
 extern FILE *FileOpen P((CONST char *, int, char *, int));
 extern byte BRead P((FILE *));

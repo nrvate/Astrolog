@@ -1413,7 +1413,12 @@ rather than to a package** — because `make install` is the *other*
 "does the shipped thing work" surface, it has the identical data
 resolution hazard, and nothing in this document or the tree tested it at
 all. `tools/ci-assert-installed.sh` runs the installed wrapper from `/`
-and asserts Chiron.
+and asserts Chiron. *(2026-10-25: the install is a real one now --
+binaries in `bin/`, data in `share/astrolog/` -- and the check refuses a
+wrapper outright, runs the binary by path and by bare name on PATH, and
+asks Chiron of Prometheia alone as well as of the default chain, since
+the Swiss fallback answers Chiron with Prometheia's catalog missing.
+QT_GUI_PLAN.md item 292.)*
 **Falsified as this item specifies**: with `ephem/` moved aside the check
 reports `EPHEMERIS NOT FOUND: Chir:  0Ari00 …` and exits 1; restored, it
 passes. A real `make install PREFIX=…` was used, not the build tree.

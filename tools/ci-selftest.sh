@@ -109,14 +109,30 @@ expect fail "desktop: a prefix with no desktop entry" tools/ci-assert-desktop.sh
 expect fail "installed: a wrapper that does not exist" tools/ci-assert-installed.sh "$T/p0/bin/astrolog"
 expect 0    "uninstalled: shared directories present, our files gone" tools/ci-assert-uninstalled.sh "$T/p0"
 mkdir -p "$T/p1/bin"; : > "$T/p1/bin/astrolog"
-expect fail "uninstalled: a prefix with a leftover wrapper" tools/ci-assert-uninstalled.sh "$T/p1"
+expect fail "uninstalled: a prefix with a leftover binary" tools/ci-assert-uninstalled.sh "$T/p1"
 expect fail "uninstalled: a prefix whose shared directories are gone" tools/ci-assert-uninstalled.sh "$T/p2"
+mkdir -p "$T/p3/bin" "$T/p3/share/applications" "$T/p3/share/icons/hicolor/48x48/apps" \
+  "$T/p3/share/astrolog/ephem"
+expect fail "uninstalled: a prefix with share/astrolog left behind" tools/ci-assert-uninstalled.sh "$T/p3"
+# The two ways an install can look right and not be: the wrapper the old
+# "make install" wrote, which computes perfectly while the checkout is
+# there, and the binary copied out with no share/astrolog beside it.
+if [ -x ./astrolog ]; then
+  mkdir -p "$T/pw/bin" "$T/pb/bin"
+  printf '#!/bin/sh\nexec "%s/astrolog" "$@"\n' "$PWD" > "$T/pw/bin/astrolog"
+  chmod 755 "$T/pw/bin/astrolog"
+  expect fail "installed: the old wrapper into the checkout" tools/ci-assert-installed.sh "$T/pw/bin/astrolog"
+  cp ./astrolog "$T/pb/bin/astrolog"
+  expect fail "installed: the binary with no share/astrolog" tools/ci-assert-installed.sh "$T/pb/bin/astrolog"
+else
+  skip "installed: the wrapper and no-data cases need ./astrolog"
+fi
 
 # The install round trip, when both binaries are here: install into a
 # scratch prefix, assert it, uninstall, assert that too.
 if [ -x ./astrolog ] && [ -x ./astrolog-qt ]; then
   if make install PREFIX="$T/inst" >/dev/null 2>&1; then
-    expect 0 "installed: a real wrapper, run from /" tools/ci-assert-installed.sh "$T/inst/bin/astrolog"
+    expect 0 "installed: a real install, run from / by path and by name" tools/ci-assert-installed.sh "$T/inst/bin/astrolog"
     expect 0 "desktop: a real install" tools/ci-assert-desktop.sh "$T/inst"
     expect fail "uninstalled: before make uninstall" tools/ci-assert-uninstalled.sh "$T/inst"
     make uninstall PREFIX="$T/inst" >/dev/null 2>&1
@@ -137,7 +153,8 @@ stage() {  # stage <dir>: the required payload as empty files, manifest written.
   mkdir -p "$1/ephem" "$1/font"
   for f in ephem/*; do : > "$1/$f"; done
   for f in astrolog.as atlas.as timezone.as sefstars.txt seorbel.txt astexo.csv \
-           earth.bmp astrolog.htm changes.htm license.htm cgif-license.txt astrolog.exe; do : > "$1/$f"; done
+           earth.bmp astrolog.htm changes.htm license.htm cgif-license.txt astrlog3.ico \
+           astrolog.exe; do : > "$1/$f"; done
   (cd "$1" && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS)
 }
 stage "$T/pkg"

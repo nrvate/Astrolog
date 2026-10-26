@@ -53,6 +53,7 @@
 
 #include "astrolog.h"
 #include <sys/stat.h>
+#include <string.h>
 #ifdef PC
 #include <io.h>
 #else
@@ -107,8 +108,38 @@ void GetExeDir(char *sz, int cch)
 
 #ifdef WIN
   GetModuleFileName(wi.hinst, sz, cch);
+#elif defined(PC)
+  // The Qt build and WCLI on Windows: not WIN, but windows.h is here (PC),
+  // so ask Windows for the module's path as WIN does. argv[0] is whatever
+  // the user typed -- "astrolog" from a terminal elsewhere, found on PATH
+  // or by App Paths -- and gave no directory at all.
+  if (GetModuleFileNameA(NULL, sz, (DWORD)cch) == 0)
+    sprintf2(sz, cch, "%s", is.szProgName != NULL ? is.szProgName : "");
 #else
   sprintf2(sz, cch, "%s", is.szProgName != NULL ? is.szProgName : "");
+  // A bare name is one the shell found on PATH -- an installed "astrolog"
+  // typed at a prompt -- so it is looked up there the same way. Without
+  // this the directory came back "" and an installed binary could find
+  // none of its data; the wrappers "make install" used to write ran the
+  // binary by absolute path, which is the only reason it never showed.
+  if (*sz && strchr(sz, chDirSep) == NULL) {
+    CONST char *pchPath = getenv("PATH"), *pchEnd;
+    char szTry[cchSzMax];
+
+    while (pchPath != NULL && *pchPath) {
+      for (pchEnd = pchPath; *pchEnd && *pchEnd != ':'; pchEnd++)
+        ;
+      if (pchEnd > pchPath) {
+        sprintf2(S(szTry), "%.*s%c%s", (int)(pchEnd - pchPath), pchPath,
+          chDirSep, sz);
+        if (FFileExists(szTry)) {
+          sprintf2(sz, cch, "%s", szTry);
+          break;
+        }
+      }
+      pchPath = *pchEnd ? pchEnd + 1 : pchEnd;
+    }
+  }
 #endif
   for (pch = sz; *pch; pch++)
     ;
@@ -120,9 +151,60 @@ void GetExeDir(char *sz, int cch)
 }
 
 
+// The directory the program's own data is in -- ephem/, font/, icons/,
+// the shipped astrolog.as -- ending in its separator. The executable's,
+// when it holds ephem/: the checkout, the Windows package, the macOS
+// app. Otherwise share/astrolog/ beside the executable's own directory,
+// which is where "make install" puts the data (QT_GUI_PLAN.md item 292):
+// /usr/local/bin/astrolog reads /usr/local/share/astrolog/. And the
+// executable's again when neither holds ephem/, so a stray copy behaves
+// as it always did. Relative -Yi directories resolve against this, and
+// FileOpen() looks here last.
+
+void GetDataDir(char *sz, int cch)
+{
+  // Each buffer has room for what is appended to the one before it:
+  // "share/astrolog/" to a parent, "ephem" to a probe.
+  static char szData[cchSzMax + 32];
+  static flag fKnown = fFalse;
+  char szExe[cchSzMax], szParent[cchSzMax + 32], szProbe[cchSzMax + 48],
+    *pch;
+
+  if (!fKnown) {
+    GetExeDir(S(szExe));
+    sprintf2(S(szData), "%s", szExe);
+    sprintf2(S(szProbe), "%sephem", szExe);
+    if (*szExe && !FDirExists(szProbe)) {
+      // The parent of the executable's directory: drop its trailing
+      // separator and its last component, so the path names
+      // /usr/local/share and not /usr/local/bin/../share.
+      sprintf2(S(szParent), "%s", szExe);
+      for (pch = szParent + CchSz(szParent) - 1; pch > szParent &&
+        *pch == chDirSep; pch--)
+        *pch = chNull;
+      while (pch > szParent && *pch != chDirSep)
+        pch--;
+      if (*pch == chDirSep) {
+        pch[1] = chNull;
+        sprintf2(SO(pch + 1, szParent), "share%castrolog%c", chDirSep,
+          chDirSep);
+        sprintf2(S(szProbe), "%sephem", szParent);
+        if (FDirExists(szProbe))
+          sprintf2(S(szData), "%s", szParent);
+      }
+    }
+    // Known once the program's name is: GetExeDir() before main() has set
+    // it would answer "" for good.
+    fKnown = is.szProgName != NULL;
+  }
+  sprintf2(sz, cch, "%s", szData);
+}
+
+
 // A -Yi directory as every search uses it: one starting with a letter or
-// digit (and not a drive letter) is relative to the EXECUTABLE's
-// directory, not the working directory; anything else is taken as given.
+// digit (and not a drive letter) is relative to the program's DATA
+// directory (GetDataDir(): the executable's, but for an installed copy),
+// not the working directory; anything else is taken as given.
 // Two readers resolving it two ways is how the Swiss files and the
 // Prometheia kernels came to be looked for in different places under the
 // same setting.
@@ -133,7 +215,7 @@ void SzPathDirAbs(CONST char *szDir, char *sz, int cch)
 
   if ((FCapCh(*szDir) || FUncapCh(*szDir) || FNumCh(*szDir)) &&
     !(szDir[1] == ':')) {
-    GetExeDir(S(szExe));
+    GetDataDir(S(szExe));
     sprintf2(sz, cch, "%s%s", szExe, szDir);
   } else
     sprintf2(sz, cch, "%s", szDir);
@@ -149,7 +231,8 @@ FILE *FileOpen(CONST char *szFile, int nFileMode, char *szPath,
   int cchPath)
 {
   FILE *file;
-  char szFileT[cchSzMax], szExe[cchSzMax], sz[cchSzLine], szMode[3], *pch;
+  char szFileT[cchSzMax], szExe[cchSzMax], szData[cchSzMax], sz[cchSzLine],
+    szMode[3], *pch;
   CONST char *pch2;
 #ifdef ENVIRON
   char *env;
@@ -158,19 +241,10 @@ FILE *FileOpen(CONST char *szFile, int nFileMode, char *szPath,
 
   // Some file types we want to open as binary instead of Ascii.
   sprintf2(S(szMode), "r%s", nFileMode >= 2 ? "b" : "");
-  // Get directory containing Astrolog executable.
-#ifdef WIN
-  GetModuleFileName(wi.hinst, szExe, cchSzMax);
-#else
-  sprintf2(S(szExe), "%s", is.szProgName != NULL ? is.szProgName : "");
-#endif
-  for (pch = szExe; *pch; pch++)
-    ;
-  while (pch > szExe && *pch != chDirSep)
-    pch--;
-  if (*pch == chDirSep)
-    pch++;
-  *pch = chNull;
+  // The directories of the executable and of its data, which differ only
+  // for an installed copy (GetDataDir()).
+  GetExeDir(S(szExe));
+  GetDataDir(S(szData));
 
   for (i = 0; i <= 1; i++) {
     if (i <= 0)
@@ -202,8 +276,9 @@ FILE *FileOpen(CONST char *szFile, int nFileMode, char *szPath,
       if (FSzSet(pch)) {
         if ((FCapCh(*pch) || FUncapCh(*pch) || FNumCh(*pch)) &&
           !(pch[1] == ':')) {
-          // If dir is relative path, then prepend the path to executable.
-          sprintf2(S(sz), "%s", szExe);
+          // If dir is relative path, then prepend the program's data
+          // directory, which is the executable's but for an installed copy.
+          sprintf2(S(sz), "%s", szData);
           for (pch = sz; *pch; pch++)
             ;
         } else
@@ -247,11 +322,22 @@ FILE *FileOpen(CONST char *szFile, int nFileMode, char *szPath,
     }
 #endif
 
-    // Finally look in one of several compile time specified directories.
+    // Next look in one of several compile time specified directories.
     pch2 = (nFileMode == 0 ? DEFAULT_DIR :
       (nFileMode == 1 ? CHART_DIR : EPHE_DIR));
     if (FSzSet(pch2)) {
       sprintf2(S(sz), "%s%c%s", pch2, chDirSep, szFileT);
+      file = fopen(sz, szMode);
+      if (file != NULL)
+        goto LDone;
+    }
+
+    // Finally the program's own data, when it is not beside the
+    // executable: an installed copy's share/astrolog/. LAST, so a user's
+    // own astrolog.as -- in the working directory, or on a -Yi path --
+    // wins over the one shipped there, which nobody but root can edit.
+    if (!FEqSz(szData, szExe)) {
+      sprintf2(S(sz), "%s%s", szData, szFileT);
       file = fopen(sz, szMode);
       if (file != NULL)
         goto LDone;

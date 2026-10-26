@@ -12236,6 +12236,93 @@ this is the note that explains the wall of dialogs.
       configurations all along (no DE440 on either search path), run on the
       shipped files now.
 
+292. **`make install` is a real install** (2026-10-25). The maintainer
+    wanted the bundled data "put in the right place by make install on
+    unix-like systems". Until now the target wrote two wrappers that ran
+    the checkout's binaries by absolute path, and those stopped working the
+    day the checkout moved.
+    - **The layout.** Binaries go to `$PREFIX/bin`. The data goes to
+      `$PREFIX/share/astrolog`, the same list the Windows package ships
+      (`ephem/`, `font/`, `icons/`, the `.as` files, the help, the icons).
+      The desktop entry and hicolor icons stay where they were. A
+      reinstall replaces `share/astrolog` whole, so a file a newer version
+      renamed does not linger beside its replacement. Uninstall removes it,
+      behind a guard that the path ends in `/share/astrolog`.
+    - **`GetDataDir()`** (io.cpp) is how the binary finds that directory:
+      - its own directory when that holds `ephem/`: the checkout, the
+        Windows package, the macOS app;
+      - otherwise `../share/astrolog/` when that holds `ephem/`;
+      - otherwise its own directory again, so a stray copy behaves as it
+        always did.
+
+      Relative `-Yi` paths resolve against it, and so do Prometheia's
+      `ephem/` search, Swiss's path, the Qt fonts, the icons and the
+      dialog icon (`StrDataDirQt()`). `FileOpen()` looks there LAST, after
+      the working directory and the `-Yi` paths, so a user's own
+      `astrolog.as` (the Save dialog offers the working directory, which
+      is `$HOME` for a menu launch) beats the shipped one, which only root
+      can edit.
+    - **A bare name on PATH had no directory at all.** `GetExeDir()` took
+      `argv[0]`, and for an `astrolog` typed at a prompt that is the bare
+      name, so the directory came back `""` and an installed binary could
+      find none of its data. The wrappers had hidden it: they ran the
+      binary by absolute path. Non-PC builds now look the name up on PATH
+      the way the shell did. The two Windows builds without `WIN` (the Qt
+      product and WCLI, both `PC`) ask Windows for the module's own path
+      instead, as `WIN` always has. An `astrolog` typed in a terminal
+      elsewhere gave them no directory either. Every Windows run we have
+      starts in the exe's own directory (the CI steps, and the Start Menu
+      shortcut's "Start in"), so nothing could have shown it.
+      `win-console-checks.sh` still passes, and WCLI run by bare name
+      through `WINEPATH` from an unrelated directory computes Chiron.
+    - **`astrlog3.ico` was in no package.** It is the planet every Qt
+      dialog shows beside its title (`PixAstrologIconQt()`). Win32
+      compiles it into the `.exe`, so the oracle never missed it, but the
+      Qt build reads the file, and the Windows zip, the installer and the
+      `.dmg` all shipped without it. All three ship it now, and
+      `qt_windows_dist_audit.py` and `ci-verify-package.sh` require it.
+    - **The nets.** `ci-assert-installed.sh` refuses a script outright,
+      since every other check passes for the old wrapper while the
+      checkout exists. It runs the binary from `/` by path and by bare
+      name, and asks for Chiron twice: on the default chain, and of
+      Prometheia alone (`-bE prometheia`). Each form was measured to fail
+      for its own reason:
+      - the old wrapper: "is a script";
+      - the binary copied out with no data beside it: Chiron `0Ari00`;
+      - the install with `astrolog-bodies.epm` removed: passes on the
+        default chain, because Swiss answers Chiron, and fails on the
+        Prometheia-only leg, which is why that leg exists.
+
+      `ci-assert-uninstalled.sh` requires `share/astrolog` gone and
+      `share` kept. `ci-selftest.sh` feeds both scripts those inputs. By
+      hand, the Qt test build was installed and probed from `/`: data
+      directory `…/share/astrolog`, all three icon sizes, the Astro font,
+      Chiron computed by Prometheia alone. The same binary copied to a
+      prefix with no data read none of them.
+    - **A reason cut at 80 bytes**, found while doing this. A chain that
+      cannot answer names why, and the reason travelled through
+      `szEphSubmitWhy` and the chain walk's `szWhy`, both `cchSzDef`.
+      Prometheia's "no planets file" text is about 150 characters, so the
+      warning stopped at `linux_p1900p2100`, losing the `.441`, "was
+      looked for" and the remedy. Those two buffers are `cchSzMax` now,
+      and the composed reason, the warning and the Test's copy of the
+      reason are `cchSzLine`, since two reasons can each run that long (the
+      warning audit named the Test's 765 bytes on the first `make check`). `ephem-no-source` gives its missing
+      file a path past 80 characters and requires "was not found" and the
+      warning's tail. Put back to 80 bytes, it fails, showing the cut
+      text.
+    - **Seen, not caused: the planetary moons.** Under `-R1` the 27 moons
+      and five planet centres read `0Ari00`, with one "sepm9401.se1 not
+      found". Neither `ephem/` nor `/swe` has ever held a `sepm` file. The
+      v4 codec already sends them to Prometheia as NAIF IDs (401…905,
+      599…999), and Prometheia refuses them because it has no satellite
+      data. JPL's satellite kernels are all type 2, which its SPK reader
+      handles. Trimmed to 1900–2100 at native precision they come to about
+      944 MB: Proteus 292 MB, Phobos 117 MB. Prometheia has been asked for
+      engine support and a refit judged by geocentric angular error. The
+      maintainer set the limit: **5 MB for all the moons over the 200
+      years**, or they do not ship.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

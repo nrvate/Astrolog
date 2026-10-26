@@ -82,6 +82,7 @@ for n in (16, 32, 48):
     need(os.path.join("icons", f"astrolog{n}.png"),
          "IconAstrologQt() asserts this exact size rather than a scaled blur")
 need("astrlog1.ico", "the fallback when the PNGs are missing")
+need("astrlog3.ico", "the planet every dialog shows (PixAstrologIconQt())")
 
 # The data every package ships. ci-verify-package.sh checks the same
 # list on Linux later; checking it here means a missing file is named on

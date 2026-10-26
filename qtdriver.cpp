@@ -1013,6 +1013,22 @@ static flag FValidUtf8Qt(CONST char *sz)
   return fTrue;
 }
 
+// The program's data directory as Qt wants a directory: no trailing
+// separator. The executable's own, except for a copy "make install" put
+// in bin/, whose data is in share/astrolog/ (GetDataDir(), io.cpp). A
+// file name, so the local 8-bit encoding, not -Ya's.
+QString StrDataDirQt()
+{
+  char sz[cchSzMax + 32];
+  QString str;
+
+  GetDataDir(S(sz));
+  str = QString::fromLocal8Bit(sz);
+  while (str.length() > 1 && (str.endsWith('/') || str.endsWith('\\')))
+    str.chop(1);
+  return str;
+}
+
 QString StrSzQt(CONST char *sz)
 {
   QString str;
@@ -5131,9 +5147,11 @@ static void LoadBundledFontsQt()
   QStringList rgstrDir;
   int i, j;
 
-  // Look next to the binary first, then in the working directory, so both
-  // a run from the source tree and an installed copy work.
+  // Next to the binary, then in the data directory -- an installed copy's
+  // fonts are in share/astrolog/font/, not beside the binary in bin/ --
+  // then in the working directory.
   rgstrDir << QCoreApplication::applicationDirPath() + "/font"
+           << StrDataDirQt() + "/font"
            << QDir::currentPath() + "/font";
   for (i = 0; i < (int)(sizeof(rgszFontFile)/sizeof(char *)); i++)
     for (j = 0; j < rgstrDir.size(); j++) {
@@ -9655,8 +9673,8 @@ static void MessageFilterQt(QtMsgType typ, CONST QMessageLogContext &ctx,
 // The application icon, from astrlog1.ico's artwork. Qt has no resource
 // script, so it is loaded from disk: the three PNG sizes this fork
 // extracts for its desktop entry, falling back to the .ico. Looked for
-// beside the executable and then in the working directory, as
-// PixAstrologIconQt() and the bundled fonts are.
+// beside the executable, in the data directory and in the working
+// directory, as PixAstrologIconQt() and the bundled fonts are.
 //
 // Not static because the suite checks it: an icon that fails to load
 // looks exactly like one that was never asked for.
@@ -9669,7 +9687,8 @@ QIcon IconAstrologQt()
   QString str;
   int i, j;
 
-  rgstrDir << QCoreApplication::applicationDirPath() << QDir::currentPath();
+  rgstrDir << QCoreApplication::applicationDirPath() << StrDataDirQt() <<
+    QDir::currentPath();
   for (i = 0; i < rgstrDir.size(); i++) {
     for (j = 0; j < 3; j++) {
       str = rgstrDir[i] + "/icons/astrolog" + QString::number(rgnSize[j]) +

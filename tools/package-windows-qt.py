@@ -45,6 +45,10 @@ WHAT SHIPS, and why each entry is here:
   *.as, sefstars.txt, the data, the same list tools/package.sh ships and
   seorbel.txt,        tools/ci-verify-package.sh requires.
   astexo.csv, earth.bmp, *.htm
+  astrlog3.ico        the planet every dialog shows beside its title
+                      (PixAstrologIconQt()). Win32 compiles it into the
+                      .exe; the Qt build reads the file, and no package
+                      carried it until 2026-10-25.
   SHA256SUMS          LF, no BOM, the format sha256sum -c reads. Written
                       here and verified by ci-verify-package.sh, which
                       never writes one.
@@ -66,7 +70,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 DATA_FILES = ["astrolog.as", "atlas.as", "timezone.as",
               "sefstars.txt", "seorbel.txt", "astexo.csv", "earth.bmp",
-              "astrlog1.ico",
+              "astrlog1.ico", "astrlog3.ico",
               "astrolog.htm", "changes.htm", "license.htm",
               "cgif-license.txt"]
 DATA_DIRS = ["ephem", "font", "icons"]

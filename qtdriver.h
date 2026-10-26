@@ -240,6 +240,8 @@ QString StrTextSelectionQt(void);
 // the definitions; not for file names.
 QString StrSzQt(CONST char *sz);
 QByteArray BaStrQt(CONST QString &str);
+// The program's data directory (GetDataDir()), without its separator.
+QString StrDataDirQt(void);
 // The pixel rectangle of one view cell.
 QRect RgrcTextCellQt(int xCell, int yCell);
 void ClearTextHoverQt(void);
