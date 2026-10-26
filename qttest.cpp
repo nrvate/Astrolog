@@ -24679,7 +24679,7 @@ static void TestEphemDialogQt()
       str.contains("EPHEMERIS SOURCE CHAIN") && str.contains("STATISTICS") &&
       str.contains("linux_p1900p2100.441") &&
       str.contains("stars and deep sky") && !str.contains("named fixed") &&
-      str.contains(QRegularExpression("\\n +[1-9][0-9,]* bodies\\n")),
+      str.contains(QRegularExpression("\\n +[1-9][0-9,]* records\\n +[1-9][0-9,]* distinct bodies\\n")),
       "it opens a window naming the planets file in use and counting the "
       "catalog's bodies apart from the library's stars (\"%s\")",
       str.left(300).toLocal8Bit().constData());

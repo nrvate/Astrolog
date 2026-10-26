@@ -12440,11 +12440,14 @@ this is the note that explains the wall of dialogs.
     Most of them have no name, and the Messier entries are not stars. It
     now reads "stars and deep sky: 9290 built in: the Bright Star
     Catalogue, the IAU-named stars and the Messier objects". The asteroid
-    catalog's own count ("13,808 bodies") is on its line under FILES. The C
-    API has no call for a catalog's size, so the count is read from the
-    description the engine gives a catalog body's answer, and Prometheia
-    has been asked for a proper call. The suite's window check requires
-    both the new label and a body count.
+    catalog's own count is on its line under FILES, as "13,808 records"
+    and then "13,808 distinct bodies". Those two differ when several
+    catalogs are loaded, because a later catalog wins for a body two carry.
+    The counts come from the C API's `prometheia_engine_catalog_count`,
+    `_info` and `_bodies`, which Prometheia added at this window's request
+    (653cd50; the submodule is pinned there now). The first version read
+    the number out of a result's description with sscanf. The suite's
+    window check requires the new label and both counts.
 
 ## Features this fork adds to both builds
 

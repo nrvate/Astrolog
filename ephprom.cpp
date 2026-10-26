@@ -1842,32 +1842,6 @@ static void DbgFile(CONST char *szLabel, CONST char *szPath, int iParam)
       "\"" : "");
 }
 
-// How many bodies the catalog holds. The C API has no call for it (asked
-// of Prometheia 2026-10-25), so it is read from the description the engine
-// gives a catalog body's answer -- "... EPM1 catalog(s) [13808 bodies]
-// ..." -- from the last cast, or from Ceres asked for here. -1 if neither
-// says.
-static long LEphPromCatalogBodies()
-{
-  CONST char *pch;
-  long l;
-  int i;
-  prometheia_result res;
-  prometheia_error err;
-
-  for (i = 0; i < (int)rgEphPromLast.size(); i++)
-    if ((pch = strstr(rgEphPromLast[i].szSrc, "catalog(s) [")) != NULL &&
-      sscanf(pch, "catalog(s) [%ld bodies]", &l) == 1)
-      return l;
-  if (pephProm != NULL && FSzSet(szEphPromCat) &&
-    prometheia_calc(pephProm, 20000001, 2451545.0, NULL, &res, &err) ==
-    PROMETHEIA_OK && res.source != NULL &&
-    (pch = strstr(res.source, "catalog(s) [")) != NULL &&
-    sscanf(pch, "catalog(s) [%ld bodies]", &l) == 1)
-    return l;
-  return -1;
-}
-
 static CONST char *SzDbgErr(int nErr)
 {
   static CONST char *rgsz[] = {"none", "unknown body", "unsupported",
@@ -1929,11 +1903,28 @@ CONST char *SzEphPromDebug(void)
     epPromLongspan);
   DbgFile("Asteroid catalog", fEphPromOpen ? szEphPromCat : NULL,
     epPromCatalog);
-  if (fEphPromOpen && FSzSet(szEphPromCat)) {
-    long lBodies = LEphPromCatalogBodies();
-    if (lBodies >= 0) {
-      DbgCount(lBodies, S(szA));
-      DbgAdd("  %-20s %s bodies\n", "", szA);
+  // Each catalog the engine loaded, with its record count, and the
+  // distinct bodies between them -- a later catalog wins for a body two
+  // carry, so the sum would overcount. The C API's own calls since
+  // Prometheia 653cd50, asked for by this window: the first version read
+  // the count out of a result's description with sscanf.
+  if (pephProm != NULL) {
+    int cCat = prometheia_engine_catalog_count(pephProm), nBodies;
+    prometheia_error err;
+    for (i = 0; i < cCat; i++) {
+      CONST char *szPath = NULL;
+      if (prometheia_engine_catalog_info(pephProm, i, &nBodies, &szPath,
+        &err) != PROMETHEIA_OK)
+        continue;
+      DbgCount(nBodies, S(szA));
+      DbgAdd("  %-20s %s records%s%s\n", cCat > 1 ? "  catalog" : "", szA,
+        cCat > 1 ? " in " : "", cCat > 1 ? SzSet(szPath) : "");
+    }
+    if (cCat > 0 && prometheia_engine_catalog_bodies(pephProm, &nBodies,
+      &err) == PROMETHEIA_OK) {
+      DbgCount(nBodies, S(szA));
+      DbgAdd("  %-20s %s distinct bodies%s\n", "", szA, cCat > 1 ?
+        " between them" : "");
     }
   }
   DbgFile("Asteroid perturbers", fEphPromOpen ? szEphPromPert : NULL,
