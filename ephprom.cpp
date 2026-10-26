@@ -627,6 +627,51 @@ void SzEphPromEmpty(int iep, flag fLong, char *sz, int cch)
       rgszEphPromPert[1], rgszEphPromPert[2]);
 }
 
+// Which years the open engine's planets files answer, said for the Test:
+// "Planets from linux_p1900p2100.441, December 4, 1899 to January 12,
+// 2100; other years go to the next source in the chain." From the library's own
+// record of each file (prometheia_engine_ephemeris_span(), C API since
+// their 624c96d, asked for by this dialog): a file cut to 1900-2100 is
+// padded out to whole 32-day records, so its name's years are not quite
+// the dates it answers. Empty when the engine is not open.
+void SzEphPromSpans(char *sz, int cch)
+{
+  char rgszDate[2][24], *pch = sz;
+  CONST char *rgszFile[2], *pchName;
+  int cFile, i, j, mon, day, yea;
+
+  *sz = chNull;
+  if (pephProm == NULL)
+    return;
+  rgszFile[0] = szEphPromEphe;
+  rgszFile[1] = szEphPromLong;
+  cFile = Min(prometheia_engine_ephemeris_count(pephProm), 2);
+  for (i = 0; i < cFile; i++) {
+    double rgjd[2];
+    prometheia_error err;
+
+    if (prometheia_engine_ephemeris_span(pephProm, i, &rgjd[0], &rgjd[1],
+      NULL, &err) != PROMETHEIA_OK)
+      continue;
+    for (j = 0; j < 2; j++) {
+      JulianToMdy(rgjd[j], &mon, &day, &yea);
+      // Format 1, the prose one: "December 4, 1899", or "4 December 1899"
+      // under -Yd; format 0 pads its columns ("12/ 4/1899").
+      sprintf2(S(rgszDate[j]), "%s", SzDate(mon, day, yea, 1));
+    }
+    for (pchName = rgszFile[i] + CchSz(rgszFile[i]); pchName > rgszFile[i]
+      && pchName[-1] != chDirSep && pchName[-1] != '/'; pchName--)
+      ;
+    sprintf2(pch, cch - (int)(pch - sz), "%s %s, %s to %s", i == 0 ?
+      "Planets from" : "; outside it from", pchName, rgszDate[0],
+      rgszDate[1]);
+    pch += CchSz(pch);
+  }
+  if (*sz)
+    sprintf2(pch, cch - (int)(pch - sz), "%s", "; other years go to the "
+      "next source in the chain");
+}
+
 static flag FEphPromResolve(char *szWhy, int cch)
 {
   if (FSzSet(SzEphPromParam(epPromEphemeris))) {

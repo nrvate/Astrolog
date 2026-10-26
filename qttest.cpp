@@ -21628,6 +21628,20 @@ static void TestPrometheiaQt()
   Check(NEphPromState(szState, (int)sizeof(szState)) == 0, "state ready (%s)",
     szState);
   printf("  engine: %s\n", szState);
+  // Which years it answers, from the library's own record of the file
+  // (the Test says this): for the cut shipped in ephem/, the padding to
+  // whole records puts its first date in 1899 and its last in 2100.
+  {
+    char szSpans[cchSzMax];
+
+    SzEphPromSpans(S(szSpans));
+    printf("  %s\n", szSpans);
+    Check(strstr(szSpans, "Planets from ") == szSpans,
+      "the open engine says which years its planets file answers");
+    if (strstr(szSpans, "linux_p1900p2100.441") != NULL)
+      Check(strstr(szSpans, "1899") != NULL && strstr(szSpans, "2100")
+        != NULL, "the shipped cut answers from 1899 to 2100");
+  }
 
   {
     eph::Profile rgpf[6];

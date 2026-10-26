@@ -44,8 +44,8 @@ these bodies are mostly from 1998-2002 (Varuna 900 km, against 668 since
 Herschel), which is why Johnston's come first.
 
 The catalog is cut with Prometheia's own prometheia-catalog-subset, built
-from the submodule by tools/prometheia-tool.sh. It refuses a list line that
-matches no body, so a body --catalog lacks is dropped and the cut retried.
+from the submodule by tools/prometheia-tool.sh; a body --catalog lacks is
+named and left out (--skip-missing).
 """
 import argparse
 import datetime
@@ -243,24 +243,31 @@ def listing(path, title, bodies, sources, shipped=None):
 
 
 def cut(subset, catalog, bodies, work, out):
-    """Cut the catalog to the bodies, dropping any it has not got."""
+    """Cut the catalog to the bodies, leaving out any it has not got.
+
+    --skip-missing (Prometheia's 624c96d, asked for by this tool) prints each
+    list line that matches no body, or more than one, with "(skipped)" and
+    goes on. Before it the cut stopped at the first and was rerun per body."""
     listpath = os.path.join(work, 'bundle.list')
     names = [o['pdes'] for o in bodies]
+    with open(listpath, 'w') as f:
+        f.write('\n'.join(names) + '\n')
+    p = subprocess.run([subset, catalog, listpath, '--skip-missing', '-o', out],
+                       capture_output=True, text=True)
+    if p.returncode != 0:
+        sys.exit('prometheia-catalog-subset failed:\n' + p.stderr)
     dropped = []
-    for _ in range(1000):
-        with open(listpath, 'w') as f:
-            f.write('\n'.join(names) + '\n')
-        p = subprocess.run([subset, catalog, listpath, '-o', out], capture_output=True, text=True)
-        if p.returncode == 0:
-            return set(names), dropped, p.stdout.strip() or p.stderr.strip()
-        m = re.match(r"^.*:(\d+): '(.*)' matches no body$", p.stderr.strip().splitlines()[-1])
-        if not m:
-            sys.exit('prometheia-catalog-subset failed:\n' + p.stderr)
-        k = int(m.group(1)) - 1
-        assert names[k] == m.group(2), (names[k], m.group(2))
-        dropped.append(names.pop(k))
-    sys.exit('more than 1000 bodies are not in %s: is it the catalog you meant?' % catalog)
-
+    for ln in (p.stdout + p.stderr).splitlines():
+        m = re.match(r"^.*:(\d+): '(.*)' matches .* \(skipped\)$", ln)
+        if m:
+            k = int(m.group(1)) - 1
+            assert names[k] == m.group(2), (names[k], m.group(2))
+            dropped.append(names[k])
+    said = [ln for ln in (p.stdout + p.stderr).splitlines() if '(skipped)' not in ln]
+    served = set(names) - set(dropped)
+    with open(listpath, 'w') as f:
+        f.write('\n'.join(n for n in names if n in served) + '\n')
+    return served, dropped, '\n'.join(said)
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])

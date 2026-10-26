@@ -342,11 +342,13 @@ extern flag FEphElemGet(int i, double *pjdEpoch, int *pnEquinox,
   double *pjdEquinox, int *pnCentre, double rgel[6][5], CONST char **pszName);
 
 // The Prometheia source (phase 7) is compiled in only when PROMETHEIA is
-// defined -- the makefiles' pkg-config detection -- and sits in the table
-// before none, so the five indexes above never move.
+// defined -- every product build, through Makefile.prometheia, and not
+// the Win32 oracle -- and sits in the table before none, so the five
+// indexes above never move.
 #ifdef PROMETHEIA
 extern EPHSRCDEF ephsrcPrometheia;
 extern void SzEphPromEmpty(int iep, flag fLong, char *sz, int cch);
+extern void SzEphPromSpans(char *sz, int cch);
 #define cEphSrcPrometheia 1
 #else
 #define cEphSrcPrometheia 0

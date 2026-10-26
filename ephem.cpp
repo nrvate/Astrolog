@@ -768,6 +768,14 @@ flag FEphTestSource(CONST char *szKey, char *sz, int cch)
     sprintf2(pch, (int)sizeof(szT) - (int)(pch - szT), " at %s",
       SzEphTestMoment());
     EphTestAdd(sz, cch, szT);
+#ifdef PROMETHEIA
+    // Which years the file it opened answers, and where the rest go.
+    if (FEqSz(szKey, "prometheia")) {
+      SzEphPromSpans(S(szT));
+      if (FSzSet(szT))
+        EphTestAdd(sz, cch, szT);
+    }
+#endif
   }
 
 #ifdef SWISS
