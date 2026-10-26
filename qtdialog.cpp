@@ -5611,7 +5611,7 @@ void ShowEphemDialogQt()
   QString rgstrVal[cEphParam + 1];
   QString strKey;   // The picked source's key; empty when none is.
   char sz[cchSzMax], szHead[cchSzDef], szWhy[cchSzDef];
-  int i, nTick = 0, rgisrc[cEphSrcBuiltIn];
+  int i, nTick = 0;
   flag fHold = fFalse, fTested = fFalse;
 
   dlg.setWindowTitle(szTitleEphem);
@@ -5840,8 +5840,7 @@ void ShowEphemDialogQt()
 
   // A setting that names more than one source -- a chain from a settings
   // file -- is said once, since OK will keep only the one picked here.
-  if (plStatus != NULL && CEphChainSrc(us.szEphemSource, rgisrc,
-    cEphSrcBuiltIn) > 1) {
+  if (plStatus != NULL && FEphChainBeyondDialog()) {
     plStatus->setText(QString("Your settings name more than one source "
       "(%1). OK keeps only the ephemeris selected here.")
       .arg(QString::fromUtf8(SzSet(us.szEphemSource))));
@@ -5948,7 +5947,7 @@ void ShowEphemDialogQt()
   }
   if (!strKey.isEmpty()) {
     QByteArray baKey = strKey.toUtf8();
-    EphSourceSet(baKey.constData());
+    EphSourceSet(SzEphSourceForKey(baKey.constData()));
   }
   RecastAndRedrawQt();
 }

@@ -1056,6 +1056,32 @@ void EphShadowFromChain(flag *pfFiles, int *pnSwiss, flag *pfMatrix)
 // when the chain really changed -- a second -bE of the same chain is
 // idempotent, not a reset.
 
+// The chain the Ephemeris Settings dialog writes for the source picked in
+// it: the default chain when that source heads it, so picking Prometheia
+// keeps the Swiss Ephemeris behind it for the years and bodies it cannot
+// answer; the source alone otherwise. OK used to write the key alone, and
+// the default chain was reported as "more than one source" that OK would
+// cut down -- so opening the dialog and pressing OK dropped the fallback
+// (found 2026-10-25, the maintainer's first look at an installed copy).
+CONST char *SzEphSourceForKey(CONST char *szKey)
+{
+  char szHead[cchSzDef];
+
+  SzEphChainHead(SzEphSourceDefault(), S(szHead));
+  return FEqSz(szKey, szHead) ? SzEphSourceDefault() : szKey;
+}
+
+// Does the current chain name more than one source in a way the dialog
+// cannot show -- anything but one source, or the default chain?
+flag FEphChainBeyondDialog()
+{
+  int rgisrc[cEphSrcBuiltIn];
+
+  return CEphChainSrc(us.szEphemSource, rgisrc, cEphSrcBuiltIn) > 1 &&
+    !FEqSz(SzSet(us.szEphemSource), SzEphSourceDefault());
+}
+
+
 void EphSourceSet(CONST char *szChain)
 {
   if (!FSzSet(szChain))

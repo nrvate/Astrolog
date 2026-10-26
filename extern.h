@@ -637,6 +637,8 @@ extern flag FEphReadRaw P((CONST EPHQUERY *, int, real *));
 // carries, the default, and the shadow of the three old fields the
 // legacy spellings toggle, which re-derives the chain after each one.
 extern CONST char *SzEphSourceDefault P((void));
+extern CONST char *SzEphSourceForKey P((CONST char *));
+extern flag FEphChainBeyondDialog P((void));
 extern void SzEphChainHead P((CONST char *, char *, int));
 extern void EphSourceChanged P((void));
 extern int IEphParamFromKey P((CONST char *));

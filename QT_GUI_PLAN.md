@@ -12357,6 +12357,30 @@ this is the note that explains the wall of dialogs.
         "an empty catalog field uses the shipped catalog, and Chiron
         works", since no configuration of this tree lacks a catalog.
 
+294. **OK in Ephemeris Settings dropped the Swiss fallback, and dry run 5's
+    audit crash** (2026-10-25).
+    - **The dialog.** The maintainer opened Ephemeris Settings on an
+      installed copy and read "Your settings name more than one source
+      (prometheia,swiss). OK keeps only the ephemeris selected here." The
+      dialog meant it: OK wrote `prometheia` alone, so years outside
+      1900–2100 lost their Swiss answer. The default chain is no list the
+      user made. `SzEphSourceForKey()` (ephem.cpp) writes the default chain
+      whole when its head is the source picked, and
+      `FEphChainBeyondDialog()` limits the note to a chain that is neither
+      one source nor the default. Both dialogs use them; in Win32 they
+      change nothing, since its default is `swiss` alone. Three
+      `ephemeris-dialog` checks cover it, two of which fail on the old code
+      quoting the very message the maintainer saw. The third, a user's own
+      chain still being reported, passes on both.
+    - **The audit.** Dry run 5 passed the whole Windows suite (6,469, with
+      the Prometheia legs running on the shipped data) and then failed in
+      `qt_windows_dist_audit.py`. The pass line still named `there`, a
+      variable item 291's rewrite removed, so the script raised NameError
+      exactly when nothing was missing. No local check had ever run its
+      passing path. `ci-selftest.sh` now stages a complete Windows tree,
+      which must pass, and the same tree without the body catalog, which
+      must fail. Put back to the old line, the first case fails.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

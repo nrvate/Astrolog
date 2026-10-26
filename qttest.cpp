@@ -24625,6 +24625,37 @@ static void TestEphemDialogQt()
   us.fSeconds = fFalse;
   RecastAndRedrawQt();
 
+#ifdef PROMETHEIA
+  // The DEFAULT chain through the dialog. It names two sources, and the
+  // dialog used to say so -- "OK keeps only the ephemeris selected here"
+  // -- and do it: open the dialog, press OK, and Swiss was gone from
+  // behind Prometheia (found 2026-10-25, the maintainer's first look at
+  // an installed copy). The default is no list the user made, so it is
+  // not reported, and picking its head writes it whole.
+  EphSourceSet(SzEphSourceDefault());
+  DriveModalQt(ShowEphemDialogQt, [&](QWidget *pw) {
+    Check(!StrEphLineQt(pw).contains("more than one source"),
+      "the default chain is not reported as a list OK would cut (\"%s\")",
+      StrEphLineQt(pw).toLocal8Bit().constData());
+    FPickEphQt(pw, "prometheia");
+    if (!FClickButtonQt(pw, "IDOK"))
+      pw->close();
+  });
+  Check(FEqSz(SzSet(us.szEphemSource), SzEphSourceDefault()),
+    "OK with Prometheia picked keeps the Swiss Ephemeris behind it (%s)",
+    SzSet(us.szEphemSource));
+  // The other half: a list the dialog cannot show is still said.
+  EphSourceSet("swiss,moshier");
+  DriveModalQt(ShowEphemDialogQt, [&](QWidget *pw) {
+    Check(StrEphLineQt(pw).contains("more than one source"),
+      "a chain the user wrote is still reported (\"%s\")",
+      StrEphLineQt(pw).toLocal8Bit().constData());
+    if (!FClickButtonQt(pw, "IDCANCEL"))
+      pw->close();
+  });
+  EphSourceSet(baChainSav.constData());
+#endif
+
   // What the dialog builds: the registry itself as the list, the setting's
   // source selected, that source's own rows.
   EphSourceSet("swiss");

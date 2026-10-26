@@ -2674,7 +2674,7 @@ flag API DlgEphem(HWND hdlg, uint message, WPARAM wParam, LPARAM lParam)
 {
   EPHSRCDEF *pephsrc;
   char sz[cchSzMax*4], szHead[cchSzDef], szT[cchSzMax];
-  int i, j, rgisrc[cEphSrcBuiltIn];
+  int i, j;
   // The list row whose selection was last applied (so the poll below only
   // acts on a change the user made), and the status line's tick.
   static int isrcLast = -1, nTick = 0;
@@ -2712,7 +2712,7 @@ flag API DlgEphem(HWND hdlg, uint message, WPARAM wParam, LPARAM lParam)
     SetEphemRowsW(hdlg);
     // A setting naming more than one source is said once, since OK keeps
     // only the one picked here.
-    if (CEphChainSrc(us.szEphemSource, rgisrc, cEphSrcBuiltIn) > 1) {
+    if (FEphChainBeyondDialog()) {
       sprintf2(S(sz), "Your settings name more than one source (%s). OK "
         "keeps only the ephemeris selected here.", us.szEphemSource);
       SetEdit(dsEp_st, sz);
@@ -2774,7 +2774,7 @@ flag API DlgEphem(HWND hdlg, uint message, WPARAM wParam, LPARAM lParam)
         is.fSwissPathSet = fFalse;
       }
       if (*szEphKeyW)
-        EphSourceSet(szEphKeyW);
+        EphSourceSet(SzEphSourceForKey(szEphKeyW));
       wi.fCast = fTrue;
     }
     if (LOWORD(wParam) == IDOK || LOWORD(wParam) == IDCANCEL) {

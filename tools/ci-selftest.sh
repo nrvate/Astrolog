@@ -144,6 +144,24 @@ else
   skip "install round trip: needs ./astrolog and ./astrolog-qt"
 fi
 
+# qt_windows_dist_audit.py: a complete staged Windows tree passes, and one
+# missing a single ephem/ file fails. Nothing ran its PASSING path before
+# a Windows runner did, and that path held a NameError -- dry run 5 on
+# 2026-10-25 failed there, after the whole Windows suite had passed.
+W="$T/windist"
+mkdir -p "$W/platforms" "$W/tls" "$W/icons" "$W/font" "$W/ephem"
+for f in astrolog.exe Qt6Core.dll Qt6Gui.dll Qt6Widgets.dll Qt6Network.dll \
+         Qt6WebSockets.dll vcruntime140.dll msvcp140.dll platforms/qwindows.dll \
+         platforms/qoffscreen.dll tls/qschannelbackend.dll icons/astrolog16.png \
+         icons/astrolog32.png icons/astrolog48.png astrlog1.ico astrlog3.ico \
+         astrolog.as atlas.as timezone.as sefstars.txt seorbel.txt astexo.csv \
+         earth.bmp astrolog.htm changes.htm license.htm cgif-license.txt \
+         SHA256SUMS; do : > "$W/$f"; done
+for f in ephem/*; do : > "$W/$f"; done
+expect 0    "windows dist: a complete staged tree" python3 tools/qt_windows_dist_audit.py "$W"
+rm "$W/ephem/astrolog-bodies.epm"
+expect fail "windows dist: the Prometheia body catalog missing" python3 tools/qt_windows_dist_audit.py "$W"
+
 # ci-verify-package.sh: a tree with every required file and a manifest
 # that covers them passes; an empty tree, a missing data file, a
 # forbidden file and a stale manifest each fail.

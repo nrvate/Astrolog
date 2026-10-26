@@ -115,4 +115,4 @@ if bad:
     sys.exit(1)
 print(f"windows dist ok: astrolog.exe{' + test build' if want_test else ''}, "
       f"Qt runtime, MSVC runtime, platform plugins, icons, data, "
-      f"{there} ephemeris files")
+      f"{len(here)} ephemeris files")
