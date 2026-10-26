@@ -24677,9 +24677,12 @@ static void TestEphemDialogQt()
     Check(pwDbg != NULL && pwDbg->isVisible() &&
       str.contains("LIBRARY AND ENGINE") && str.contains("SEARCH PATH") &&
       str.contains("EPHEMERIS SOURCE CHAIN") && str.contains("STATISTICS") &&
-      str.contains("linux_p1900p2100.441"), "it opens a window naming the "
-      "planets file in use (\"%s\")", str.left(300).toLocal8Bit().
-      constData());
+      str.contains("linux_p1900p2100.441") &&
+      str.contains("stars and deep sky") && !str.contains("named fixed") &&
+      str.contains(QRegularExpression("\\n +[1-9][0-9,]* bodies\\n")),
+      "it opens a window naming the planets file in use and counting the "
+      "catalog's bodies apart from the library's stars (\"%s\")",
+      str.left(300).toLocal8Bit().constData());
     ShotEphQt(pw, "prometheia-debug-button");
     if (!FClickButtonQt(pw, "IDCANCEL"))
       pw->close();

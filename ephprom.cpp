@@ -1842,6 +1842,32 @@ static void DbgFile(CONST char *szLabel, CONST char *szPath, int iParam)
       "\"" : "");
 }
 
+// How many bodies the catalog holds. The C API has no call for it (asked
+// of Prometheia 2026-10-25), so it is read from the description the engine
+// gives a catalog body's answer -- "... EPM1 catalog(s) [13808 bodies]
+// ..." -- from the last cast, or from Ceres asked for here. -1 if neither
+// says.
+static long LEphPromCatalogBodies()
+{
+  CONST char *pch;
+  long l;
+  int i;
+  prometheia_result res;
+  prometheia_error err;
+
+  for (i = 0; i < (int)rgEphPromLast.size(); i++)
+    if ((pch = strstr(rgEphPromLast[i].szSrc, "catalog(s) [")) != NULL &&
+      sscanf(pch, "catalog(s) [%ld bodies]", &l) == 1)
+      return l;
+  if (pephProm != NULL && FSzSet(szEphPromCat) &&
+    prometheia_calc(pephProm, 20000001, 2451545.0, NULL, &res, &err) ==
+    PROMETHEIA_OK && res.source != NULL &&
+    (pch = strstr(res.source, "catalog(s) [")) != NULL &&
+    sscanf(pch, "catalog(s) [%ld bodies]", &l) == 1)
+    return l;
+  return -1;
+}
+
 static CONST char *SzDbgErr(int nErr)
 {
   static CONST char *rgsz[] = {"none", "unknown body", "unsupported",
@@ -1878,8 +1904,13 @@ CONST char *SzEphPromDebug(void)
     DbgAdd("  %-20s %ld time%s this session, the last at %s in %.1f ms\n",
       "opened", sEPS.cOpen, sEPS.cOpen == 1 ? "" : "s", szA, sEPS.rMsOpen);
   }
-  DbgAdd("  %-20s %d named fixed stars, built in\n", "stars",
-    prometheia_star_count());
+  // Not all stars, and not all named: the library's star namespace is the
+  // Bright Star Catalogue, the IAU-named stars beyond it and the Messier
+  // objects, 9,290 at 0.7.3 (its docs/STARS.md). The window said "9290
+  // named fixed stars", which the maintainer read as the asteroid count.
+  DbgAdd("  %-20s %d built in: the Bright Star Catalogue, the IAU-named "
+    "stars\n  %-20s and the Messier objects\n", "stars and deep sky",
+    prometheia_star_count(), "");
   if (pephProm != NULL)
     DbgAdd("  %-20s %d named by token\n", "hypotheticals",
       prometheia_hypothetical_count(pephProm));
@@ -1898,6 +1929,13 @@ CONST char *SzEphPromDebug(void)
     epPromLongspan);
   DbgFile("Asteroid catalog", fEphPromOpen ? szEphPromCat : NULL,
     epPromCatalog);
+  if (fEphPromOpen && FSzSet(szEphPromCat)) {
+    long lBodies = LEphPromCatalogBodies();
+    if (lBodies >= 0) {
+      DbgCount(lBodies, S(szA));
+      DbgAdd("  %-20s %s bodies\n", "", szA);
+    }
+  }
   DbgFile("Asteroid perturbers", fEphPromOpen ? szEphPromPert : NULL,
     epPromPerturbers);
   if (pephProm != NULL) {

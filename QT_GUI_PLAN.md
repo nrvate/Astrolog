@@ -12433,6 +12433,19 @@ this is the note that explains the wall of dialogs.
 
     With the move to the main window disabled, the last three fail.
 
+    The first version said "9290 named fixed stars", and the maintainer
+    read it as the asteroid count. That number is the library's whole star
+    namespace: 9,096 Bright Star Catalogue stars, 84 IAU-named stars
+    beyond it, and the 110 Messier objects (Prometheia's docs/STARS.md).
+    Most of them have no name, and the Messier entries are not stars. It
+    now reads "stars and deep sky: 9290 built in: the Bright Star
+    Catalogue, the IAU-named stars and the Messier objects". The asteroid
+    catalog's own count ("13,808 bodies") is on its line under FILES. The C
+    API has no call for a catalog's size, so the count is read from the
+    description the engine gives a catalog body's answer, and Prometheia
+    has been asked for a proper call. The suite's window check requires
+    both the new label and a body count.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.
