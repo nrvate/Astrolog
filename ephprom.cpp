@@ -634,6 +634,12 @@ void SzEphPromEmpty(int iep, flag fLong, char *sz, int cch)
 // their 624c96d, asked for by this dialog): a file cut to 1900-2100 is
 // padded out to whole 32-day records, so its name's years are not quite
 // the dates it answers. Empty when the engine is not open.
+CONST char *SzEphPromCatalogUsed()
+{
+  return szEphPromCat;
+}
+
+
 void SzEphPromSpans(char *sz, int cch)
 {
   char rgszDate[2][24], *pch = sz;

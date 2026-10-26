@@ -79,6 +79,14 @@ double REphPromElemDiff(CONST char *szFile);
 // the files.
 flag FEphPromAvailable(char *szWhy, int cch);
 
+// The body catalog the engine resolved when it last opened: the file
+// named, or the first of the shipped defaults found; "" for none. The
+// suite asks this rather than reading the parameter, because an empty
+// parameter has meant the shipped catalog since work log item 291 -- and
+// a suite that took "empty" for "none" expected Ceres unknown and failed
+// on every runner, where the shipped catalog is the only one.
+CONST char *SzEphPromCatalogUsed(void);
+
 // 4.1's Start and State. Start opens the engine from the parameters and
 // returns fFalse, with the reason in szWhy, when it cannot. State writes
 // "ready: <engine>" or "closed" (esReady), or why the last open failed

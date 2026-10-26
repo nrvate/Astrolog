@@ -12322,6 +12322,40 @@ this is the note that explains the wall of dialogs.
       engine support and a refit judged by geocentric angular error. The
       maintainer set the limit: **5 MB for all the moons over the 200
       years**, or they do not ship.
+    - **Prometheia measured it, and they do not ship.** It refit all 32
+      objects in each moon's mean orbital plane, held to the error at the
+      planet's nearest approach, and extrapolated from two years of JPL
+      records. 1900–2100 comes to 169 MB at 0.1" and 51 MB at 1", against
+      the 5 MB limit, so there is no moon file and no satellite loading. The
+      planet centres would fit if each were answered as its barycentre:
+      599–899 lie within 0.1" of theirs, and 999 is 2,132 km out. That would
+      be a different body under the centre's name, so it is not done.
+
+293. **What dry run 4 found** (2026-10-25, run 40255500296, on ad278f5).
+    The macOS and Windows suites failed the same two `prometheia` checks:
+    "a designation with no catalog is error 1" and "no catalog, no
+    Chiron". The group set `fCat` from the catalog PARAMETER, filled in
+    only when Prometheia's full `sbdb-*.epm` turned up through
+    `PROMETHEIA_HOME`. That is true here and false on a runner. Since item
+    291 an empty parameter means the shipped `astrolog-bodies.epm`, so the
+    runner loaded a catalog while the test asserted it had none.
+    - **The fix asks the engine.** `SzEphPromCatalogUsed()` (ephprom.h)
+      names the catalog it resolved when it opened. The group, and the
+      oracle's Chiron leg, which had the same read, set `fCat` from it
+      after the engine opens. A local run with the checkout's catalog
+      hidden reproduced both failures before the fix and passes after it.
+    - **Three legs that skipped on every runner now run there:**
+      - the Object Selections leg: every numbered body it offers, from
+        Prometheia alone, to 1" of Swiss;
+      - the oracle's Chiron, 0.034" from Swiss's file against the shipped
+        catalog;
+      - the Ephemeris Settings dialog's whole Prometheia block. That one
+        had required the DE440 cut, which neither `make check` nor any
+        runner has, so it was skipped on both. It is gated on the
+        plugin's own default order now, so the shipped 1900–2100 cut
+        qualifies. Its "no catalog: works, except for Chiron" leg became
+        "an empty catalog field uses the shipped catalog, and Chiron
+        works", since no configuration of this tree lacks a catalog.
 
 ## Features this fork adds to both builds
 

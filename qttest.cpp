@@ -21224,8 +21224,9 @@ static void TestPrometheiaOracleQt()
   // Leg 9: a small body through the catalog. Chiron: Swiss's own file
   // and orbit vs the SBDB record with the sb441 perturbers -- different
   // realizations of the same body, so the loosest of the body tiers,
-  // and still a binding check.
-  if (FSzSet(SzEphPromParam(epPromCatalog))) {
+  // and still a binding check. The catalog the engine loaded, shipped or
+  // named, not the parameter, which is empty for the shipped one.
+  if (FSzSet(SzEphPromCatalogUsed())) {
     EphSelBorrow bSwiss(szChainOracle);
     fS = FSwissPlanet(oChi, jd, oEar, &lonS, &latS, &d, &d, &d, &d);
     fCast = FPromOneRowQt(eph::kTimeUT1, jd, &pfTrop, eph::kObjBody,
@@ -21610,12 +21611,11 @@ static void TestPrometheiaQt()
       szPath, sizeof(szPath)))
       EphPromSetParam(epPromCatalog, szPath);
     else
-      printf("  note: no sbdb catalog on the -Yi paths, so the small-body "
-        "legs skip\n");
+      printf("  note: no sbdb catalog in the Prometheia checkout, so the "
+        "shipped one is used\n");
     if (FEphPromFindFile("sb441-n16-de440span.bsp", szPath, sizeof(szPath)) ||
       FEphPromFindFile("sb441-n16.bsp", szPath, sizeof(szPath)))
       EphPromSetParam(epPromPerturbers, szPath);
-    fCat = FSzSet(SzEphPromParam(epPromCatalog));
   }
   if (!FEphPromAvailable(szWhy, sizeof(szWhy))) {
     printf("  skipped: the engine's files are missing (%s)\n", szWhy);
@@ -21625,6 +21625,10 @@ static void TestPrometheiaQt()
     printf("  skipped: the engine did not open (%s)\n", szWhy);
     return;
   }
+  // What the engine LOADED, not what the parameter says: an empty one is
+  // the shipped catalog, which is the only one on a release runner.
+  fCat = FSzSet(SzEphPromCatalogUsed());
+  printf("  catalog: %s\n", fCat ? SzEphPromCatalogUsed() : "none");
   Check(NEphPromState(szState, (int)sizeof(szState)) == 0, "state ready (%s)",
     szState);
   printf("  engine: %s\n", szState);
@@ -24992,7 +24996,14 @@ static void TestEphemDialogQt()
 #ifdef PROMETHEIA
   {
     char szEphe[cchSzMax], szCat[cchSzMax];
-    if (FEphPromFindFile("linux_p1550p2650.440", S(szEphe))) {
+    // The planets file an empty field uses: the first of the defaults
+    // found, in the plugin's own order (ephprom.cpp), which is the shipped
+    // 1900-2100 cut wherever nothing longer is on the -Yi paths. This
+    // asked for the DE440 cut alone until 2026-10-25, which neither make
+    // check nor any release runner has, so the block was skipped on both.
+    if (FEphPromFindFile("linux_p1550p2650.440", S(szEphe)) ||
+      FEphPromFindFile("de440s.bsp", S(szEphe)) ||
+      FEphPromFindFile("linux_p1900p2100.441", S(szEphe))) {
       flag fCat = FEphPromFindFile(StrPromCatalogQt().toLocal8Bit().
         constData(), S(szCat));
       DriveModalQt(ShowEphemDialogQt, [&](QWidget *pw) {
@@ -25020,13 +25031,19 @@ static void TestEphemDialogQt()
           peEph == NULL ? "" : peEph->placeholderText().toLocal8Bit().
           constData(), peEph == NULL ? "" : peEph->toolTip().toLocal8Bit().
           constData());
+        // Empty, the catalog field means the shipped catalog (work log
+        // item 291), so Chiron works with nothing named. "Works, except
+        // for Chiron" is for a tree with no catalog at all, which no
+        // configuration of this one can be.
         if (peCat != NULL)
           peCat->setText("");
         str = StrEphTestQt(pw);
-        Check(str.startsWith("Works, except for Chiron. Sun ") &&
-          str.contains("Asteroid Catalog"), "Prometheia with no catalog "
-          "works and says what Chiron needs (\"%s\")",
-          str.toLocal8Bit().constData());
+        Check(str.startsWith("Works. Sun ") && str.contains("Chiron ") &&
+          peCat != NULL && peCat->placeholderText().contains(
+          "astrolog-bodies.epm"), "an empty catalog field uses the shipped "
+          "catalog, and Chiron works (\"%s\"; \"%s\")",
+          str.toLocal8Bit().constData(), peCat == NULL ? "" :
+          peCat->placeholderText().toLocal8Bit().constData());
         cLong += !FEphFitsQt(pw, "dsEp_st");
         if (fCat && peCat != NULL) {
           peCat->setText(QString::fromLocal8Bit(szCat));
