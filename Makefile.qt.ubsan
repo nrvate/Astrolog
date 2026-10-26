@@ -80,7 +80,11 @@ RM = rm -f
 PROMETHEIA_OBJDIR := $(OBJDIR)/prometheia
 PROMETHEIA_EXTRA_CXXFLAGS := -fsanitize=undefined -g
 include Makefile.prometheia
-CPPFLAGS += $(PROMETHEIA_TEST_FLAGS)
+# "override", like Makefile.prometheia's own additions: once a variable has been
+# overridden, every later plain += to it is silently ignored, and this one
+# was -- the live server legs skipped, "no prometheiad", because the path
+# never reached qttest.o.
+override CPPFLAGS += $(PROMETHEIA_TEST_FLAGS)
 
 # Stamp the plugin state this dir was built with; see Makefile.srcs.
 $(call prometheia-stamp,$(OBJDIR))

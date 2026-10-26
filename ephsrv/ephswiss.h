@@ -29,7 +29,15 @@
 #define EPHSWISS_H
 
 #include "ephproto.h"
-#include "swephexp.h"
+// The vendored header, by a path relative to this file -- the one place a
+// quoted include is always searched first -- so no build can reach an
+// installed one. "swephexp.h" alone was found through whatever -I came
+// next: the Qt makefiles' "-I ." got the vendored copy, and the console
+// build, which has no -I and reaches this header through ephreq.h,
+// compiled ephprom.cpp against the thread-safe fork in /usr/local/include
+// on any machine that had installed it, and failed on every machine that
+// had not (the first release dry run with Prometheia always compiled in).
+#include "../swephexp.h"
 
 #include <string>
 

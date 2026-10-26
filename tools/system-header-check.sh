@@ -16,11 +16,32 @@
 # Two checks instead:
 #   1. every Qt makefile that adds "-I ephsrv" adds "-I ." on the same line;
 #   2. a real -M preprocess (which does list system headers) of what the Qt
-#      build includes, under those flags, resolves swephexp.h to ./swephexp.h.
+#      build includes, under those flags, resolves swephexp.h to ./swephexp.h;
+#   3. the same of ephprom.cpp under the CONSOLE build's flags, which have no
+#      -I at all. That build reaches ephswiss.h through ephreq.h, and 1 and 2
+#      never looked at it: the first release dry run with Prometheia always
+#      compiled in failed there while this check passed, because this
+#      machine had the fork installed. ephswiss.h names "../swephexp.h"
+#      since, which no -I order can redirect.
 #
 #   tools/system-header-check.sh
 #   tools/system-header-check.sh --selftest   # bad inputs it must refuse
 set -u
+
+# check_resolved <dir> <file> <flags...>: 3 above -- every swephexp.h that
+# compiling <file> in <dir> pulls in is <dir>/swephexp.h.
+check_resolved() {
+  dir=$1; src=$2; shift 2
+  got=$(cd "$dir" && g++ -x c++ -std=gnu++17 -M -MT x "$@" "$src" 2>/dev/null \
+    | tr ' \\' '\n\n' | grep -E 'swephexp\.h$' | sort -u)
+  [ -n "$got" ] || { echo "system-header-check FAIL: $src includes no swephexp.h at all"; return 1; }
+  want=$(cd "$dir" && realpath swephexp.h)
+  for h in $got; do
+    [ "$(cd "$dir" && realpath "$h")" = "$want" ] || {
+      echo "system-header-check FAIL: $src resolves swephexp.h to $h"; return 1; }
+  done
+  return 0
+}
 
 # check_flags <makefile>...: 1 above.
 check_flags() {
@@ -52,6 +73,15 @@ if [ "${1:-}" = "--selftest" ]; then
   case "$got" in "$d/sys/swephexp.h") ;; *) echo "system-header-check SELFTEST FAIL: decoy did not win without -I . ($got)"; rm -rf "$d"; exit 1;; esac
   got=$(cd "$d/root" && g++ -M -isystem "$d/sys" -I ephsrv -I . t.cpp | tr ' \\' '\n\n' | grep 'swephexp.h')
   case "$got" in "swephexp.h") ;; *) echo "system-header-check SELFTEST FAIL: vendored did not win with -I . ($got)"; rm -rf "$d"; exit 1;; esac
+  # 3, with the same decoy: a header in a subdirectory naming "swephexp.h"
+  # reaches the decoy under flags with no -I, and "../swephexp.h" does not.
+  echo '#include "swephexp.h"' > "$d/root/ephsrv/x.h"
+  echo '#include "ephsrv/x.h"' > "$d/root/c.cpp"
+  check_resolved "$d/root" c.cpp -isystem "$d/sys" >/dev/null 2>&1 && {
+    echo "system-header-check SELFTEST FAIL: accepted the decoy under the console's flags"; rm -rf "$d"; exit 1; }
+  echo '#include "../swephexp.h"' > "$d/root/ephsrv/x.h"
+  check_resolved "$d/root" c.cpp -isystem "$d/sys" >/dev/null 2>&1 || {
+    echo "system-header-check SELFTEST FAIL: refused ../swephexp.h under the console's flags"; rm -rf "$d"; exit 1; }
   rm -rf "$d"
   echo "system-header-check selftest clean"
   exit 0
@@ -64,10 +94,10 @@ check_flags Makefile.qt Makefile.qt.test Makefile.qt.asan Makefile.qt.ubsan \
   tools/warning_audit.py || rc=1
 
 QTC=$(pkg-config --cflags Qt5Widgets 2>/dev/null || pkg-config --cflags Qt6Widgets 2>/dev/null)
-got=$(echo '#include "ephswiss.h"' | g++ -x c++ -std=gnu++17 -M -I ephsrv -I . $QTC - 2>/dev/null | tr ' \\' '\n\n' | grep -E 'swephexp\.h$' | sort -u)
-if [ "$got" != "swephexp.h" ]; then
-  echo "system-header-check FAIL: ephswiss.h resolves swephexp.h to: ${got:-nothing}"
-  rc=1
-fi
+# What the Qt builds compile ephswiss.h from, under their flags; compared as
+# FILES, since "../swephexp.h" from ephsrv/ is ./swephexp.h by another name.
+check_resolved . qtdriver.cpp -DQT -I ephsrv -I . $QTC || rc=1
+# The console build's flags (Makefile, plus Makefile.prometheia's).
+check_resolved . ephprom.cpp -DPROMETHEIA -Iprometheia/include || rc=1
 [ $rc -eq 0 ] || exit 1
 exit 0

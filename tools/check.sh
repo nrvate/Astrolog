@@ -99,6 +99,13 @@ for a in rc_audit rc_mnemonic_audit rc_field_audit rc_lookup_audit \
 done
 step "build: console and Qt"     make -j4
 step "build: the test binary"    make qt-test -j4
+# The live server legs find prometheiad through PROMETHEIA_HOME, compiled
+# into the test build as a string, and SKIP without it -- which reads as
+# a pass. A plain "CPPFLAGS +=" after Makefile.prometheia's override was
+# silently ignored, and the suite ran 155 checks fewer, green, until a
+# count was compared by hand. So: the path is in the binary, or this fails.
+step "test build has PROMETHEIA_HOME" sh -c \
+  'h=${PROMETHEIA_HOME:-$(sed -n "s/^PROMETHEIA_HOME ?= //p" Makefile.srcs)}; [ -n "$h" ] && grep -q -a -F "$h" astrolog-qt-test'
 
 # The compiler's warnings, for every source file the three Linux builds
 # compile. The full audit is five builds and 70 s, so it is not here -- and

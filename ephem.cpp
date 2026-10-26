@@ -143,6 +143,12 @@ static CONST char * CONST rgszEphSrcFuture[] = {
   // second answer to the same question.
   "prometheia",
 #endif
+  // The end of the list -- and what keeps it from being EMPTY when every
+  // source above is compiled in, as in every product build since
+  // Prometheia is: an empty initializer is a zero-size array, which GCC
+  // accepts as an extension and MSVC refuses (C2466, the first release
+  // dry run with both compiled in).
+  NULL
 };
 
 
@@ -160,8 +166,7 @@ flag FEphSrcKeyKnownN(CONST char *pch, int cch)
   for (isrc = 0; isrc < cEphSrcBuiltIn; isrc++)
     if (FEqSzRange(pch, cch, rgephsrc[isrc]->szKey))
       return fTrue;
-  for (isrc = 0; isrc < (int)(sizeof(rgszEphSrcFuture) /
-    sizeof(*rgszEphSrcFuture)); isrc++)
+  for (isrc = 0; rgszEphSrcFuture[isrc] != NULL; isrc++)
     if (FEqSzRange(pch, cch, rgszEphSrcFuture[isrc]))
       return fTrue;
   return fFalse;

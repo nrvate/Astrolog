@@ -12088,6 +12088,45 @@ this is the note that explains the wall of dialogs.
     - **Unchanged:** the default source is still Swiss, and nothing is
       shipped yet. The Win32 oracle (`Makefile.win`, `Makefile.wcli`) stays
       Swiss-only by design, and `ephprom.cpp` compiles to nothing there.
+    - **What the first release dry run found** (run 40248892354, at
+      0ab1cb5). All three platforms failed, and each failure was real:
+      - *Linux: the console build compiled `ephprom.cpp` against an
+        installed Swiss header.* `ephsrv/ephswiss.h` said `"swephexp.h"`,
+        and the console build passes no `-I`. So the search went past
+        `ephsrv/` to `/usr/local/include`, where this machine has the
+        thread-safe fork. The runner has none, and failed. The same class
+        as the qt.25 dry run's, by a road `tools/system-header-check.sh`
+        never walked: it checked only makefiles adding `-I ephsrv`. The
+        include is `"../swephexp.h"` now, which no `-I` order can redirect.
+        The check gained a leg preprocessing `ephprom.cpp` under the
+        console's flags, with a selftest decoy. Put back to the old
+        include, the leg fails naming `/usr/local/include/swephexp.h`.
+      - *Linux: Prometheia's `src/frames.cpp` uses `uint8_t` without
+        `<cstdint>`.* GCC 11's library includes it transitively and GCC 13's
+        (ubuntu-24.04) does not. Reproduced in an `ubuntu:24.04` container:
+        15 errors in that file, none in the other 13. Reported to their
+        session; the pin moves when their fix is pushed.
+      - *Windows: a zero-size array.* `rgszEphSrcFuture[]` in `ephem.cpp`
+        lists the keys of sources not compiled in, and with both JPLWEB and
+        PROMETHEIA it is empty. GCC accepts that as an extension; MSVC
+        refuses it (C2466). It ends in NULL now, as does the suite's copy,
+        which the Windows test build would have hit next. **MSVC compiled
+        all 14 Prometheia sources**, the library's first build with that
+        compiler, with only C4996 deprecation warnings.
+      - *macOS: `tools/ci-macos-zstd.sh` did not parse.* macOS's `/bin/sh`
+        is bash 3.2, which read an apostrophe inside a `${VAR:?message}` as
+        an opening quote. It is a plain `if` now.
+    - **And one found by counting.** After those fixes the suite ran 6,329
+      checks, green, against 6,484 before. Once a make variable has been
+      modified with `override`, every later plain `+=` to it is ignored.
+      So the three test makefiles' `CPPFLAGS += $(PROMETHEIA_TEST_FLAGS)`,
+      after `Makefile.prometheia`, had done nothing. With no
+      `PROMETHEIA_HOME_DIR` the live server group skipped: "no prometheiad
+      to start ("")", 151 checks. The earlier 6,484 had passed only because
+      `qttest.o` predated the change. Those lines are `override` too, and
+      `make check` now requires the path in the built test binary ("test
+      build has PROMETHEIA_HOME"): 0 occurrences in the broken binary, 1 in
+      the fixed one.
 
 ## Features this fork adds to both builds
 

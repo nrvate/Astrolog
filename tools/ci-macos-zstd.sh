@@ -36,8 +36,15 @@ if [ ! -f "$lib/libzstd.a" ] || [ ! -f "$lib/zstd.h" ]; then
   got=$( (shasum -a 256 "$tgz" 2>/dev/null || sha256sum "$tgz") | cut -d' ' -f1)
   [ "$got" = "$SHA" ] || { echo "zstd-$VER.tar.gz: SHA-256 $got, expected $SHA" >&2; exit 1; }
   tar -x -z -f "$tgz" -C "$dir"
+  # No ${VAR:?message} here: macOS /bin/sh is bash 3.2, which read an
+  # apostrophe inside that message as an opening quote and failed the
+  # first release job with "unexpected EOF while looking for matching".
   min=
-  [ "$(uname -s)" != Darwin ] || min="-mmacosx-version-min=${MACOSX_DEPLOYMENT_TARGET:?set MACOSX_DEPLOYMENT_TARGET, or the archive claims the runner's macOS}"
+  if [ "$(uname -s)" = Darwin ]; then
+    [ -n "${MACOSX_DEPLOYMENT_TARGET:-}" ] || {
+      echo "set MACOSX_DEPLOYMENT_TARGET, or the archive claims the macOS it was built on" >&2; exit 1; }
+    min="-mmacosx-version-min=$MACOSX_DEPLOYMENT_TARGET"
+  fi
   # The single-threaded archive: Prometheia decompresses its catalog
   # chunks one at a time and links no threads (EMBEDDING.md).
   make -C "$lib" -j4 libzstd.a CFLAGS="-O2 $min" >&2

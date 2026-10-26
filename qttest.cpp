@@ -24185,6 +24185,7 @@ static void TestEphemRegistryQt()
 #ifndef PROMETHEIA
           "prometheia",
 #endif
+          NULL   // so never empty, which MSVC refuses (ephem.cpp's copy)
         };
         int isrc, i;
 
@@ -24201,7 +24202,7 @@ static void TestEphemRegistryQt()
         // that removing one when its plugin lands is forced rather than
         // remembered -- the count is asserted, so a key that becomes a
         // real source and is left in the future list fails this.
-        for (i = 0; i < (int)(sizeof(rgszFuture)/sizeof(*rgszFuture)); i++) {
+        for (i = 0; rgszFuture[i] != NULL; i++) {
           Check(FEphSrcKeyKnown(rgszFuture[i]),
             "-bE still accepts the not-yet-compiled source %s",
             rgszFuture[i]);
