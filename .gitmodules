@@ -1,0 +1,4 @@
+[submodule "prometheia"]
+	path = prometheia
+	url = https://github.com/nrvate/ephemeris-prometheia.git
+	branch = initial

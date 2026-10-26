@@ -112,6 +112,18 @@ make astrolog -j4 >"$out/build-head.log" 2>&1 || {
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 git archive "$base" | tar -x -C "$tmp"
+# git archive leaves a submodule out. A base from 2026-10-25 on records a
+# Prometheia commit, and builds only with it: extract that commit there,
+# fetching it first if this clone of the submodule has not got it (the
+# base can pin an older one than HEAD). A base before then has no
+# submodule and builds as it always did.
+if prom=$(git rev-parse -q --verify "$base:prometheia" 2>/dev/null); then
+  git -C prometheia cat-file -e "$prom^{commit}" 2>/dev/null \
+    || git -C prometheia fetch -q origin "$prom"
+  mkdir -p "$tmp/prometheia"
+  git -C prometheia archive "$prom" | tar -x -C "$tmp/prometheia" || {
+    echo "BASE PROMETHEIA $prom NOT AVAILABLE -- git submodule update --init"; exit 1; }
+fi
 ( cd "$tmp" && make astrolog -j4 ) >"$out/build-base.log" 2>&1 || {
   echo "BASE BUILD FAILED at $basesha -- see $out/build-base.log"
   tail -20 "$out/build-base.log"; exit 1; }

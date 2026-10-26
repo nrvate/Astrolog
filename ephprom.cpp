@@ -1302,42 +1302,6 @@ flag FEphPromCompute(CONST EPHPROMQ *pq, EPHPROMANSWER rga[])
 // answer's longitude carries is.rSid subtracted, which the host re-adds,
 // because that is how the program's two halves have always met.
 
-// A Swiss body id to the NAIF/SPK-ID the plugin computes. The system
-// barycentres from Mars on are Prometheia's own convention (C_API.md:
-// PROMETHEIA_MARS is 4, not 499); the small bodies are their SPK-IDs,
-// 20000000 + the asteroid's number. Bodies the engine does not serve --
-// the fictitious points, the planetary moons -- return ephNativeNone.
-static int NNaifFromSwiss(int iobj)
-{
-  switch (iobj) {
-  case SE_SUN:       return PROMETHEIA_SUN;
-  case SE_MOON:      return PROMETHEIA_MOON;
-  case SE_MERCURY:   return PROMETHEIA_MERCURY;
-  case SE_VENUS:     return PROMETHEIA_VENUS;
-  case SE_EARTH:     return PROMETHEIA_EARTH;
-  case SE_MARS:      return PROMETHEIA_MARS;
-  case SE_JUPITER:   return PROMETHEIA_JUPITER;
-  case SE_SATURN:    return PROMETHEIA_SATURN;
-  case SE_URANUS:    return PROMETHEIA_URANUS;
-  case SE_NEPTUNE:   return PROMETHEIA_NEPTUNE;
-  case SE_PLUTO:     return PROMETHEIA_PLUTO;
-  case SE_CHIRON:    return 20002060;
-  case SE_PHOLUS:    return 20005145;
-  case SE_CERES:     return 20000001;
-  case SE_PALLAS:    return 20000002;
-  case SE_JUNO:      return 20000003;
-  case SE_VESTA:     return 20000004;
-  default:
-    // Every Swiss id past SE_AST_OFFSET is a numbered asteroid. An upper
-    // bound of SE_VARUNA + 99000 used to stand here, refusing everything
-    // past 119000 -- Eris, Haumea, Makemake, Gonggong -- so Swiss
-    // answered them even with this source primary.
-    if (iobj > SE_AST_OFFSET)
-      return 20000000 + (iobj - SE_AST_OFFSET);
-    return ephNativeNone;
-  }
-}
-
 static flag FAvailableProm(char *szWhy, int cch)
 {
   // Compiled in is available: a missing data file is a per-object

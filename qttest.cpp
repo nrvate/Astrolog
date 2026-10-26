@@ -20704,6 +20704,23 @@ static real RAnimRunSrvQt(int nAnim, int nDir, int nFrame, int *rgcReq,
   return rMax;
 }
 
+// The small-body catalog in the Prometheia checkout this build was
+// configured with, as a full path: the newest sbdb-*.epm there. Not a
+// fixed name, because the file is renamed at every refresh -- on
+// 2026-10-25 sbdb-full-20260916.epm was replaced, and removed, by
+// sbdb-20260916-refresh-20261025.epm, and four places here named the old
+// one. Empty when the checkout has none.
+static QString StrPromCatalogQt()
+{
+#ifdef PROMETHEIA_HOME_DIR
+  QFileInfoList rgfi = QDir(QString::fromLocal8Bit(PROMETHEIA_HOME_DIR)).
+    entryInfoList(QStringList() << "sbdb-*.epm", QDir::Files, QDir::Time);
+  if (!rgfi.isEmpty())
+    return rgfi.first().absoluteFilePath();
+#endif
+  return QString();
+}
+
 // prometheiad, Ephemeris Prometheia's protocol version 4 server: the one
 // the live server legs start, since this tree's own went (2026-10-25,
 // QT_GUI_PLAN.md item 289). Found in the Prometheia checkout this build was
@@ -20734,7 +20751,9 @@ static flag FPromdArgsQt(int port, QString *pstrBin, QStringList *prgstrArg,
     return fFalse;
   }
   rgstrFile[0] = strHome + "/ephe/linux_p1550p2650.440";
-  rgstrFile[1] = strHome + "/sbdb-full-20260916.epm";
+  rgstrFile[1] = StrPromCatalogQt();
+  if (rgstrFile[1].isEmpty())
+    rgstrFile[1] = strHome + "/sbdb-*.epm";
   rgstrFile[2] = strHome + "/ephe/sb441-n16-de440span.bsp";
   for (i = 0; i < 3; i++)
     if (!QFileInfo::exists(rgstrFile[i])) {
@@ -21587,7 +21606,8 @@ static void TestPrometheiaQt()
   // leg, and the catalog's own legs say what they skipped.
   {
     char szPath[cchSzMax];
-    if (FEphPromFindFile("sbdb-full-20260916.epm", szPath, sizeof(szPath)))
+    if (FEphPromFindFile(StrPromCatalogQt().toLocal8Bit().constData(),
+      szPath, sizeof(szPath)))
       EphPromSetParam(epPromCatalog, szPath);
     else
       printf("  note: no sbdb catalog on the -Yi paths, so the small-body "
@@ -24905,7 +24925,8 @@ static void TestEphemDialogQt()
   {
     char szEphe[cchSzMax], szCat[cchSzMax];
     if (FEphPromFindFile("linux_p1550p2650.440", S(szEphe))) {
-      flag fCat = FEphPromFindFile("sbdb-full-20260916.epm", S(szCat));
+      flag fCat = FEphPromFindFile(StrPromCatalogQt().toLocal8Bit().
+        constData(), S(szCat));
       DriveModalQt(ShowEphemDialogQt, [&](QWidget *pw) {
         QLineEdit *peCat, *peEph;
         QString str;

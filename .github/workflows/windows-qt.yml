@@ -69,6 +69,8 @@ jobs:
       QT_SUBDIR: msvc2022_64
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          submodules: true
 
       # The Qt install is cached, and the reason is not speed. aqt
       # fetches from a mirror it picks per run, and one mirror serving an
@@ -109,6 +111,16 @@ jobs:
       - name: Where Qt is
         shell: pwsh
         run: echo "QTDIR=${{ github.workspace }}\Qt\$env:QT_VERSION\$env:QT_SUBDIR" >> $env:GITHUB_ENV
+
+      # Ephemeris Prometheia's one dependency (Makefile.prometheia), from the
+      # runner's own vcpkg: a static library against the dynamic CRT, which
+      # is what /MD in tools/msvc-build-qt.cmd links, so no zstd DLL ships.
+      - name: zstd for MSVC
+        shell: pwsh
+        run: |
+          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install zstd:x64-windows-static-md
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          echo "ZSTD_DIR=$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows-static-md" >> $env:GITHUB_ENV
 
       # No moc, no build system: tools/qt-srcs.py reads Makefile.srcs,
       # the same source list every other build uses, and

@@ -49,28 +49,29 @@ casting a chart with the result.
 
 ```sh
 # Debian, Ubuntu, Mint
-sudo apt install g++ make pkg-config libx11-dev qt6-base-dev qt6-websockets-dev
+sudo apt install g++ make pkg-config libx11-dev libzstd-dev qt6-base-dev \
+  qt6-websockets-dev
 # qtbase5-dev libqt5websockets5-dev instead on Ubuntu 22.04 and 24.04 and
 # on Debian 12 works too -- the makefile builds against whichever
 # pkg-config finds
 # Fedora
-sudo dnf install gcc-c++ make pkgconf-pkg-config libX11-devel qt6-qtbase-devel \
-  qt6-qtwebsockets-devel
+sudo dnf install gcc-c++ make pkgconf-pkg-config libX11-devel libzstd-devel \
+  qt6-qtbase-devel qt6-qtwebsockets-devel
 # Rocky / Alma / RHEL 9 and 10 — the Qt package differs, and CRB holds
 # libX11-devel on both
 sudo dnf config-manager --set-enabled crb
-sudo dnf install gcc-c++ make pkgconf-pkg-config libX11-devel \
+sudo dnf install gcc-c++ make pkgconf-pkg-config libX11-devel libzstd-devel \
   qt5-qtbase-devel qt5-qtwebsockets-devel   # EL9
 # EL10, which has no Qt5: qt6-qtbase-devel qt6-qtwebsockets-devel
 # Arch
-sudo pacman -S gcc make pkgconf libx11 qt6-base qt6-websockets
+sudo pacman -S gcc make pkgconf libx11 zstd qt6-base qt6-websockets
 # openSUSE
-sudo zypper install gcc-c++ make pkgconf-pkg-config libX11-devel qt6-base-devel \
-  qt6-websockets-devel
+sudo zypper install gcc-c++ make pkgconf-pkg-config libX11-devel libzstd-devel \
+  qt6-base-devel qt6-websockets-devel
 # Alpine
-doas apk add g++ make pkgconf libx11-dev qt6-qtbase-dev qt6-qtwebsockets-dev
+doas apk add g++ make pkgconf libx11-dev zstd-dev qt6-qtbase-dev qt6-qtwebsockets-dev
 
-git clone https://github.com/nrvate/Astrolog && cd Astrolog
+git clone --recursive https://github.com/nrvate/Astrolog && cd Astrolog
 make -j4          # ./astrolog (console) and ./astrolog-qt (windowed)
 make install      # optional: both on PATH, plus a menu entry and icons
 ```

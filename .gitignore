@@ -36,6 +36,8 @@
 /astrolog-asan
 /obj-qt-test/
 /obj-qt-asan/
+# The console build's copy of Ephemeris Prometheia (Makefile.prometheia)
+/obj-prometheia/
 obj-win/
 astrolog.exe
 obj-wcli/

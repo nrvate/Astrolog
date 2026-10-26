@@ -56,11 +56,11 @@ LIBS = -lm -lX11 -ldl -pthread -s
 CPPFLAGS = -MMD -MP -O -std=gnu++17 -Wno-write-strings -Wno-narrowing -Wno-comment
 RM = rm -f
 
-# The Prometheia plugin's optional dependency; see Makefile.srcs for the
-# detection and for why a machine without the package builds exactly as
-# it always has.
-CPPFLAGS += $(PROMETHEIA_FLAGS)
-LIBS += $(PROMETHEIA_LIBS)
+# Ephemeris Prometheia, compiled from the submodule; see Makefile.prometheia.
+# The console build's OBJDIR is empty, so its copy of the library gets a
+# directory of its own beside the root objects.
+PROMETHEIA_OBJDIR := $(if $(OBJDIR),$(OBJDIR)/prometheia,obj-prometheia)
+include Makefile.prometheia
 
 # Stamp the plugin state the root objects were built with; the console
 # build's OBJDIR is empty, so the stamp lives at the root. See Makefile.srcs.
@@ -84,7 +84,7 @@ $(call prometheia-stamp,$(OBJDIR))
 # binary's flags -- two builds writing the same file.
 default: $(NAME) qt
 
-$(NAME): $(OBJS)
+$(NAME): $(OBJS) $(PROMETHEIA_LIB)
 	g++ -o $(NAME) $(OBJS) $(LIBS)
 
 # Only reached when OBJDIR is set; with it empty, $(objdir)%.o is plain
@@ -127,6 +127,7 @@ clean: clean-console
 # anyone running it meanwhile.
 clean-console:
 	$(RM) $(OBJS) $(OBJS:.o=.d) $(NAME)
+	$(RM) -r $(PROMETHEIA_OBJDIR)
 
 # This file is upstream's and builds upstream's binary as $(NAME); this
 # fork's Qt port has its own makefiles, reached through the named targets

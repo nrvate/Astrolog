@@ -85,44 +85,29 @@ $(SWISS_OBJS): override CPPFLAGS += $(SWISS_NOWARN)
 $(SWISS_OBJS): override CFLAGS += $(SWISS_NOWARN)
 
 
-# The Prometheia source plugin's optional dependency (EPHEMERIS_PLUGINS_
-# PLAN.md 4.2, phase 7): detected with `pkg-config prometheia`, and
-# built without it silently -- PROMETHEIA_FLAGS and PROMETHEIA_LIBS come
-# out empty, ephprom.cpp compiles empty, and no binary references the
-# library. The source then reports unavailable through FAvailable. The
-# Windows toolchains get no detection at all: the package is today a
-# Linux static library, and a .pc on a mingw PATH would hand this build
-# Linux paths. A makefile opts in with the two lines after its own
-# CPPFLAGS and LIBS:
-#
-#   CPPFLAGS += $(PROMETHEIA_FLAGS)
-#   LIBS += $(PROMETHEIA_LIBS)
-#
-# PROMETHEIA_HOME is where a Prometheia checkout lives: a sibling by
-# default, overridable with "make PROMETHEIA_HOME=/path". Its build tree's prometheia.pc is appended
-# to whatever PKG_CONFIG_PATH the user already has, so an installed
-# Prometheia still wins and a checkout without the sibling builds as before.
+# Ephemeris Prometheia is part of every product build since 2026-10-25,
+# compiled from the submodule at PROMETHEIA_DIR by Makefile.prometheia,
+# which each product makefile includes once it has its OBJDIR. It used to
+# be an optional pkg-config dependency here, found on this machine and
+# absent everywhere else -- so every build anyone else made, and every
+# release, had no Prometheia in it at all.
+PROMETHEIA_DIR ?= prometheia
+# PROMETHEIA_HOME is a different thing: a FULL Prometheia checkout, with
+# the daemon built and the kernels fetched, which the submodule has
+# neither of. The suite's live server legs start prometheiad from it over
+# its own kernels (qttest.cpp, FPromdArgsQt), so the three test makefiles
+# compile its path in, and the legs skip, saying why, when it is not
+# there. A sibling by default; "make PROMETHEIA_HOME=/path" names another.
 PROMETHEIA_HOME ?= /shares/ephemeris-prometheia
-PROMETHEIA_PKGCONFIG := PKG_CONFIG_PATH="$(PKG_CONFIG_PATH)$(if $(PKG_CONFIG_PATH),:)$(PROMETHEIA_HOME)/build" pkg-config
-UNAME := $(shell uname -s 2>/dev/null)
-ifneq ($(findstring Linux,$(UNAME)),Linux)
-PROMETHEIA_FOUND :=
-else
-PROMETHEIA_FOUND := $(shell $(PROMETHEIA_PKGCONFIG) --exists prometheia 2>/dev/null && echo yes)
-endif
-PROMETHEIA_FLAGS := $(if $(PROMETHEIA_FOUND),-DPROMETHEIA $(shell $(PROMETHEIA_PKGCONFIG) --cflags prometheia 2>/dev/null))
-# The suite's live server legs start prometheiad, the protocol v4 daemon
-# this tree's own server gave way to, from the same checkout over its own
-# kernels (qttest.cpp, FPromdArgsQt): the three test makefiles compile its
-# path in. Found or not -- the legs skip, saying why, when it is not there.
 PROMETHEIA_TEST_FLAGS := -DPROMETHEIA_HOME_DIR='"$(PROMETHEIA_HOME)"'
-PROMETHEIA_LIBS := $(if $(PROMETHEIA_FOUND),$(shell $(PROMETHEIA_PKGCONFIG) --static --libs prometheia 2>/dev/null))
 
-# That decision is made here, at parse time, and a flip of it changes no
-# source file's mtime -- so make happily links an ephem.o compiled
-# without the plugin beside a plugin-built ephprom.o, and the registry
-# row is silently absent (the trap the phase 7 review hit by hand). Each
-# opting-in makefile calls the stamp below with its object dir: the dir
+# PROMETHEIA_FLAGS is decided at parse time (Makefile.prometheia), and a
+# change of it changes no source file's mtime -- so make happily links an
+# ephem.o compiled without the plugin, or against another checkout's
+# headers, beside a plugin-built ephprom.o, and the registry row is
+# silently absent (the trap the phase 7 review hit by hand; the move from
+# pkg-config to the submodule is exactly such a change). Each including
+# makefile calls the stamp below with its object dir: the dir
 # remembers the flags it was last built with, and a change -- or
 # pre-stamp objects with no record to compare -- deletes the three
 # objects the flag can reach, before make has considered them. The

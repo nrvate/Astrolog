@@ -64,13 +64,15 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          submodules: true
       # mingw as well as Qt, so "make check" builds the Win32 oracle here
       # rather than skipping it. That build compiles nowhere else now,
       # and it went 62 commits without compiling the last time nothing
       # watched it -- while three work log items listed "Windows builds"
       # among their nets. About 30 s of apt for 40 s of compile.
       - name: Dependencies
-        run: tools/ci-deps.sh qtbase5-dev libqt5websockets5-dev pkg-config libx11-dev g++-mingw-w64-x86-64
+        run: tools/ci-deps.sh qtbase5-dev libqt5websockets5-dev pkg-config libx11-dev libzstd-dev g++-mingw-w64-x86-64
       - name: make check
         env:
           SELFTEST_ONLINE: "1"
@@ -104,8 +106,9 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           fetch-depth: 0
+          submodules: true
       - name: Dependencies
-        run: tools/ci-deps.sh libx11-dev
+        run: tools/ci-deps.sh libx11-dev libzstd-dev
       - name: Against the previous release tag
         env:
           REF: ${{ github.event.inputs.tag || github.ref_name }}
@@ -153,6 +156,8 @@ jobs:
       MACOSX_DEPLOYMENT_TARGET: "12.0"
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          submodules: true
       - run: brew install pkg-config
       - name: Cached Qt
         uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0, Node 24
@@ -161,6 +166,16 @@ jobs:
           key: qt-mac-${{ env.QT_VERSION }}-clang_64-qtbase-qttools-qtwebsockets-aqt3.3.0-nodsym
       - name: Qt ${{ env.QT_VERSION }}, pinned
         run: tools/ci-macos-qt.sh "$QT_VERSION" "$HOME/Qt" >> "$GITHUB_ENV"
+      # Ephemeris Prometheia's one dependency, built for the deployment
+      # target above and linked in statically; the script says why not
+      # Homebrew's.
+      - name: Cached zstd
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0, Node 24
+        with:
+          path: ~/zstd
+          key: zstd-1.5.7-static-macos${{ env.MACOSX_DEPLOYMENT_TARGET }}-${{ runner.arch }}
+      - name: zstd, pinned and static
+        run: tools/ci-macos-zstd.sh "$HOME/zstd" >> "$GITHUB_ENV"
       # "shell: bash" is bash -eo pipefail; the default -e reports tee's
       # status, and a failed make read as a green step.
       - name: Build

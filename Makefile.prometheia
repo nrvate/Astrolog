@@ -1,0 +1,49 @@
+# Ephemeris Prometheia, compiled into every product build from the
+# submodule at prometheia/ (QT_GUI_PLAN.md work log item 290). The
+# maintainer's decision, 2026-10-25: this fork is coupled to Prometheia --
+# a required checkout -- and the Swiss Ephemeris stays as a selectable
+# source beside it.
+#
+# A makefile includes this AFTER its own OBJDIR, CPPFLAGS and LIBS, having
+# named where the library's objects go:
+#
+#   PROMETHEIA_OBJDIR := $(OBJDIR)/prometheia
+#   include Makefile.prometheia
+#
+# and lists $(PROMETHEIA_LIB) among its binary's prerequisites. Each build
+# gets a directory of its own: the library's object names (engine.o,
+# time.o) are generic, two makefiles run by one "make -j4" would otherwise
+# race on one archive, and a sanitizer or clang build can set
+# PROMETHEIA_EXTRA_CXXFLAGS for its own copy. It costs 6 s at -j4.
+#
+# The library's own makefile fragment does the work: it reads the source
+# list from embed/sources.txt, compiles it with the flags its numbers
+# depend on (C++20, -ffp-contract=off) and never with this tree's
+# CPPFLAGS, and leaves the parent's default goal alone (Prometheia's
+# docs/EMBEDDING.md, "The contract"). Its one dependency is libzstd:
+# the distribution's package on Linux, PROMETHEIA_ZSTD_CFLAGS and
+# PROMETHEIA_ZSTD_LIBS from the environment where it is somewhere else
+# (the macOS release job builds a static one, tools/ci-macos-zstd.sh).
+#
+# The Win32 oracle (Makefile.win, Makefile.wcli) does not include this.
+# It is the behavioural reference for the Swiss build every divergence is
+# judged against, and ephprom.cpp compiles to nothing without -DPROMETHEIA.
+
+ifeq ($(wildcard $(PROMETHEIA_DIR)/embed/prometheia.mk),)
+$(error $(PROMETHEIA_DIR)/ is not a Prometheia checkout. Astrolog needs it: run "git submodule update --init" (or clone with --recursive), or name another checkout with PROMETHEIA_DIR=/path)
+endif
+include $(PROMETHEIA_DIR)/embed/prometheia.mk
+ifneq ($(PROMETHEIA_EMBED_CONTRACT),1)
+$(error Prometheia embed contract is $(PROMETHEIA_EMBED_CONTRACT); this build knows 1 -- see $(PROMETHEIA_DIR)/docs/EMBEDDING.md)
+endif
+
+PROMETHEIA_FLAGS := -DPROMETHEIA $(PROMETHEIA_CPPFLAGS)
+PROMETHEIA_LIBS := $(PROMETHEIA_LIB) $(PROMETHEIA_LDLIBS)
+# "override", because a variable given on make's command line silently
+# wins over a makefile's +=, and four tools build this tree that way --
+# tools/asan-sweep.sh, ubsan-sweep.sh and coverage-report.sh pass both
+# CPPFLAGS= and LIBS=, tools/warning_audit.py CPPFLAGS=. Without it each
+# of those builds compiled the default source out and swept everything
+# but it.
+override CPPFLAGS += $(PROMETHEIA_FLAGS)
+override LIBS += $(PROMETHEIA_LIBS)

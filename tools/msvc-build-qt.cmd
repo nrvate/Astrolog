@@ -71,6 +71,18 @@ rem   /DQT /DPC         the Qt backend, and what astrolog.h wants on
 rem                     Windows for <io.h> and backslash separators. No
 rem                     /DWIN: this is Windows without the Windows backend.
 rem
+rem EPHEMERIS PROMETHEIA is compiled in, from the submodule at prometheia\,
+rem as every make build does through Makefile.prometheia. Its makefile
+rem fragment is GNU make's, so this reads the same source list,
+rem prometheia\embed\sources.txt, and honours the same contract
+rem (Prometheia's docs/EMBEDDING.md): ISO C++20, and /fp:precise, which is
+rem MSVC's default and from Visual Studio 2022 generates no contractions --
+rem so no /fp flag is passed at all. The library gets its own flags, not
+rem this tree's: the core stays C++17 with its permissive string
+rem literals, and only ephprom.cpp and qttest.cpp include the library's C
+rem header. Its one dependency is zstd, from vcpkg, named by ZSTD_DIR: a
+rem static library against the dynamic CRT, so nothing more ships.
+rem
 rem NOTE: rem cannot appear between "cl" and its last "^" continuation --
 rem cmd passes the word to the compiler as a source file and the link
 rem dies with "LNK1181: cannot open input file 'rem.obj'". It did.
@@ -84,10 +96,30 @@ if not exist Makefile.srcs (
   echo run this from the repository root
   exit /b 2
 )
+findstr /x /c:"contract 1" prometheia\embed\sources.txt >nul || (
+  echo prometheia\ is not a Prometheia checkout with embed contract 1 -- git submodule update --init
+  exit /b 2
+)
+if not defined ZSTD_DIR (
+  echo ZSTD_DIR is not set -- point it at a zstd for MSVC, e.g. vcpkg's x64-windows-static-md
+  exit /b 2
+)
+set "ZSTDLIB=%ZSTD_DIR%\lib\zstd.lib"
+if not exist "%ZSTDLIB%" set "ZSTDLIB=%ZSTD_DIR%\lib\zstd_static.lib"
+if not exist "%ZSTDLIB%" (
+  echo no zstd.lib or zstd_static.lib under %ZSTD_DIR%\lib
+  exit /b 2
+)
 
 python tools\qt-srcs.py --only core > srcs-core.txt || exit /b 1
 python tools\qt-srcs.py --only qt   > srcs-qt.txt   || exit /b 1
 python tools\qt-srcs.py --only test > srcs-test.txt || exit /b 1
+if exist srcs-prom.txt del srcs-prom.txt
+for /f "usebackq tokens=*" %%s in (`findstr /b /c:"src/" prometheia\embed\sources.txt`) do echo prometheia/%%s>>srcs-prom.txt
+if not exist srcs-prom.txt (
+  echo prometheia\embed\sources.txt lists no sources
+  exit /b 1
+)
 
 rem The git sha the About dialog shows. Same FORCE-plus-content-diff
 rem generator the makefiles run on Linux; a checkout without .git answers
@@ -117,13 +149,18 @@ for /f "usebackq tokens=*" %%v in (`python tools\version.py`) do set "VERSTR=%%v
 if not defined VERRC exit /b 1
 rc /nologo /I. /DVERSIONRC=%VERRC% /DVERSIONSTR=\"%VERSTR%\" /fo astrolog-qt.res tools\astrolog-qt.rc || exit /b 1
 
-set CXX=/nologo /MP /std:c++17 /Zc:__cplusplus /permissive- /Zc:strictStrings- /EHsc /MD /O2 /W3 /D_CRT_SECURE_NO_WARNINGS /DQT /DPC /DWIN32 /D_WINDOWS /DNDEBUG
-set INC=/I"%QTDIR%\include" /I"%QTDIR%\include\QtCore" /I"%QTDIR%\include\QtGui" /I"%QTDIR%\include\QtWidgets" /I"%QTDIR%\include\QtNetwork" /I"%QTDIR%\include\QtPrintSupport" /I"%QTDIR%\include\QtWebSockets" /Iephsrv
-set LIBS=/LIBPATH:"%QTDIR%\lib" Qt6Widgets.lib Qt6Gui.lib Qt6Core.lib Qt6Network.lib Qt6PrintSupport.lib Qt6WebSockets.lib user32.lib gdi32.lib shell32.lib advapi32.lib ole32.lib
+set CXX=/nologo /MP /std:c++17 /Zc:__cplusplus /permissive- /Zc:strictStrings- /EHsc /MD /O2 /W3 /D_CRT_SECURE_NO_WARNINGS /DQT /DPC /DWIN32 /D_WINDOWS /DNDEBUG /DPROMETHEIA
+set PROMCXX=/nologo /MP /std:c++20 /Zc:__cplusplus /permissive- /EHsc /MD /O2 /W3 /Iprometheia\include /I"%ZSTD_DIR%\include"
+set INC=/I"%QTDIR%\include" /I"%QTDIR%\include\QtCore" /I"%QTDIR%\include\QtGui" /I"%QTDIR%\include\QtWidgets" /I"%QTDIR%\include\QtNetwork" /I"%QTDIR%\include\QtPrintSupport" /I"%QTDIR%\include\QtWebSockets" /Iephsrv /Iprometheia\include
+set LIBS=/LIBPATH:"%QTDIR%\lib" Qt6Widgets.lib Qt6Gui.lib Qt6Core.lib Qt6Network.lib Qt6PrintSupport.lib Qt6WebSockets.lib user32.lib gdi32.lib shell32.lib advapi32.lib ole32.lib obj-prom\*.obj "%ZSTDLIB%"
 
 if not exist obj mkdir obj
 if not exist obj-app mkdir obj-app
 if not exist obj-test mkdir obj-test
+if not exist obj-prom mkdir obj-prom
+
+echo == Ephemeris Prometheia, from prometheia\embed\sources.txt
+cl %PROMCXX% /c /Fo"obj-prom\\" @srcs-prom.txt || exit /b 1
 
 echo == the shared core, once
 cl %CXX% %INC% /c /Fo"obj\\" @srcs-core.txt || exit /b 1

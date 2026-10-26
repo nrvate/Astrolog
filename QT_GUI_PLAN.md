@@ -12027,6 +12027,68 @@ this is the note that explains the wall of dialogs.
     passed. Console, Qt, Win32, wcli, Qt6, `eph_wsclient` and
     `ephproto_test` build with no warning.
 
+290. **Prometheia is a submodule, compiled into every product build**
+    (2026-10-25). The first step of coupling this fork to Prometheia,
+    the maintainer's decision of the same day: a required checkout, then
+    the default source, then its data shipped in the tree and the
+    installers. This is the first.
+    - **What it was.** The plugin was an optional pkg-config dependency,
+      found on this machine (the sibling checkout's `build/prometheia.pc`)
+      and nowhere else, and on Linux only. Every build anyone else made,
+      and every release, had no Prometheia in it at all.
+    - **What it is.** `prometheia/` is a submodule
+      (`https://github.com/nrvate/ephemeris-prometheia.git`, branch
+      `initial`, which is where Prometheia works; GitHub's `main` is an
+      older commit). `Makefile.prometheia` includes the library's own
+      makefile fragment (`embed/prometheia.mk`, embed contract 1), which
+      reads `embed/sources.txt` and compiles it with the flags its numbers
+      depend on (C++20, `-ffp-contract=off`) and never with this tree's.
+      It stops, naming `git submodule update --init`, when the checkout
+      is missing, and refuses a contract it does not know.
+      - Each product makefile builds its own copy under
+        `$(OBJDIR)/prometheia` (`obj-prometheia` for the console build).
+        The object names are generic, two makefiles under one
+        `make -j4` would race on a shared archive, and the sanitizer
+        builds instrument theirs. 6.3 s at `-j4`.
+      - `PROMETHEIA_HOME` stays, for a different thing: a full checkout,
+        with the daemon built and the kernels fetched, which the live
+        server legs start `prometheiad` from. The submodule has neither.
+    - **`override` on both additions, and what that found.** A variable
+      on make's command line silently beats a makefile's `+=`, and
+      `tools/asan-sweep.sh`, `ubsan-sweep.sh` and `coverage-report.sh`
+      pass `CPPFLAGS=` and `LIBS=`, and `tools/warning_audit.py`
+      `CPPFLAGS=`. Each of those builds had compiled the plugin out. The
+      first warning audit with it in named `NNaifFromSwiss()` unused:
+      dead since item 289 sent every route through `ephreq.h`. Its
+      comment recorded a fix (an upper bound that made Eris and Haumea
+      fall back to Swiss), so the live mapping (`NaifFromSwissBody()`)
+      was checked first: it maps every number up to about 21 million.
+      Removed.
+    - **Windows.** `tools/msvc-build-qt.cmd` reads the same source list
+      and compiles it as C++20 under MSVC's default `/fp:precise`, which
+      makes no contractions from Visual Studio 2022 on. zstd comes from
+      the runner's vcpkg, `x64-windows-static-md`, named by `ZSTD_DIR`, so
+      no DLL ships. Prometheia's `EMBEDDING.md` says it has **never** been
+      built with MSVC or Apple clang, so the release dry run is that
+      library's first build on both.
+    - **macOS.** `tools/ci-macos-zstd.sh` builds zstd 1.5.7 from the
+      release tarball, SHA-256 written in the script, for the job's
+      deployment target, as a static archive. Homebrew's is built for the
+      runner's own macOS. Proven on Linux first: 6 s.
+    - **Linux.** `libzstd-dev` or each distribution's name for it, in
+      README.md and `tools/build-check.sh`, whose README cross-check
+      agrees. `git archive` leaves a submodule out, so `build-check.sh`
+      and `ci-differential.sh` extract it from the commit the tree
+      records. The differential fetches a base's older pin if it must.
+    - **The catalog's name.** The same day Prometheia refreshed its catalog
+      (`sbdb-full-20260916.epm` replaced, and removed, by
+      `sbdb-20260916-refresh-20261025.epm`), and four places here named
+      the old file. The suite and `tools/ephsrv-prometheia.sh` take the
+      newest `sbdb-*.epm` in the checkout now (`StrPromCatalogQt()`).
+    - **Unchanged:** the default source is still Swiss, and nothing is
+      shipped yet. The Win32 oracle (`Makefile.win`, `Makefile.wcli`) stays
+      Swiss-only by design, and `ephprom.cpp` compiles to nothing there.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

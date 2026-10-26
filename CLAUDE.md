@@ -69,8 +69,12 @@ Work happens on branch **`qt`**.
   **The maintainer is coupling this fork to Prometheia** (2026-10-25): a
   required checkout, the default ephemeris source, with Swiss kept as a
   selectable source and not the primary one. That reverses "don't make
-  Prometheia the default" (2026-09-29). Until it lands, the default is
-  still Swiss.
+  Prometheia the default" (2026-09-29). **The checkout has landed**: the
+  submodule at `prometheia/` (branch `initial`, the one Prometheia works
+  on), compiled into every product build by `Makefile.prometheia` and on
+  Windows by `tools/msvc-build-qt.cmd`, from the library's own source list
+  and under its own flags (work log item 290). The Win32 oracle stays
+  Swiss-only. **The default is still Swiss** until the next step lands.
   **`EPHEMERIS_PROTOCOL_COLLABORATION.md`** is how
   that negotiation was actually run between two agent sessions: the shape of a
   round, the discipline that made objections productive (with the errors on
@@ -136,8 +140,10 @@ matters when merging a new upstream release:
 ## Prerequisites
 
 ```sh
-sudo apt install qtbase5-dev libqt5websockets5-dev pkg-config
+sudo apt install qtbase5-dev libqt5websockets5-dev pkg-config libzstd-dev
                                                     # build the Qt port
+                                                    # (zstd is Prometheia's
+                                                    # one dependency)
                                                     # (Qt Network too, same package;
                                                     # the makefiles stop and name
                                                     # the package if it is missing)
@@ -180,6 +186,9 @@ Three things live in `.git/config` or on the machine, so none of them
 survive a clone and all three have bitten:
 
 ```sh
+git submodule update --init                      # prometheia/, which every
+                                                 # build needs; a clone with
+                                                 # --recursive has it already
 git remote -v                                    # upstream push must read
 git remote set-url --push upstream DISABLED      # DISABLED; set it yourself
 git config user.name  nrvate                     # or commits land under

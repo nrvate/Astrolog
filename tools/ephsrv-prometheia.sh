@@ -34,7 +34,10 @@ SELFTEST=0
 P=/shares/ephemeris-prometheia
 PROMD="${1:-$P/build/prometheiad}"
 EPHE="$P/ephe/linux_p1550p2650.440"
-CAT="$P/sbdb-full-20260916.epm"
+# The newest catalog: Prometheia renames it at every refresh (the
+# 2026-09-16 file gave way to sbdb-20260916-refresh-20261025.epm).
+CAT=$(ls -t "$P"/sbdb-*.epm 2>/dev/null | head -1)
+CAT="${CAT:-$P/sbdb-*.epm}"
 PERT="$P/ephe/sb441-n16-de440span.bsp"
 BIN="./astrolog-qt-test"
 WORK="${TMPDIR:-/nvm/work}/ephsrv-prometheia.$$"
