@@ -206,12 +206,21 @@ int NEphSourceGen()
 }
 
 
-// The default chain: the Swiss Ephemeris under EPHEM, the Matrix legacy
-// cast without it.
+// The default chain. Ephemeris Prometheia first wherever it is compiled
+// in -- every product build since 2026-10-25, the maintainer's decision to
+// couple this fork to it (QT_GUI_PLAN.md item 291) -- with the Swiss
+// Ephemeris behind it, so what Prometheia cannot answer (a date outside
+// the planets file it found, a body its catalog lacks, a planetary moon)
+// is still answered. The Swiss Ephemeris alone where Prometheia is not
+// compiled, which is the Win32 oracle; the Matrix legacy cast without it.
 CONST char *SzEphSourceDefault()
 {
 #ifdef EPHEM
+#ifdef PROMETHEIA
+  return "prometheia,swiss";
+#else
   return "swiss";
+#endif
 #else
   return "matrix";
 #endif
@@ -1079,7 +1088,12 @@ void EphSourceSetShadow(flag fFiles, int nSwiss, flag fMatrix)
       // have (section 1, item 7; the chain names that).
       sprintf2(S(sz), "%s", "server,swiss"); break;
     default:
-      sprintf2(S(sz), "%s", "swiss"); break;
+      // Files on and no backend of the old three named: the default chain,
+      // which the old fields meant by it -- "the ephemeris files" -- and
+      // which is Prometheia's then Swiss's since it is compiled in. Spelt
+      // "swiss" here, every settings file carrying "=b" (nrvate.as, and
+      // the shipped astrolog.as before its -bE line) cast from Swiss alone.
+      sprintf2(S(sz), "%s", SzEphSourceDefault()); break;
     }
   EphSourceSet(sz);
 }

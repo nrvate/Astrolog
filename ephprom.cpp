@@ -488,10 +488,10 @@ void EphPromStop(void)
 }
 
 // Search a bare file name over Astrolog's own -Yi ephemeris directories
-// -- the same list SwissEnsurePath() walks -- then over ephe/ beside the
-// program, which is where a Prometheia checkout keeps its kernels. A
-// name with a directory in it is tried as given. The first hit wins;
-// fFalse leaves szPath empty.
+// -- the same list SwissEnsurePath() walks -- then the program's own
+// ephem/ folder, then over ephe/ beside the program, which is where a
+// Prometheia checkout keeps its kernels. A name with a directory in it is
+// tried as given. The first hit wins; fFalse leaves szPath empty.
 flag FEphPromFindFile(CONST char *szFile, char *szPath, int cch)
 {
   char szTry[300];
@@ -520,6 +520,21 @@ flag FEphPromFindFile(CONST char *szFile, char *szPath, int cch)
       return fTrue;
     }
   }
+  // The program's own ephem/, whatever -Yi says. The files shipped with
+  // the program live there -- the DE441 cut, its kernel and the body
+  // catalog (QT_GUI_PLAN.md item 291) -- and a settings file that points
+  // -Yi elsewhere must not hide them: nrvate.as names /swe three times,
+  // and under it this source found no planets file at all.
+  {
+    char szDir[cchSzMax];
+
+    SzPathDirAbs("ephem", S(szDir));
+    sprintf2(S(szTry), "%s%c%s", szDir, chDirSep, szFile);
+    if (FFileExists(szTry)) {
+      sprintf2(szPath, cch, "%s", szTry);
+      return fTrue;
+    }
+  }
   sprintf2(S(szTry), "ephe%c%s", chDirSep, szFile);
   if (FFileExists(szTry)) {
     sprintf2(szPath, cch, "%s", szTry);
@@ -530,15 +545,37 @@ flag FEphPromFindFile(CONST char *szFile, char *szPath, int cch)
 
 
 // The ephemeris, catalog and perturbers resolved to paths. An empty
-// ephemeris parameter is the source's own default: the DE440 files the
-// C API's own example names, searched over the paths above; an empty
-// catalog or perturbers means none loaded. fFalse names in szWhy the
-// first thing missing.
+// parameter is the source's own default: the first of its files below
+// found over the paths above. fFalse names in szWhy the first thing
+// missing.
 // The files an EMPTY parameter means, named once: the resolution below
 // searches for them, and Ephemeris Settings shows them greyed in the empty
-// field (SzEphPromEmpty()), so the two cannot name different files.
-static CONST char *rgszEphe[] = {"linux_p1550p2650.440", "de440s.bsp"};
+// field (SzEphPromEmpty()), so the two cannot name different files. Each
+// list runs widest first and ends with the file shipped in ephem/
+// (QT_GUI_PLAN.md item 291): JPL's DE441 cut to 1900-2100, the 16
+// asteroids' kernel cut to the same years, and the catalog of the bodies
+// Astrolog ships (tools/bundle-bodies.py). So a clone casts with nothing
+// set, and a fuller file on the -Yi paths is preferred by being there.
+static CONST char *rgszEphe[] = {"linux_p1550p2650.440", "de440s.bsp",
+  "linux_p1900p2100.441"};
 static CONST char szEphPromLongDefault[] = "linux_m13000p17000.441";
+static CONST char *rgszEphPromCat[] = {"astrolog-bodies.epm"};
+static CONST char *rgszEphPromPert[] = {"sb441-n16.bsp",
+  "sb441-n16-de440span.bsp", "sb441-p1900p2100.bsp"};
+#define CSZ(rgsz) ((int)(sizeof(rgsz)/sizeof(CONST char *)))
+
+// The first of a default list found over the paths, or fFalse.
+static flag FEphPromFindFirst(CONST char **rgsz, int csz, char *szPath,
+  int cch)
+{
+  int i;
+
+  for (i = 0; i < csz; i++)
+    if (FEphPromFindFile(rgsz[i], szPath, cch))
+      return fTrue;
+  *szPath = chNull;
+  return fFalse;
+}
 
 // What an empty field means, said with the file it actually is: the
 // search runs here, so the field names what it found, or says nothing was.
@@ -548,47 +585,50 @@ void SzEphPromEmpty(int iep, flag fLong, char *sz, int cch)
 {
   char szPath[cchSzMax];
   CONST char *pchName;
-  int i;
 
   szPath[0] = chNull;
-  if (iep == epPrometheiaEphemeris || iep == epPrometheiaLongspan) {
-    if (iep == epPrometheiaEphemeris) {
-      for (i = 0; i < (int)(sizeof(rgszEphe)/sizeof(CONST char *)); i++)
-        if (FEphPromFindFile(rgszEphe[i], S(szPath)))
-          break;
-    } else
-      FEphPromFindFile(szEphPromLongDefault, S(szPath));
-    for (pchName = szPath + CchSz(szPath); pchName > szPath &&
-      pchName[-1] != chDirSep && pchName[-1] != '/'; pchName--)
-      ;
-    if (FSzSet(szPath))
-      sprintf2(sz, cch, !fLong ? "empty: uses %s" : "Left empty, %s is "
-        "used: it was found where the program looks. Browse to pick "
-        "another.", !fLong ? pchName : szPath);
-    else if (iep == epPrometheiaEphemeris)
-      sprintf2(sz, cch, !fLong ? "%s" : "Left empty, %s or %s is looked "
-        "for, and neither was found. Browse for a DE440 file.",
-        !fLong ? "empty: none found; Browse for one" : rgszEphe[0],
-        rgszEphe[1]);
-    else
-      sprintf2(sz, cch, !fLong ? "%s" : "Left empty, only 1550 to 2650 is "
-        "computed: %s, which covers -13000 to 17000, was not found.",
-        !fLong ? "empty: none, so 1550-2650 only" : szEphPromLongDefault);
-  } else if (iep == epPrometheiaCatalog)
-    sprintf2(sz, cch, "%s", !fLong ? "empty: none, so no asteroids" :
-      "Left empty, no catalog is read, so no asteroids or centaurs, Chiron "
-      "among them.");
+  if (iep == epPrometheiaEphemeris)
+    FEphPromFindFirst(rgszEphe, CSZ(rgszEphe), S(szPath));
+  else if (iep == epPrometheiaLongspan)
+    FEphPromFindFile(szEphPromLongDefault, S(szPath));
+  else if (iep == epPrometheiaCatalog)
+    FEphPromFindFirst(rgszEphPromCat, CSZ(rgszEphPromCat), S(szPath));
   else
-    sprintf2(sz, cch, "%s", !fLong ? "empty: asteroids within 100 years" :
-      "Left empty, an asteroid is computed only within 100 years of its "
-      "catalog date. A file of the 16 largest asteroids' paths, such as "
-      "sb441-n16.bsp, lifts that limit.");
+    FEphPromFindFirst(rgszEphPromPert, CSZ(rgszEphPromPert), S(szPath));
+  for (pchName = szPath + CchSz(szPath); pchName > szPath &&
+    pchName[-1] != chDirSep && pchName[-1] != '/'; pchName--)
+    ;
+  if (FSzSet(szPath))
+    sprintf2(sz, cch, !fLong ? "empty: uses %s" : "Left empty, %s is "
+      "used: it was found where the program looks. Browse to pick "
+      "another.", !fLong ? pchName : szPath);
+  // Nothing found. Each says what it costs and what was looked for, by
+  // name, since the names are the whole of what "empty" means.
+  else if (iep == epPrometheiaEphemeris)
+    sprintf2(sz, cch, !fLong ? "%s" : "Left empty, %s, %s or %s is "
+      "looked for, and none was found, so this source answers nothing. "
+      "Browse for a JPL DE file.", !fLong ? "empty: none found; Browse "
+      "for one" : rgszEphe[0], rgszEphe[1], rgszEphe[2]);
+  else if (iep == epPrometheiaLongspan)
+    sprintf2(sz, cch, !fLong ? "%s" : "Left empty, a date outside the "
+      "planets file's own years goes to the next source in the chain: %s, "
+      "which covers -13000 to 17000, was not found.", !fLong ? "empty: "
+      "none; Planets' years only" : szEphPromLongDefault);
+  else if (iep == epPrometheiaCatalog)
+    sprintf2(sz, cch, !fLong ? "%s" : "Left empty, %s is looked for, and "
+      "was not found, so no asteroids or centaurs are read, Chiron among "
+      "them.", !fLong ? "empty: none, so no asteroids" :
+      rgszEphPromCat[0]);
+  else
+    sprintf2(sz, cch, !fLong ? "%s" : "Left empty, %s, %s or %s is "
+      "looked for, and none was found, so an asteroid is computed only "
+      "within 100 years of its catalog date.", !fLong ? "empty: asteroids "
+      "within 100 years" : rgszEphPromPert[0],
+      rgszEphPromPert[1], rgszEphPromPert[2]);
 }
 
 static flag FEphPromResolve(char *szWhy, int cch)
 {
-  int cEphe = (int)(sizeof(rgszEphe)/sizeof(CONST char *)), i;
-
   if (FSzSet(SzEphPromParam(epPromEphemeris))) {
     if (!FEphPromFindFile(SzEphPromParam(epPromEphemeris), szEphPromEphe,
       (int)sizeof(szEphPromEphe))) {
@@ -601,25 +641,26 @@ static flag FEphPromResolve(char *szWhy, int cch)
       return fFalse;
     }
   } else {
-    for (i = 0; i < cEphe &&
-      !FEphPromFindFile(rgszEphe[i], szEphPromEphe,
-        (int)sizeof(szEphPromEphe)); i++)
-      ;
-    if (i >= cEphe) {
+    if (!FEphPromFindFirst(rgszEphe, CSZ(rgszEphe), szEphPromEphe,
+      (int)sizeof(szEphPromEphe))) {
       // Said for both places it can be fixed from: the dialog's field
       // and the switch. The file names are the ones searched for, so the
-      // reader knows what "a DE440 ephemeris" means here.
-      sprintf2(S(szEphPromState), "no planets file was found (%s or %s "
-        "was looked for); pick one in \"Planets, 1550-2650\", or set -bP "
-        "prometheia.ephemeris", rgszEphe[0], rgszEphe[1]);
+      // reader knows what "a planets file" means here.
+      sprintf2(S(szEphPromState), "no planets file was found (%s, %s or "
+        "%s was looked for); pick one in \"Planets\", or set -bP "
+        "prometheia.ephemeris", rgszEphe[0], rgszEphe[1], rgszEphe[2]);
       if (szWhy != NULL)
         sprintf2(szWhy, cch, "%s", szEphPromState);
       return fFalse;
     }
   }
+  // The catalog and the perturbers: named, they must be found; empty,
+  // the first of their defaults found, and none if none is.
   *szEphPromCat = chNull;
-  if (FSzSet(SzEphPromParam(epPromCatalog)) &&
-    !FEphPromFindFile(SzEphPromParam(epPromCatalog), szEphPromCat,
+  if (!FSzSet(SzEphPromParam(epPromCatalog)))
+    FEphPromFindFirst(rgszEphPromCat, CSZ(rgszEphPromCat), szEphPromCat,
+      (int)sizeof(szEphPromCat));
+  else if (!FEphPromFindFile(SzEphPromParam(epPromCatalog), szEphPromCat,
       (int)sizeof(szEphPromCat))) {
     sprintf2(S(szEphPromState), "the asteroid catalog '%s' was not found",
       SzEphPromParam(epPromCatalog));
@@ -646,8 +687,10 @@ static flag FEphPromResolve(char *szWhy, int cch)
     (int)sizeof(szEphPromLong)))
     *szEphPromLong = chNull;
   *szEphPromPert = chNull;
-  if (FSzSet(SzEphPromParam(epPromPerturbers)) &&
-    !FEphPromFindFile(SzEphPromParam(epPromPerturbers), szEphPromPert,
+  if (!FSzSet(SzEphPromParam(epPromPerturbers)))
+    FEphPromFindFirst(rgszEphPromPert, CSZ(rgszEphPromPert), szEphPromPert,
+      (int)sizeof(szEphPromPert));
+  else if (!FEphPromFindFile(SzEphPromParam(epPromPerturbers), szEphPromPert,
       (int)sizeof(szEphPromPert))) {
     sprintf2(S(szEphPromState), "the asteroid perturbers file '%s' was not "
       "found", SzEphPromParam(epPromPerturbers));

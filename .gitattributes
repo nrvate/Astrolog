@@ -24,6 +24,13 @@
 *.png    binary
 *.ico    binary
 *.bmp    binary
+# Ephemeris Prometheia's data in ephem/ (QT_GUI_PLAN.md item 291): a JPL DE
+# binary, a NAIF SPK kernel and an EPM1 catalog, each one CR byte from
+# being mistaken for text.
+*.441    binary
+*.440    binary
+*.bsp    binary
+*.epm    binary
 
 # Windows and VMS tooling, left CRLF: Visual Studio's project files and
 # resource editor, the module definition the Windows linker reads, the

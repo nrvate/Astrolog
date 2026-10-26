@@ -2443,7 +2443,21 @@ static int NSwb(CONST char *szSwitch, PARSEIN *pin)
     return 1;
   }
   SwitchF(fFiles);
-  EphSourceSetShadow(fFiles, nSwiss, fMatrix);
+  // A spelling that leaves the triple as the chain already implies changes
+  // nothing. The triple cannot tell "prometheia,swiss" from "swiss", or
+  // "swiss,moshier" from either -- all three are {files, 0, -} -- so
+  // re-deriving the chain from it rewrote each of them to one chain: the
+  // "=b" every settings file carries replaced the default, and an
+  // explicit "-bE swiss,moshier" read before it lost its fallback.
+  {
+    flag fFilesNow = fFiles, fMatrixNow = fMatrix;
+    int nSwissNow = nSwiss;
+
+    EphShadowFromChain(&fFilesNow, &nSwissNow, &fMatrixNow);
+    if (fFilesNow != fFiles || (fFiles ? nSwissNow != nSwiss :
+      fMatrixNow != fMatrix))
+      EphSourceSetShadow(fFiles, nSwiss, fMatrix);
+  }
   // Claim the generation this call just made. Without it the NEXT -b
   // spelling sees a generation it does not recognise and rebuilds the
   // shadow from the chain TEXT -- and that round trip cannot carry

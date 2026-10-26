@@ -132,10 +132,10 @@ fi
 # that covers them passes; an empty tree, a missing data file, a
 # forbidden file and a stale manifest each fail.
 stage() {  # stage <dir>: the required payload as empty files, manifest written.
-  # Every .se1 the tree ships, by name, because the check counts them
-  # against ephem/ -- a package with three of thirty-two is what it is for.
+  # Every file the tree's ephem/ ships, by name, because the check requires
+  # each of them -- the Swiss files and Ephemeris Prometheia's alike.
   mkdir -p "$1/ephem" "$1/font"
-  for f in ephem/*.se1; do : > "$1/$f"; done
+  for f in ephem/*; do : > "$1/$f"; done
   for f in astrolog.as atlas.as timezone.as sefstars.txt seorbel.txt astexo.csv \
            earth.bmp astrolog.htm changes.htm license.htm cgif-license.txt astrolog.exe; do : > "$1/$f"; done
   (cd "$1" && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS)
@@ -146,6 +146,8 @@ expect fail "verify-package: an empty directory" tools/ci-verify-package.sh "$T/
 expect fail "verify-package: not a directory" tools/ci-verify-package.sh "$T/new"
 stage "$T/pkg2"; rm "$T/pkg2/ephem/seas_18.se1"
 expect fail "verify-package: the Chiron ephemeris missing" tools/ci-verify-package.sh "$T/pkg2"
+stage "$T/pkg5"; rm "$T/pkg5/ephem/astrolog-bodies.epm"
+expect fail "verify-package: the Prometheia body catalog missing" tools/ci-verify-package.sh "$T/pkg5"
 stage "$T/pkg3"; : > "$T/pkg3/nrvate.as"
 expect fail "verify-package: a forbidden file (nrvate.as) present" tools/ci-verify-package.sh "$T/pkg3"
 stage "$T/pkg4"; echo changed > "$T/pkg4/astrolog.as"

@@ -46,7 +46,11 @@ PARAMS = [
     # free text while a second, divergent copy of the same three lived
     # inside ephprom.cpp saying epkFile -- and nothing read either one,
     # so a dialog's Browse button depended on which table it asked.
-    ("prometheia", "ephemeris",  "Planets, 1550-2650", "epkFile", ""),
+    # "Planets", not "Planets, 1550-2650": the file an empty field means
+    # is whichever its default list finds first, and the one shipped in
+    # ephem/ is DE441 cut to 1900-2100 (QT_GUI_PLAN.md item 291). The
+    # field names the file it found, and the file's name its years.
+    ("prometheia", "ephemeris",  "Planets", "epkFile", ""),
     ("prometheia", "catalog",    "Asteroid Catalog",   "epkFile", ""),
     ("prometheia", "perturbers", "Asteroid Perturbers", "epkFile", ""),
     ("server", "url",   "Server Address", "epkUrl",   ""),

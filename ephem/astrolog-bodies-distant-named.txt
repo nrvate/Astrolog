@@ -1,0 +1,86 @@
+Named bodies with aphelion beyond 7.5 AU, U <= 4
+74 bodies, sorted by absolute magnitude H, brightest (largest) first.
+D_km: measured where a source gives one, else estimated from H and the albedo
+shown (class in brackets; "~" = class guessed from the elements).
+U: the orbit condition code, 0 best .. 9 worst.
+Orbits, H, U and names: NASA/JPL Small-Body Database (ssd.jpl.nasa.gov), 2026-10-25;
+the catalog's records: sbdb-20260916-refresh-20261025.epm.
+Sizes marked (Johnston), and the classes and assumed albedos in jclass: Wm. Robert
+Johnston, "List of known trans-Neptunian objects", johnstonsarchive.net/astro/tnoslist.html,
+retrieved 2026-10-25; his sources are at johnstonsarchive.net/astro/tnodiam.html.
+
+    #  number  name              designation  class  jclass         H      D_km  albedo  D_source              a         e      i       q       Q        U
+    1  136199  Eris              2003 UB313   TNO    SDO            -1.26  2326  0.960   measured (Johnston)   67.934    0.438  43.93   38.163  97.71    3
+    2  136472  Makemake          2005 FY9     TNO    cubewano-hot?  -0.25  1430  0.800   measured (Johnston)   45.571    0.159  29.03   38.330  52.81    1
+    3  136108  Haumea            2003 EL61    TNO    Haumea         0.14   1595  0.510   measured (Johnston)   43.060    0.194  28.21   34.688  51.43    1
+    4  90377   Sedna             2003 VB12    TNO    Sednoid        1.50   995   0.320   measured (Johnston)   543.720   0.860  11.93   76.185  1011.25  1
+    5  225088  Gonggong          2007 OR10    TNO    res 3:10       1.82   1535  0.089   measured (Johnston)   66.867    0.504  30.90   33.149  100.58   3
+    6  90482   Orcus             2004 DW      TNO    plutino        2.13   910   0.230   measured (Johnston)   39.377    0.221  20.56   30.693  48.06    1
+    7  50000   Quaoar            2002 LM60    TNO    cubewano-hot   2.41   1111  0.109   measured (Johnston)   43.156    0.035  7.99    41.637  44.68    0
+    8  532037  Chiminigagua      2013 FY27    TNO    SDO            3.09   742   0.170   measured (Johnston)   58.898    0.391  33.11   35.873  81.92    4
+    9  55565   Aya               2002 AW197   TNO    cubewano-hot?  3.44   768   0.112   measured (Johnston)   47.369    0.129  24.34   41.273  53.46    0
+   10  229762  G!kun||'homdima   2007 UK126   TNO    SDO            3.44   614   0.150   measured (Johnston)   74.508    0.496  23.33   37.568  111.45   1
+   11  174567  Varda             2003 MW12    TNO    cubewano-hot?  3.46   740   0.099   measured (Johnston)   45.554    0.142  21.51   39.072  52.04    1
+   12  28978   Ixion             2001 KX76    TNO    plutino        3.47   697   0.106   measured (Johnston)   39.346    0.244  19.66   29.763  48.93    0
+   13  307261  Mani              2002 MS4     TNO    cubewano-hot?  3.64   796   0.100   measured (Johnston)   41.589    0.148  17.70   35.422  47.75    1
+   14  145452  Ritona            2005 RN43    TNO    cubewano-hot?  3.69   679   0.107   measured (Johnston)   41.498    0.023  19.28   40.562  42.43    0
+   15  208996  Achlys            2003 AZ84    TNO    plutino        3.71   723   0.097   measured (Johnston)   39.657    0.175  13.55   32.718  46.60    1
+   16  20000   Varuna            2000 WR106   TNO    cubewano-hot?  3.79   668   0.127   measured (Johnston)   43.200    0.052  17.14   40.970  45.43    0
+   17  55637   Uni               2002 UX25    TNO    cubewano-hot?  3.83   664   0.107   measured (Johnston)   42.925    0.146  19.42   36.647  49.20    0
+   18  90568   Goibniu           2004 GV9     TNO    cubewano-hot?  3.96   680   0.077   measured (Johnston)   41.861    0.077  22.03   38.636  45.09    0
+   19  471143  Dziewanna         2010 EK139   TNO    res 2:7        4.05   470   0.250   measured (Johnston)   68.928    0.528  29.46   32.508  105.35   2
+   20  120347  Salacia           2004 SB60    TNO    cubewano-hot?  4.12   866   0.042   measured (Johnston)   42.055    0.105  23.93   37.656  46.45    1
+   21  768325  Geyagugv          2015 BP519   TNO    ESDO           4.32   516   0.124   est. (ESDO)           486.200   0.927  54.08   35.296  937.10   2
+   22  145451  Rumina            2005 RM43    TNO    SDO            4.58   524   0.102   measured (Johnston)   92.031    0.618  28.71   35.168  148.89   1
+   23  19521   Chaos             1998 WH24    TNO    cubewano-hot   4.64   600   0.050   measured (Johnston)   46.090    0.110  12.03   41.007  51.17    2
+   24  38628   Huya              2000 EB173   TNO    plutino        4.79   411   0.079   measured (Johnston)   39.251    0.274  15.48   28.508  49.99    1
+   25  78799   Xewioso           2002 XW93    TNO    Centaur        4.84   565   0.038   measured (Johnston)   37.676    0.244  14.34   28.501  46.85    2
+   26  47171   Lempo             1999 TC36    TNO    plutino        4.94   272   0.079   measured (Johnston)   39.656    0.229  8.40    30.594  48.72    1
+   27  79360   Sila-Nunam        1997 CS29    TNO    cubewano-cold  5.26   249   0.090   measured (Johnston)   44.083    0.015  2.24    43.411  44.76    2
+   28  2060    Chiron            1977 UB      CEN    Centaur        5.54   179   0.180   measured (Johnston)   13.684    0.380  6.93    8.487   18.88    0
+   29  541132  Leleakuhonua      2015 TG387   TNO    Sednoid        5.57   220   0.210   measured (Johnston)   1344.905  0.952  11.68   64.683  2625.13  2
+   30  420356  Praamzius         2012 BX85    TNO    cubewano-cold  5.75   241   0.152   est. (cubewano-cold)  42.927    0.003  1.09    42.788  43.07    3
+   31  148780  Altjira           2001 UQ18    TNO    cubewano-hot   5.77   191   0.071   measured (Johnston)   44.506    0.057  5.20    41.974  47.04    4
+   32  66652   Borasisi          1999 RZ253   TNO    cubewano-cold  5.85   126   0.236   measured (Johnston)   43.725    0.085  0.56    40.021  47.43    2
+   33  88611   Teharonhiawako    2001 QT297   TNO    cubewano-cold  5.96   178   0.145   measured (Johnston)   43.989    0.028  2.58    42.754  45.22    2
+   34  469705  |=Kagara          2005 EF298   TNO    cubewano-cold  6.16   138   0.160   measured (Johnston)   44.130    0.092  2.87    40.079  48.18    2
+   35  184314  Mbabamwanawaresa  2005 EO302   TNO    cubewano-hot   6.36   253   0.079   est. (cubewano-hot)   45.030    0.137  5.77    38.869  51.19    4
+   36  474640  Alicanto          2004 VN112   TNO    EDDO           6.46   193   0.124   est. (EDDO)           342.150   0.862  25.51   47.371  636.93   3
+   37  65489   Ceto              2003 FX128   TNO    Centaur        6.47   223   0.056   measured (Johnston)   100.893   0.824  22.29   17.728  184.06   1
+   38  472235  Zhulong           2014 GE45    TNO    res 2:5        6.50   188   0.126   est. (res 2:5)        55.298    0.408  0.81    32.738  77.86    2
+   39  10199   Chariklo          1997 CU26    CEN    Centaur        6.55   241   0.037   measured (Johnston)   15.734    0.171  23.43   13.047  18.42    0
+   40  385446  Manwe             2003 QW111   TNO    res 4:7        6.57   160   0.100   measured (Johnston)   43.766    0.116  2.67    38.690  48.84    4
+   41  53311   Deucalion         1999 HU11    TNO    cubewano-cold  6.71   155   0.152   est. (cubewano-cold)  43.941    0.059  0.37    41.342  46.54    2
+   42  341520  Mors-Somnus       2007 TY430   TNO    plutino        6.79   102   0.230   measured (Johnston)   39.503    0.269  11.28   28.874  50.13    2
+   43  58534   Logos             1997 CQ29    TNO    cubewano-cold  6.87   82    0.195   measured (Johnston)   45.306    0.123  2.90    39.739  50.87    3
+   44  38083   Rhadamanthus      1999 HX11    TNO    other TNO      7.03   145   0.130   est. (other TNO)      38.961    0.156  12.75   32.873  45.05    3
+   45  5145    Pholus            1992 AD      CEN    Centaur        7.07   107   0.126   measured (Johnston)   20.290    0.575  24.76   8.629   31.95    1
+   46  15760   Albion            1992 QB1     TNO    cubewano-cold  7.18   125   0.152   est. (cubewano-cold)  44.131    0.071  2.19    40.991  47.27    3
+   47  463368  Eurytus           2012 VU85    CEN    Centaur        7.32   190   0.058   est. (Centaur)        29.471    0.315  15.05   20.187  38.76    3
+   48  471325  Taowu             2011 KT19    TNO    Centaur        7.44   179   0.058   est. (Centaur)        35.619    0.333  110.28  23.772  47.46    2
+   49  54598   Bienor            2000 QC243   CEN    Centaur        7.49   158   0.065   measured (Johnston)   16.603    0.206  20.72   13.189  20.02    0
+   50  55576   Amycus            2002 GB10    CEN    Centaur        7.56   104   0.083   measured (Johnston)   24.941    0.393  13.37   15.140  34.74    1
+   51  42355   Typhon            2002 CR46    TNO    Centaur        7.63   162   0.044   measured (Johnston)   37.780    0.537  2.43    17.479  58.08    1
+   52  15810   Arawn             1994 JR1     TNO    plutino        7.68   142   0.074   est. (plutino)        39.201    0.115  3.81    34.712  43.69    2
+   53  10370   Hylonome          1995 DW2     CEN    Centaur        8.20   77    0.048   measured (Johnston)   24.946    0.247  4.14    18.794  31.10    3
+   54  385695  Clete             2005 TO74    TNO    Nep Trj L4     8.49   111   0.058   est. (Nep Trj L4)     30.279    0.057  5.25    28.567  31.99    4
+   55  121725  Aphidas           1999 XX143   CEN    Centaur        8.88   92    0.058   est. (Centaur)        17.960    0.461  6.77    9.673   26.25    2
+   56  83982   Crantor           2002 GO9     CEN    Centaur        8.89   59    0.121   measured (Johnston)   19.366    0.276  12.79   14.024  24.71    1
+   57  52975   Cyllarus          1998 TF35    CEN    Centaur        8.90   62    0.115   measured (Johnston)   26.285    0.377  12.63   16.383  36.19    2
+   58  385571  Otrera            2004 UP10    TNO    Nep Trj L4     8.91   91    0.058   est. (Nep Trj L4)     30.285    0.031  1.43    29.354  31.22    4
+   59  32532   Thereus           2001 PT13    CEN    Centaur        9.17   86    0.059   measured (Johnston)   10.646    0.198  20.36   8.541   12.75    0
+   60  8405    Asbolus           1995 GO      CEN    Centaur        9.20   84    0.055   measured (Johnston)   18.055    0.617  17.62   6.909   29.20    0
+   61  60558   Echeclus          2000 EC98    CEN    Centaur        9.21   60    0.050   measured (Johnston)   10.757    0.454  4.34    5.872   15.64    0
+   62  696315  Petraios          2016 GR206   CEN    Centaur        9.24   78    0.058   est. (Centaur)        20.190    0.080  14.25   18.585  21.80    2
+   63  7066    Nessus            1993 HA2     CEN    Centaur        9.57   57    0.086   measured (Johnston)   24.505    0.518  15.65   11.802  37.21    2
+   64  330836  Orius             2009 HW77    CEN    Centaur        9.73   62    0.058   est. (Centaur)        21.360    0.418  17.88   12.425  30.30    3
+   65  31824   Elatus            1999 UG5     CEN    Centaur        10.26  50    0.049   measured (Johnston)   11.766    0.383  5.25    7.258   16.28    0
+   66  49036   Pelion            1998 QM107   CEN    Centaur        10.38  46    0.058   est. (Centaur)        20.035    0.132  9.34    17.382  22.69    2
+   67  944     Hidalgo           A920 UB      CEN    unusual        10.55  52    0.042   measured (Johnston)   5.729     0.662  42.52   1.936   9.52     0
+   68  52872   Okyrhoe           1998 SG35    CEN    Centaur        10.93  36    0.058   measured (Johnston)   8.354     0.308  15.67   5.782   10.93    0
+   69  486958  Arrokoth          2014 MU69    TNO    cubewano-cold  11.06  25    0.100   measured (Johnston)   44.053    0.036  2.45    42.486  45.62    4
+   70  346889  Rhiphonos         2009 QV38    CEN    Centaur        12.00  23    0.062   measured (Johnston)   10.782    0.443  19.90   6.009   15.56    2
+   71  5335    Damocles          1991 DA      CEN    Damocloid      13.23  14    0.048   est. (Damocloid)      11.861    0.867  61.90   1.580   22.14    4
+   72  37117   Narcissus         2000 VU2     CEN    unusual        13.39  11    0.088   measured (Johnston)   6.885     0.554  13.82   3.071   10.70    0
+   73  20461   Dioretsa          1999 LD31    CEN    Damocloid      13.92  14    0.030   measured (Johnston)   23.776    0.900  160.42  2.377   45.17    2
+   74  365756  ISON              2010 WZ71    CEN    unusual        14.18  8.6   0.051   est. (unusual)        5.858     0.524  20.25   2.790   8.93     0

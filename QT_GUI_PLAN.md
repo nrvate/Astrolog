@@ -12127,6 +12127,114 @@ this is the note that explains the wall of dialogs.
       `make check` now requires the path in the built test binary ("test
       build has PROMETHEIA_HOME"): 0 occurrences in the broken binary, 1 in
       the fixed one.
+    - **The third dry run was green on all three platforms** (run
+      40252873055, at fae7d99), after two more fixes. The Windows test link
+      needed `JPLCachePutTest()`, which `io.cpp` defined under QTTEST
+      while the Windows build compiles the core once, without it. And
+      `tools/ci-deps.sh` now bounds apt: the second run's Linux job sat 24
+      minutes in one stalled download and was cancelled.
+
+291. **Prometheia is the default source, and its data ships in `ephem/`**
+    (2026-10-25). The second and third steps of item 290's coupling.
+    - **What ships.** The maintainer's choices, made over the day:
+      - JPL's DE441 cut to 1900-2100 (`linux_p1900p2100.441`, 18.6 MB),
+        not DE440. The two are practically identical for the planets
+        there, and DE441's longer span is what further cuts come from.
+      - Its 16-asteroid kernel SB441-N16, cut to the same years
+        (`sb441-p1900p2100.bsp`, 7.6 MB). It was named `sb441-n16-...` until
+        "empty: uses" plus that name measured 421 px in a 408 px field at
+        the maintainer's font.
+      - `astrolog-bodies.epm`, 13,808 bodies in 1.3 MB:
+        - every numbered asteroid 1-10000;
+        - everything JPL lists with aphelion beyond 7.5 AU and orbit
+          condition code U <= 4;
+        - cut from Prometheia's refreshed catalog,
+          `sbdb-20260916-refresh-20261025.epm`.
+      - The U cut was measured, not assumed. Prometheia propagated the full
+        covariance of 56 bodies across U 0-7 (1-sigma, worse end of
+        1900-2100):
+        - U 3 at most 3.8';
+        - U 4 at 2'-7', with one centaur at 51';
+        - U 5 at 7'-89';
+        - U 6 from 35' to 32 degrees.
+      - The cheap estimate, sigma_n times the time from the arc, was within
+        2x for U <= 4 and up to 9x low beyond it, so it could not decide the
+        cut on its own.
+      - Left out by rule: bodies with no U (the near-parabolic A/ objects),
+        Pluto (DE441's), and 16 MPC-orbit bodies newer than the catalog.
+        Their soln_date is null, so Prometheia's refresh cannot select them.
+      - `ephem/astrolog-bodies-*.txt` list the four groups by H, largest
+        first: the main belt, and the named, numbered and unnumbered distant
+        bodies. Sizes are Johnston's measured values where he has them,
+        attributed in each header. JPL's diameters for these bodies are
+        mostly from 1998-2002 (Varuna 900 km, against 668 since Herschel).
+      - Names are JPL's only. astromcp's tables carry the maintainer's own
+        unofficial names (Apsu for 523671, Triptolemus, Philyra, Maat,
+        Pylenor); a word-bounded search finds none of them in the tree.
+    - **Proved before it went in.**
+      - Every one of the 13,808 designations and 9,148 names resolves in the
+        shipped files to the same SPK-ID as in the full data, Geyagugv's
+        2026-10-19 name included.
+      - Every 20th body answers bit-identically at 1901, 2026 and 2099:
+        2,073 answers.
+      - The same check run against the 09-16 cut of the named group fails,
+        on Quaoar's re-solved orbit and on Geyagugv's missing name.
+    - **The tools.**
+      - `tools/bundle-bodies.py` rebuilds the catalog and its listings from
+        two SBDB queries and Johnston's list, and `--research` writes every
+        distant body.
+      - `tools/cut-ephemeris.sh` cuts other spans. It recreated the shipped
+        pair byte for byte.
+      - `tools/prometheia-tool.sh` builds Prometheia's own cutters from the
+        submodule against `obj-prometheia/libprometheia.a`, so neither tool
+        needs a Prometheia checkout.
+    - **The plugin finds the files with nothing set.**
+      - Each empty field has a default list, widest first and ending with
+        the shipped file:
+        - planets: `linux_p1550p2650.440`, `de440s.bsp`, then the cut;
+        - perturbers: `sb441-n16.bsp`, `-de440span`, then the cut;
+        - catalog: `astrolog-bodies.epm`.
+      - The search covers the program's own `ephem/` after the `-Yi`
+        folders, whatever `-Yi` says. `nrvate.as` names `/swe` three times,
+        and under it the engine found no planets file at all.
+      - The planets field is "Planets", not "Planets, 1550-2650". Each empty
+        field names the file it found, and each short text fits the field
+        at the maintainer's font, which the suite measures.
+    - **The default chain is `prometheia,swiss`** (`SzEphSourceDefault()`,
+      PROMETHEIA builds; the Win32 oracle keeps `swiss`), and
+      `astrolog.as` says so. Swiss answers what Prometheia cannot: a date
+      outside 1900-2100, a body the catalog lacks, a moon.
+    - **`=b` used to replace any chain with `swiss`.** Every legacy `-b`
+      spelling re-derived the chain from a three-field shadow, and that
+      shadow says {files, 0, -} for `prometheia,swiss`, `swiss` and
+      `swiss,moshier` alike. So the `=b` every settings file carries
+      (`nrvate.as` included) cast from Swiss alone, and an explicit
+      `-bE swiss,moshier` read before it lost its fallback. Two fixes:
+      - a spelling that leaves the shadow where the chain already had it
+        changes nothing;
+      - "files on, no backend" means the default chain, not the literal
+        `swiss`.
+      Five checks in `ephem-registry` cover it. Put back to the old
+      behaviour, four of them fail. Their first draft read
+      `us.szEphemSource` in the same argument list as the call that frees
+      it, and printed freed memory; the call comes first now.
+    - **A leg that could no longer be set up.** "Ceres from a catalog with
+      no perturbers is refused" relied on an empty perturbers field meaning
+      none. With the kernel shipped and always found, no configuration
+      Astrolog has can lack it. The leg now asks the case that is real:
+      Ceres in 1850, before the shipped years, is refused as outside the
+      coverage, and the chain hands it to Swiss.
+    - **Packaging.** Both installers already copy all of `ephem/`.
+      `ci-verify-package.sh`, `qt_windows_dist_audit.py` and
+      `package-macos.sh` counted `.se1` files, so a package missing the DE441
+      cut would have passed all three. Each requires ephem/ file by file
+      now, and `ci-selftest.sh` gained "the Prometheia body catalog
+      missing", which must fail. `.441`, `.440`, `.bsp` and `.epm` are
+      binary in `.gitattributes` and in `line_endings_audit.py`'s SKIP.
+    - **Counts.** The suite runs 6,621 checks, against 6,484 before. The
+      `prometheia` group's engine legs, which skipped under both
+      configurations all along (no DE440 on either search path), run on the
+      shipped files now.
 
 ## Features this fork adds to both builds
 

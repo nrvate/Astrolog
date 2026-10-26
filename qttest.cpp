@@ -22463,35 +22463,39 @@ LStop:
     && FEqSz(szStateAfter, "closed"),
     "the engine stopped cleanly (%s)", szStateAfter);
 
-  // A catalog with NO perturber kernel serves a body only within 100 years
-  // of its element epoch (Ephemeris Prometheia 0.7.3): asked for Ceres in
-  // 1900, 126 years before the catalog's 2026 epoch, the engine refuses with
-  // its coverage status, ephprom.cpp maps that to error 3, and a chain that
-  // has Swiss behind it walks on and answers, with no warning. Held
-  // together because either half alone can change under the other: the
-  // refusal is theirs, the mapping and the fall-through are ours.
-  if (fCat) {
-    char szPertSav[cchSzMax], szWhyC[cchSzMax];
+  // A date outside the years of every planets file the engine has is
+  // refused with the engine's coverage status, ephprom.cpp maps that to
+  // error 3, and a chain with Swiss behind it walks on and answers. With
+  // the files shipped in ephem/ -- DE441 and its asteroid kernel, cut to
+  // 1900-2100 (QT_GUI_PLAN.md item 291) -- that is every chart before 1900
+  // or after 2100 under the default chain, so it is asked of exactly that:
+  // Ceres in 1850, which the Swiss files (1800-2400) answer. It replaced a
+  // leg asking for Ceres from a catalog with NO kernel, a case the shipped
+  // kernel has made impossible to set up: it is found in the program's
+  // own ephem/ whatever -Yi says. Held together because either half alone
+  // can change under the other: the refusal is the engine's, the mapping
+  // and the fall-through are ours.
+  {
+    char szWhyC[cchSzMax];
     int rgisrcP[1], rgisrcPS[2];
     EPHQUERY eqP, eqPS;
+    CONST real rJD1850 = 2396758.5;   // 1850 January 1, 0h
 
-    sprintf2(S(szPertSav), "%s", SzSet(SzEphPromParam(epPromPerturbers)));
-    EphPromSetParam(epPromPerturbers, "");
     if (!FEphPromStart(S(szWhyC))) {
-      Check(fFalse, "the engine reopens with a catalog and no perturbers "
-        "(%s)", szWhyC);
+      Check(fFalse, "the engine reopens for a date outside its files (%s)",
+        szWhyC);
     } else {
       rgisrcP[0] = rgisrcPS[0] = IEphSrcFromKey("prometheia");
       rgisrcPS[1] = IEphSrcFromKey("swiss");
-      EphQueryInit(&eqP, 2415021.0);
+      EphQueryInit(&eqP, rJD1850);
       FEphQueryAdd(&eqP, oCer, 0, 0, NULL);
       FEphSubmitChain(&eqP, rgisrcP, 1);
       Check(eqP.rgisrc[0] == ephSrcNone &&
         eqP.rgrow[0].nErr == ephErrOutsideCover,
-        "Ceres in 1900 from a catalog with no perturbers is refused as "
+        "Ceres in 1850, before the shipped files' years, is refused as "
         "outside the coverage (source %d, error %d)", eqP.rgisrc[0],
         (int)eqP.rgrow[0].nErr);
-      EphQueryInit(&eqPS, 2415021.0);
+      EphQueryInit(&eqPS, rJD1850);
       FEphQueryAdd(&eqPS, oCer, 0, 0, NULL);
       FEphSubmitChain(&eqPS, rgisrcPS, 2);
       Check(eqPS.rgisrc[0] == rgisrcPS[1] &&
@@ -22501,7 +22505,6 @@ LStop:
         SzSet(eqPS.rgrow[0].szSrc));
       EphPromStop();
     }
-    EphPromSetParam(epPromPerturbers, szPertSav);
   }
 
   // The record of what the engine was opened from used to outlive the
@@ -24146,8 +24149,51 @@ static void TestEphemRegistryQt()
         "the fallback order is carried whole");
       rgsz[2] = (char *)"swiss";
       Check(FProcessSwitches(3, rgsz, NULL), "-bE swiss parses");
-      Check(FEqSz(us.szEphemSource, SzEphSourceDefault()),
-        "-bE swiss is the default");
+      Check(FEqSz(us.szEphemSource, "swiss"),
+        "-bE swiss selects the Swiss Ephemeris alone");
+#ifdef PROMETHEIA
+      Check(FEqSz(SzEphSourceDefault(), "prometheia,swiss"),
+        "the default chain is Prometheia, then Swiss (%s)",
+        SzEphSourceDefault());
+#else
+      Check(FEqSz(SzEphSourceDefault(), "swiss"),
+        "without Prometheia the default chain is Swiss (%s)",
+        SzEphSourceDefault());
+#endif
+      // "=b", which every settings file carries, changes nothing when
+      // files are already on. The legacy shadow cannot tell these chains
+      // apart -- each is {files, 0, -} -- and re-deriving from it
+      // rewrote each of them to "swiss": the default lost Prometheia, and
+      // an explicit fallback was dropped.
+      {
+        char *rgszB[3] = {(char *)szAppNameCore, (char *)"=b", NULL};
+        static CONST char *rgszKeep[] = {"swiss,moshier", "swiss", NULL};
+        int iKeep;
+        flag fOk;
+
+        rgszKeep[2] = SzEphSourceDefault();
+        for (iKeep = 0; iKeep < 3; iKeep++) {
+          rgsz[2] = (char *)rgszKeep[iKeep];
+          FProcessSwitches(3, rgsz, NULL);
+          // The switch first and the Check after, never inside its
+          // arguments: the message's us.szEphemSource could be read before
+          // the call frees it (the order is unspecified), and the first
+          // draft printed freed memory.
+          fOk = FProcessSwitches(2, rgszB, NULL);
+          Check(fOk && FEqSz(us.szEphemSource, rgszKeep[iKeep]),
+            "=b leaves the chain %s as it is (%s)", rgszKeep[iKeep],
+            us.szEphemSource);
+        }
+        rgszB[1] = (char *)"_b";
+        fOk = FProcessSwitches(2, rgszB, NULL);
+        Check(fOk && FEqSz(us.szEphemSource, "none"),
+          "_b turns the files off (%s)", us.szEphemSource);
+        rgszB[1] = (char *)"=b";
+        fOk = FProcessSwitches(2, rgszB, NULL);
+        Check(fOk && FEqSz(us.szEphemSource, SzEphSourceDefault()),
+          "and =b turns them back on as the default chain (%s)",
+          us.szEphemSource);
+      }
       rgsz[2] = (char *)"";
       Check(FProcessSwitches(3, rgsz, NULL), "-bE with an empty chain");
       Check(FEqSz(us.szEphemSource, SzEphSourceDefault()),

@@ -27,6 +27,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # Everything .gitattributes exempts: binaries, and the files Windows or
 # VMS tooling reads in its own format. Keep the two lists in step.
 SKIP = ('.se1', '.ttf', '.pdf', '.docx', '.rtf', '.png', '.ico', '.bmp',
+        '.441', '.440', '.bsp', '.epm',
         '.exe', '.res', '.o',
         '.sln', '.vcproj', '.vcxproj', '.rc', '.def', '.url', '.com',
         '.htm')

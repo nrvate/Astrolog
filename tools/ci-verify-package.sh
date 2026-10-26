@@ -47,11 +47,16 @@ done
 # every line above, install, run, and print a correct Chiron -- seas_18
 # is in the named set -- while twenty bodies in the Object Selections
 # dialog quietly returned 0Ari00'00". Exact, not a floor.
-want_se1=$(ls ephem/*.se1 2>/dev/null | wc -l | tr -d ' ')
-got_se1=$(ls "$dir"/ephem/*.se1 2>/dev/null | wc -l | tr -d ' ')
-[ "$want_se1" -gt 0 ] && [ "$got_se1" = "$want_se1" ] || {
-  echo "EPHEMERIS INCOMPLETE: $got_se1 .se1 files staged, this tree ships $want_se1"
-  bad=1; }
+#
+# File by file, not by counting .se1 files, since ephem/ holds Ephemeris
+# Prometheia's data too (QT_GUI_PLAN.md item 291): the DE441 cut, its
+# asteroid kernel and the body catalog, which a .se1 count cannot see go.
+n_eph=0
+for f in ephem/*; do
+  n_eph=$((n_eph + 1))
+  [ -e "$dir/$f" ] || { echo "EPHEMERIS INCOMPLETE: $f is not staged"; bad=1; }
+done
+[ "$n_eph" -gt 0 ] || { echo "EPHEMERIS: this tree's ephem/ is empty"; bad=1; }
 [ -d "$dir/font" ] || { echo "MISSING: font/"; bad=1; }
 # Exactly one executable, and it must be one we meant to ship.
 n=$(find "$dir" -maxdepth 1 -type f \( -name '*.exe' -o -perm -u+x \) | wc -l)

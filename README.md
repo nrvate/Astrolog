@@ -8,7 +8,11 @@ http://www.astrolog.org/ftp/ast80src.zip — the changes upstream made in
 Everything Astrolog does, and all of its chart calculation and drawing
 code, is Walter D. Pullen's work. See license.htm. Two libraries are
 vendored: the Swiss Ephemeris (its licence is part of license.htm) and,
-for writing animated GIFs, cgif (MIT; cgif-license.txt).
+for writing animated GIFs, cgif (MIT; cgif-license.txt). A third is a
+git submodule, `prometheia/`: [Ephemeris
+Prometheia](https://github.com/nrvate/ephemeris-prometheia)
+(GPL-2.0-or-later), the ephemeris every chart is computed from by
+default -- clone with `--recursive`, or run `git submodule update --init`.
 
 ## What this fork adds
 
@@ -83,14 +87,27 @@ root.
 
 Every release stays; nothing is ever pruned.
 
-The tree carries the ephemeris for every body the Object Selections
-dialog offers, and the dialog offers every body the tree carries: the
-first **29 main-belt asteroids**, Ceres to Amphitrite, and **39 outer
-bodies**, the centaurs and trans-Neptunian dwarfs from Pholus out to
-Chiminigagua, alongside the planets and the Moon. 67 files, 19 MB, so a
-clone computes everything the program offers. A body outside that set
-reads `0Ari00'00"` rather than failing, which is the signature to know:
-the file was not found, and the position is not zero.
+**Charts are computed by Ephemeris Prometheia by default**, from data the
+tree carries in `ephem/` and every installer ships:
+
+- JPL's **DE441**, cut to **1900-2100** (`linux_p1900p2100.441`, 18.6 MB),
+  and the paths of the 16 most massive asteroids it was fitted with
+  (`sb441-p1900p2100.bsp`, 7.6 MB);
+- a catalog of **13,808 small bodies** (`astrolog-bodies.epm`, 1.3 MB):
+  every numbered asteroid from 1 to 10000, and every body JPL lists with
+  an aphelion beyond 7.5 AU whose orbit is good to a few arcminutes
+  across those two centuries -- the named ones, the numbered and the
+  unnumbered. `ephem/astrolog-bodies-*.txt` list them, largest first.
+
+A date outside 1900-2100, or a body that catalog lacks, falls back to the
+**Swiss Ephemeris**, which stays as a selectable source and whose files
+sit beside them: the first **29 main-belt asteroids**, Ceres to
+Amphitrite, and **39 outer bodies**, Pholus out to Chiminigagua, 1800 to
+2400. `tools/cut-ephemeris.sh` cuts other years of DE441 for the
+Prometheia source, and `tools/bundle-bodies.py` rebuilds the catalog from
+JPL. A body outside both sets reads `0Ari00'00"` rather than failing,
+which is the signature to know: no file had it, and the position is not
+zero.
 
 Versions are `8.00-qt.N`: upstream numbers the program, this numbers the
 port.

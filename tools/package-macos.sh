@@ -190,12 +190,15 @@ printf ' files\n   Resources: '; ls "$app/Contents/Resources" | tr '\n' ' '; ech
 # files are most of the bundle's payload, and the Chiron assertion further
 # down cannot see them go -- seas_18.se1, where Chiron lives, was in the
 # original 12-file set and would still answer.
-want_se1=$(ls ephem/*.se1 2>/dev/null | wc -l | tr -d ' ')
-got_se1=$(ls "$app/Contents/MacOS/ephem"/*.se1 2>/dev/null | wc -l | tr -d ' ')
-[ "$want_se1" -gt 0 ] && [ "$got_se1" = "$want_se1" ] || {
-  echo "   FAILED: bundle has $got_se1 .se1 files, this tree ships $want_se1"
-  exit 1; }
-echo "   ephem complete: $got_se1 of $want_se1 .se1 files"
+# File by file, since ephem/ holds Ephemeris Prometheia's data as well as
+# the Swiss files, and a .se1 count cannot see the DE441 cut go.
+n_eph=0
+for f in ephem/*; do
+  n_eph=$((n_eph + 1))
+  [ -e "$app/Contents/MacOS/$f" ] || { echo "   FAILED: the bundle has no $f"; exit 1; }
+done
+[ "$n_eph" -gt 0 ] || { echo "   FAILED: this tree's ephem/ is empty"; exit 1; }
+echo "   ephem complete: all $n_eph files"
 
 # Does it depend on anything that will not be on the target machine? This
 # runs on a builder where Homebrew Qt exists, so a binary still linking

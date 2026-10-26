@@ -74,7 +74,13 @@ Work happens on branch **`qt`**.
   on), compiled into every product build by `Makefile.prometheia` and on
   Windows by `tools/msvc-build-qt.cmd`, from the library's own source list
   and under its own flags (work log item 290). The Win32 oracle stays
-  Swiss-only. **The default is still Swiss** until the next step lands.
+  Swiss-only. **Prometheia is the default since work log item 291**: the
+  chain is `prometheia,swiss`, so Swiss answers what Prometheia cannot (a
+  date outside the shipped files, a body the catalog lacks, a planetary
+  moon). Its data ships in `ephem/` (below), and the plugin searches the
+  program's own `ephem/` after the `-Yi` folders, whatever `-Yi` says --
+  `nrvate.as` names `/swe` three times, and under it the source found no
+  planets file at all until that search was added.
   **`EPHEMERIS_PROTOCOL_COLLABORATION.md`** is how
   that negotiation was actually run between two agent sessions: the shape of a
   round, the discipline that made objections productive (with the errors on
@@ -210,6 +216,18 @@ history is rewritten rather than added to.
 And **`/swe` is a machine-local ephemeris mount, not part of this repo** —
 887,000-odd files, kept on the NAS. `nrvate.as` points `-Yi1`/`-Yi2`/
 `-Yi3` at it.
+
+**`ephem/` holds Ephemeris Prometheia's data too, since work log item
+291** -- 28 MB beside the Swiss files' 19: JPL's DE441 cut to 1900-2100
+(`linux_p1900p2100.441`), the 16 asteroids' kernel cut to the same years
+(`sb441-p1900p2100.bsp`), and `astrolog-bodies.epm`, 13,808 bodies:
+numbered 1-10000, and everything beyond 7.5 AU aphelion with orbit
+condition code U <= 4, cut from Prometheia's catalog by
+`tools/bundle-bodies.py`, with `astrolog-bodies-*.txt` listing them by H.
+`tools/cut-ephemeris.sh` cuts other spans. **The names are JPL's only**:
+astromcp's tables hold the maintainer's own unofficial names (Apsu,
+Triptolemus, Philyra, Maat, Pylenor), which must never ship. Every package
+check requires ephem/ file by file, not by counting `.se1` files.
 
 **The bundled `ephem/` covers all 39 esoteric bodies on its own** since
 2026-09-03, so `-Yi1 ephem` and `/swe` resolve the same 39 and the suite

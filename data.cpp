@@ -138,8 +138,10 @@ US us = {
   // after every positional slot above so none of them can shift. The
   // chain is NULL here -- a string constant cannot initialize a char*
   // without a -Wwrite-strings warning the warning audit owns -- and
-  // InitProgram() applies the default (SzEphSourceDefault(): "swiss"
-  // under EPHEM, "matrix" without it) before any file or switch loads.
+  // InitProgram() applies the default (SzEphSourceDefault():
+  // "prometheia,swiss" where Prometheia is compiled in, "swiss" under
+  // EPHEM without it, "matrix" without either) before any file or
+  // switch loads.
   // Every parameter starts at its source's own default (NULL, which is
   // ephparam.h's "" for each row); the NULL list is one per generated
   // parameter, so it grows when ephparam.h does.

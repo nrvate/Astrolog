@@ -98,10 +98,13 @@ if os.path.exists(os.path.join(d, "nrvate.as")):
 # The ephemeris, exactly as many files as the tree ships. Chiron alone
 # cannot notice the 20 esoteric-body files going missing: seas_18.se1 was
 # always there.
-here = len(glob.glob(os.path.join(os.path.dirname(__file__), "..", "ephem", "*.se1")))
-there = len(glob.glob(os.path.join(d, "ephem", "*.se1")))
-if here and there != here:
-    bad.append(f"ephem/  -- {there} .se1 files staged, this tree ships {here}")
+# File by file since ephem/ holds Ephemeris Prometheia's data too (the DE441
+# cut, its asteroid kernel, the body catalog), which a .se1 count cannot see.
+here = sorted(os.path.basename(f) for f in glob.glob(
+    os.path.join(os.path.dirname(__file__), "..", "ephem", "*")))
+for f in here:
+    if not os.path.exists(os.path.join(d, "ephem", f)):
+        bad.append(f"ephem/{f}  -- the tree ships it and the package has not got it")
 
 if bad:
     print(f"THE WINDOWS TREE IS INCOMPLETE ({d}):")
