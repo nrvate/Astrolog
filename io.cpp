@@ -4075,15 +4075,16 @@ static void FJPLCachePut(CONST char *szUrl, CONST PT3R *pt,
     cjcUsed++;
 }
 
-#ifdef QTTEST
 // The suite's way to answer a Horizons fetch with no network: a reply put
 // here is what GetJPLHorizonsAt() reads back for that exact URL, so a
-// whole cast through the horizons source can run offline.
+// whole cast through the horizons source can run offline. Defined in every
+// build, not under QTTEST: the Windows build compiles this file ONCE,
+// without QTTEST, for both binaries (tools/msvc-build-qt.cmd, which says
+// the same of FailIndexQt()), and its test link failed on it (LNK2019).
 void JPLCachePutTest(CONST char *szUrl, CONST PT3R *pt, CONST char *szName)
 {
   FJPLCachePut(szUrl, pt, szName);
 }
-#endif
 
 
 // Given a JPL object index, compute its geocentric position and velocity

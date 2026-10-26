@@ -30,5 +30,20 @@ if [ -n "$i386" ]; then
   sudo dpkg --add-architecture i386
 fi
 echo 'Acquire::ForceIPv4 "true";' | sudo tee /etc/apt/apt.conf.d/99force-ipv4 >/dev/null
+# A STALLED MIRROR, the third disease (2026-10-25): a release dry run's
+# Linux job sat 24 minutes inside one download from the Azure mirror and
+# was cancelled at its 25-minute limit with nothing wrong in the tree. So
+# a transfer that stops is dropped after a minute and retried, and each
+# whole attempt is bounded too; the archives already fetched stay in
+# apt's cache, so a second attempt carries on rather than starting over.
+printf 'Acquire::http::Timeout "60";\nAcquire::https::Timeout "60";\nAcquire::Retries "5";\n' \
+  | sudo tee /etc/apt/apt.conf.d/99timeouts >/dev/null
 sudo apt-get update
-sudo apt-get install -y "$@"
+for attempt in 1 2 3; do
+  if sudo timeout 480 apt-get install -y "$@"; then
+    exit 0
+  fi
+  echo "ci-deps: apt-get install attempt $attempt did not finish; retrying"
+done
+echo "ci-deps: apt-get install failed three times"
+exit 1
