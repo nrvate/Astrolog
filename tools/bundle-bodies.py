@@ -304,7 +304,10 @@ def main():
                             check=True, capture_output=True, text=True).stdout.strip()
     os.makedirs(args.out, exist_ok=True)
     epm = os.path.join(args.out, 'astrolog-bodies.epm')
-    served, dropped, said = cut(subset, args.catalog, mainbelt + distant, args.work, epm)
+    # Cut beside the shipped file and move it into place only once cut() is
+    # satisfied, so a stop leaves ephem/ as it was.
+    served, dropped, said = cut(subset, args.catalog, mainbelt + distant, args.work, epm + '.part')
+    os.replace(epm + '.part', epm)
     print(said, file=sys.stderr)
     print('not in the catalog, left out: %d%s' % (len(dropped), (' (' + ', '.join(dropped[:20]) +
           (' ...' if len(dropped) > 20 else '') + ')') if dropped else ''), file=sys.stderr)
