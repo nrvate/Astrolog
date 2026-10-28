@@ -1882,9 +1882,10 @@ CONST char *SzEphPromDebug(void)
   // Bright Star Catalogue, the IAU-named stars beyond it and the Messier
   // objects, 9,290 at 0.7.3 (its docs/STARS.md). The window said "9290
   // named fixed stars", which the maintainer read as the asteroid count.
+  // The Double Cluster in Perseus (NGC 869 and 884) joined at 8913d9d.
   DbgAdd("  %-20s %d built in: the Bright Star Catalogue, the IAU-named "
-    "stars\n  %-20s and the Messier objects\n", "stars and deep sky",
-    prometheia_star_count(), "");
+    "stars,\n  %-20s the Messier objects and the Double Cluster in Perseus\n",
+    "stars and deep sky", prometheia_star_count(), "");
   if (pephProm != NULL)
     DbgAdd("  %-20s %d named by token\n", "hypotheticals",
       prometheia_hypothetical_count(pephProm));
