@@ -1892,6 +1892,11 @@ Answers a samples REQUEST in one or more chunks. Header (24 bytes):
 metadata follow the header:
 - **Source table.** `u8 nSources`, then `nSources × str8`: the sources that
   answered, e.g. `JPL DE440`, `Swiss Ephemeris files (sepl_18)`, `SBDB 2026-09-16`.
+  An object whose quantity is server-defined (§3.5a: kind 1 methods 0 and 2,
+  kind 3) MUST name its model in its source-table entry. An entry SHOULD read
+  `<engine> | <ephemeris> | <model>`, the first two fields stable and the
+  third free text, empty for an object computed from the ephemeris alone,
+  e.g. `engine 1.0 | JPL DE440 | mean elements: DE440 secular fit`.
 - **Object metadata.** `nObj × META`.
 
 The meta-present flag MUST be set on chunk 0. A server MAY repeat the metadata
@@ -2454,14 +2459,24 @@ model everywhere has no step at a span's ends):
   μ = G(M_centre + M_body) from the ephemeris's own constants (M_body 0 where
   unknown).
 - **Mean (0)** elements are the server's mean-element model, **named in the
-  object's source string** (source strings are
-  `<engine> | <ephemeris> | <model>`, the first two fields stable and the third
-  free text, e.g. `prometheia 0.1.0 | JPL DE440 | mean elements: DE440 secular fit`) (e.g. "mean elements: DE440 secular fit",
-  "Moon: Simon et al. 1994"). Mean points legitimately differ between models.
+  object's source string** (§3.4, Source table), e.g. "mean elements: DE440
+  secular fit", "Moon: Simon et al. 1994". Mean points legitimately differ
+  between models.
 - **Interpolated (2)** is the Moon's "natural" apogee and perigee, a
   server-defined smoothing of the osculating points, also named in the source.
-- **Which bodies.** Any body with an orbit about its centre. The Sun (10) and
-  the solar-system barycentre (0) have none: per-object error 2.
+- **Which bodies.** Any body with an orbit about its centre. The solar-system
+  barycentre (0) has none: per-object error 2.
+- **The Sun (10)** MAY be answered under methods 0 and 1, as its geocentric
+  orbit: the heliocentric orbit of the Earth (399) reflected through the
+  focus -- its osculating orbit under method 1; under method 0, the server's
+  mean orbit of the Earth, which may be the Earth-Moon barycentre's. Each
+  apsis lies at that orbit's apsidal distance from the geocentre, in the
+  opposite direction; the ascending and descending nodes exchange; the focus
+  is the geocentre. Methods 2-4 for the Sun are error 2, and so is a Sun
+  orbit point from a server that does not serve it. The Sun's osculating
+  nodes are ill-conditioned: the Earth's osculating orbit lies within
+  arcseconds of the ecliptic of date, so they may move through up to 180° in
+  a month.
 - **Method 3 (osculating, barycentric)** takes the elements from the body's
   barycentric state with μ = the ephemeris's total solar-system GM. A server
   whose barycentric elements use another mass does not advertise method 3
@@ -3628,6 +3643,33 @@ instructions for a human to copy is the thing this direction exists to stop.
      bug into their own `corrapplied.py` and caught it by fault
      injection rather than by trusting the green. The symptom to grep
      for in any existing leg is a column of suspiciously exact zeros.
+
+42. **The Sun's orbit points, and naming a model (2026-10-27).** astromcp asked
+   Prometheia for the Sun's nodes and apsides, so callers do not each build
+   them; Prometheia's 015edb6 serves them in its C API, and its v4 server
+   kept answering error 2 because §3.5a said "The Sun (10) and the
+   solar-system barycentre (0) have none". Jointly worded, and approved by
+   Prometheia's maintainer.
+   - **The Sun is a MAY**, under methods 0 and 1: the Earth's heliocentric
+     orbit reflected through the focus. MAY rather than MUST, so a server
+     without it -- `ephprom.cpp`'s handler among them -- stays conforming.
+   - **The Earth, not the Earth-Moon barycentre**, because the orbit is about
+     the geocentre. Prometheia measured the two on DE440 over 2026, daily:
+     up to 3.1° apart in the osculating perihelion, 272,989 km in its
+     distance, and 179.7° in the node. Their mean fit is the barycentre's,
+     which method 0 allows.
+   - **The osculating nodes are ill-conditioned**, which the text now says,
+     so a correct value is not reported as a bug.
+   - **Naming a model.** Prometheia found that none of its mean orbit points
+     named a model -- Moon and Earth included -- though §3.5a required it. The
+     requirement is now one MUST under §3.4's source table, for every
+     server-defined quantity (kind 1 methods 0 and 2, kind 3). The
+     `<engine> | <ephemeris> | <model>` form, which had sat in a parenthesis
+     inside §3.5a, is a SHOULD. A MUST would have made the fixtures' single-field
+     sources (`JPL DE440`, `SBDB 2026-09-16`) non-conforming and moved the
+     set digest; as a SHOULD, it moves no conforming bytes.
+   - **Astrolog's charts are not changed.** Its request builder gives naif 10
+     no kind-1 form, and the 126 conformance files are unchanged.
 
 41. **House cusps out of zodiacal order are error 9 (2026-10-27).** The
    Prometheia side found, while adding houses to its C API (its A-1), that its
