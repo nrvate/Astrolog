@@ -2576,7 +2576,8 @@ Ascendant and cusp 10 the MC except where an entry says otherwise (Equal at cusp
   the horizon's north and south points and the equator point of hour angle −30°
   (k − 10), on the half of that circle holding that point. For k = 10 that circle is
   the meridian and the point is the one above the horizon; where the MC culminates
-  below it, that is the IC.
+  below it, that is the IC, and the cusps are then out of zodiacal order and
+  undefined (below), so an answered cusp 10 is always the MC.
 - **Campanus** (4): the same circles through the north and south points and the
   prime-vertical points at 0°, 30°, 60°, 90°, 120°, 150°, 180° from the east point
   toward the zenith for cusps 1, 12, 11, 10, 9, 8, 7, and at −30° … −150° for cusps
@@ -2588,13 +2589,15 @@ Ascendant and cusp 10 the MC except where an entry says otherwise (Equal at cusp
 - **Koch** (1): with SA = 90° + asin(tan φ tan δ), δ the declination of the MC
   point, cusps 11, 12, 2, 3 are the Ascendant for ARMC − 2SA/3, ARMC − SA/3,
   ARMC + SA/3, ARMC + 2SA/3. (One SA serves all four.) Near the polar circle these
-  can fall out of order, 8° before the MC at φ = 66.56° and ARMC 280.457°; that is
-  the construction, and no rule reorders them.
+  crowd toward the IC: at φ = 66.56° and ARMC 280.457° cusp 11 lies 8° before the
+  IC and houses 10 and 4 are 172° wide. That is the construction, the cusps are
+  still in zodiacal order, and no rule adjusts them.
 - **Topocentric** (10, Polich–Page): with φ₁ = atan(tan φ / 3) and φ₂ = atan(2 tan φ
   / 3), cusp 11 is the Ascendant at latitude φ₁ for ARMC − 60°, cusp 12 at φ₂ for
   ARMC − 30°, cusp 2 at φ₂ for ARMC + 30°, cusp 3 at φ₁ for ARMC + 60°. Cusp 10 is
-  the MC. **No reordering is applied inside the polar circle**; the definition gives
-  no rule for one.
+  the MC. **No reordering is applied**; the definition gives no rule for one, and
+  where its cusps fall out of zodiacal order they are undefined (below). That
+  begins about 1.6° short of the polar circle (64.98° at ε = 23.44°).
 - **Placidus** (0): a cusp is the ecliptic point whose hour angle H is a fixed
   fraction of its own semi-arcs. With SA_d the diurnal semi-arc of the point
   (acos(−tan φ tan δ)) and SA_n = 180° − SA_d: cusp 11, H = −SA_d/3; cusp 12,
@@ -2609,12 +2612,26 @@ Ascendant and cusp 10 the MC except where an entry says otherwise (Equal at cusp
   another system. **A server MAY answer or refuse within ±1″ of 90° − ε**; the
   fixture rows sit at ±0.001° outside that band. At exactly 90° − ε the reference
   implementation and Prometheia both answer; that is behaviour, not normative.
+- **Cusps out of zodiacal order, any system.** Where the twelve cusps, taken from
+  cusp 1 to cusp 12 and back to cusp 1, go round the ecliptic more than once (the
+  forward arcs between successive cusps sum to more than 360°), every cusp of that
+  system (points 1–12) is error 9. The server MUST NOT reorder them or substitute
+  another system. By the definitions above this happens only to Regiomontanus and
+  Campanus inside the polar circle and to Topocentric from about 1.6° short of it,
+  at some ARMCs; the rule is stated for every system so that no list has to be
+  kept. **A server MAY answer or refuse where the smallest forward arc is within
+  1″ of zero**, the boundary at which two cusps cross.
 - **Degenerate instants:** where the ecliptic lies along the horizon or the prime
   vertical the Ascendant or the Vertex has no intersection, which can happen only
   on the boundary; that row is error 9.
 The **angles** (13–16) are the same in every system: they are refused only at a
-pole, and a Placidus or Koch angle answers inside the polar circle. Every other
-system answers at every other latitude.
+pole, and they answer where a system's cusps are refused (a Placidus or Koch angle
+inside the polar circle, a Regiomontanus angle with its cusps out of order). Every
+other cusp answers. (Amended 2026-10-27: until then the out-of-order cusps were
+answered as the definitions gave them, and Regiomontanus cusp 10 could be the IC.
+Ephemeris Prometheia found its own Regiomontanus, Campanus and Topocentric out of
+order there, and the reference implementation reproduced every onset
+independently.)
 
 The reference implementation is `tools/houses_ref.py`, written from this section
 and nothing else; its Placidus is iterated to full precision, and conformance for
@@ -3611,6 +3628,37 @@ instructions for a human to copy is the thing this direction exists to stop.
      bug into their own `corrapplied.py` and caught it by fault
      injection rather than by trusting the green. The symptom to grep
      for in any existing leg is a column of suspiciously exact zeros.
+
+41. **House cusps out of zodiacal order are error 9 (2026-10-27).** The
+   Prometheia side found, while adding houses to its C API (its A-1), that its
+   Regiomontanus and Campanus go out of order inside the polar circle at some
+   ARMCs, and its Topocentric from 64.98° at ε = 23.44°: the twelve cusps go
+   round the ecliptic more than once. Their maintainer chose to refuse, never
+   to reorder or substitute. §3.5b had said the opposite ("every other system
+   answers at every other latitude"), so the change is to the normative text,
+   and it is jointly worded.
+   - **Reproduced here first, from `houses_ref.py` alone.** Swept at
+     ε 23.4393, |φ| every 0.25° plus 0.01° steps across 66.40–66.69, ARMC
+     every 5°, both hemispheres: out of order are Topocentric from 65.0° and
+     Regiomontanus and Campanus from 66.57°, and nothing else. No in-order
+     Regiomontanus or Campanus has the IC at cusp 10, so the old IC sentence
+     described only cases that are now refused.
+   - **The rule is stated for every system**, not as a list, with a 1″ MAY
+     band where the smallest forward arc nears zero. The angles still answer.
+   - **What moved.** `houses_ref.py` refuses by `order_excess()`; its
+     selftest gained two cases. The grader `ephsrv_houses.py` accepts a refusal
+     where the cusps are out of order at the ARMC that system's Ascendant row
+     reported, and complains about an answer there; it gained five cases.
+     With the rule disabled, both selftests fail. In `ephsrv/houses-rows.tsv`,
+     62 rows become `refused` and 8 become `either` (four out of order and
+     four in order, all within 1″ of the boundary, at ±89.999°). The new
+     rows-sha256 is e9b87707…3373. The 126 conformance files are unchanged:
+     no fixture holds an out-of-order case.
+   - **Astrolog's own charts are not changed** by this. The app computes houses
+     through Swiss, and `FEnsureHousePartition()` has fallen back to Porphyry for
+     these systems since work log item 157 in `QT_GUI_PLAN.md`. That
+     substitution is the app's display policy; on the wire, substitution
+     is forbidden.
 
 40. **Houses in protocol v4: object kind 6 (2026-09-30).** Proposed by the
    Prometheia project for its pyswisseph-shaped client; agreed as an additive

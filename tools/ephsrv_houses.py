@@ -31,9 +31,12 @@ def sep(a, b):
 
 def grade_row(system, point, lat, ayan, lon, armc, eps, refused):
     """Complaints about one row. `refused` is whether the server said error 9;
-    lon/armc/eps are then meaningless. 3.5b: Placidus and Koch are undefined
-    beyond 90 - eps (either answer within +-1 arcsecond of it); every point is
-    undefined at a pole; nothing else is ever refused."""
+    lon is then meaningless, and armc/eps are the ones the same system's
+    angles reported, or None. 3.5b: Placidus and Koch are undefined beyond
+    90 - eps (either answer within +-1 arcsecond of it); every point is
+    undefined at a pole; the cusps of any system are undefined where they fall
+    out of zodiacal order (either answer within 1 arcsecond of that); nothing
+    else is ever refused."""
     name = H.SYSTEMS[system]
     if abs(lat) >= 90.0:
         return [] if refused else ["%s point %d answered at a pole" % (name, point)]
@@ -42,10 +45,19 @@ def grade_row(system, point, lat, ayan, lon, armc, eps, refused):
     pk = name in ("placidus", "koch") and point <= 12
     beyond = pk and abs(lat) > 90.0 - eps
     band = pk and abs(abs(lat) - (90.0 - eps)) * 3600.0 <= 1.0
+    # out of zodiacal order, graded at the ARMC and obliquity reported
+    disorder = obands = False
+    if point <= 12 and armc is not None and not beyond:
+        raw = H._cusps_tropical(name, armc, lat, eps)
+        disorder = H.order_excess(raw) > 180.0
+        obands = H.order_margin(raw) <= 1.0
     if refused:
-        if beyond or band:
+        if beyond or band or disorder or obands:
             return []
         return ["%s point %d refused at lat %.4f" % (name, point, lat)]
+    if disorder and not obands:
+        return ["%s point %d answered where the cusps are out of order (lat %.4f, armc %.4f)"
+                % (name, point, lat, armc)]
     if beyond and not band:
         return ["%s point %d answered beyond the polar boundary (lat %.4f, eps %.4f)"
                 % (name, point, lat, eps)]
@@ -119,6 +131,17 @@ def selftest():
          grade_row(1, 11, 66.5607, 0.0, 0.0, 280.457, 23.4393, True) +
          grade_row(1, 11, 66.5607, 0.0, H.cusps("koch", 280.457, 66.5607, 23.4393)[10],
                    280.457, 23.4393, False))
+    case("Topocentric refused where its cusps are out of order passes", False,
+         grade_row(10, 2, 66.56, 0.0, 0.0, 280.457, 23.4393, True))
+    case("Topocentric answered there is caught", True,
+         grade_row(10, 2, 66.56, 0.0, H._cusps_tropical("topocentric", 280.457, 66.56, 23.4393)[1],
+                   280.457, 23.4393, False))
+    case("Topocentric refused in order at 47.6 N is caught", True,
+         grade_row(10, 2, 47.6, 0.0, 0.0, 280.457, 23.4393, True))
+    case("a refusal with no ARMC to grade it by is caught", True,
+         grade_row(10, 2, 66.56, 0.0, 0.0, None, 23.4393, True))
+    case("a Regiomontanus ANGLE out of order still answers", False,
+         grade_row(3, 13, 70.0, 0.0, H.angles(280.457, 70.0, 23.4393)["asc"], 280.457, 23.4393, False))
     case("Equal refused at 70 N is caught", True,
          grade_row(5, 1, 70.0, 0.0, 0.0, 280.457, 23.4393, True))
     case("an answer at a pole is caught", True,
@@ -192,8 +215,14 @@ def gate(port):
                         if "err=9" not in meta.get(i, ""):
                             bad.append("%s point %d lat %.4f: NaN row without error 9" % (H.SYSTEMS[system], point, lat))
                             continue
-                        # the polar band is graded with the obliquity of date
-                        bad += grade_row(system, point, lat, 0.0, 0.0, 0.0, 23.4393 - 0.0130 * (jd - 2451545.0) / 36525.0, True)
+                        # the polar band is graded with the obliquity of date, and
+                        # the cusps' order at the ARMC this system's Ascendant reported
+                        eps0 = 23.4393 - 0.0130 * (jd - 2451545.0) / 36525.0
+                        armc0 = None
+                        a = rows[system * 16 + 12][5:]
+                        if a[0] != "nan":
+                            armc0, eps0 = float.fromhex(a[8]), float.fromhex(a[9])
+                        bad += grade_row(system, point, lat, 0.0, 0.0, armc0, eps0, True)
                         continue
                     # lon lat dist dlon dlat ddist ayanamsa dT armc eps
                     lon, ayan, armc, eps = vals[0], vals[6], vals[8], vals[9]
