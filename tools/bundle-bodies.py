@@ -263,6 +263,16 @@ def cut(subset, catalog, bodies, work, out):
             k = int(m.group(1)) - 1
             assert names[k] == m.group(2), (names[k], m.group(2))
             dropped.append(names[k])
+    # A 1.2 catalog serves a line naming a numbered body by its old
+    # provisional designation, and says "'2015 RR245' -> 523794 (old
+    # designation)" (Prometheia's a5abc8e). That body was numbered after the
+    # SBDB fetch in the work directory, so the listings would show it
+    # unnumbered: stop, and have the fetch redone.
+    renamed = re.findall(r"'(.*)' -> (\d+) \(old designation\)", p.stdout + p.stderr)
+    if renamed:
+        sys.exit('numbered since the SBDB fetch in %s: %s\n'
+                 'delete outer.json and num10k.json there and run again'
+                 % (work, ', '.join('%s = %s' % r for r in renamed)))
     said = [ln for ln in (p.stdout + p.stderr).splitlines() if '(skipped)' not in ln]
     served = set(names) - set(dropped)
     with open(listpath, 'w') as f:
