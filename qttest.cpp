@@ -24830,7 +24830,7 @@ static void TestEphemDialogQt()
         FEphFitsQt(pw, "dsEp_ds"), "%s describes itself, in the space "
         "there is (\"%s\")", pes->szKey,
         plDesc == NULL ? "" : plDesc->text().toLocal8Bit().constData());
-      Check(ppbOK != NULL && ppbOK->isEnabled() == fAvail,
+      Check(ppbOK != NULL && ppbOK->isEnabled() == (fAvail != fFalse),
         "%s can be OKed exactly when this build can use it", pes->szKey);
       SzEphDialogStatus(pes->szKey, fFalse, 0, S(sz));
       Check(StrEphLineQt(pw) == QString::fromUtf8(sz),
@@ -25842,7 +25842,8 @@ static void CanaryDiffQt(CONST char *szGroup)
       CANARY("ignore2[%d %s] %d -> %d", i, i < cObj ? SzSet(szObjName[i]) :
         "", s_ign2CanaryQt.rgn[i], ignore2.rgn[i]);
   }
-  if (s_fThemeSetCanaryQt != qEnvironmentVariableIsSet("ASTROLOG_QT_THEME") ||
+  if (s_fThemeSetCanaryQt !=
+    (flag)qEnvironmentVariableIsSet("ASTROLOG_QT_THEME") ||
     s_baThemeCanaryQt != qgetenv("ASTROLOG_QT_THEME"))
     CANARY("ASTROLOG_QT_THEME %s%s%s -> %s%s%s",
       s_fThemeSetCanaryQt ? "\"" : "", s_fThemeSetCanaryQt ?
